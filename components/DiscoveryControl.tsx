@@ -23,16 +23,32 @@ interface AutomationStatus {
   search_interval_seconds: number
 }
 
+interface Location {
+  value: string
+  label: string
+}
+
+interface Category {
+  value: string
+  label: string
+}
+
 export default function DiscoveryControl() {
   const [status, setStatus] = useState<DiscoveryStatus | null>(null)
   const [automationStatus, setAutomationStatus] = useState<AutomationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  const [locations, setLocations] = useState<Location[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedLocation, setSelectedLocation] = useState<string>('')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
 
   useEffect(() => {
     loadStatus()
     loadAutomationStatus()
+    loadLocations()
+    loadCategories()
     // Refresh every 10 seconds
     const interval = setInterval(() => {
       loadStatus()
@@ -40,6 +56,46 @@ export default function DiscoveryControl() {
     }, 10000)
     return () => clearInterval(interval)
   }, [])
+
+  const loadLocations = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) return
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/discovery/locations`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setLocations(data.locations || [])
+      }
+    } catch (error) {
+      console.error('Error loading locations:', error)
+    }
+  }
+
+  const loadCategories = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) return
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/discovery/categories`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      )
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data.categories || [])
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error)
+    }
+  }
 
   const loadStatus = async () => {
     try {
@@ -86,10 +142,25 @@ export default function DiscoveryControl() {
   const triggerSearch = async () => {
     setSearching(true)
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) return
+      
+      // Build query params
+      const params = new URLSearchParams()
+      if (selectedLocation) {
+        params.append('location', selectedLocation)
+      }
+      if (selectedCategories.length > 0) {
+        params.append('categories', selectedCategories.join(','))
+      }
+      
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/discovery/search-now${params.toString() ? '?' + params.toString() : ''}`
+      
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/discovery/search-now`,
+        url,
         {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
         }
       )
       if (response.ok) {
@@ -222,6 +293,52 @@ export default function DiscoveryControl() {
               </div>
             </div>
           )}
+
+          {/* Location and Category Selection */}
+          <div className="space-y-2 border-t pt-2 mt-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Search Location
+              </label>
+              <select
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-olive-500 focus:border-transparent"
+              >
+                <option value="">All Locations</option>
+                {locations.map((loc) => (
+                  <option key={loc.value} value={loc.value}>
+                    {loc.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Categories (Optional - leave empty for all)
+              </label>
+              <div className="space-y-1 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-1.5">
+                {categories.map((cat) => (
+                  <label key={cat.value} className="flex items-center space-x-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={selectedCategories.includes(cat.value)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories([...selectedCategories, cat.value])
+                        } else {
+                          setSelectedCategories(selectedCategories.filter(c => c !== cat.value))
+                        }
+                      }}
+                      className="rounded border-gray-300 text-olive-600 focus:ring-olive-500"
+                    />
+                    <span>{cat.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
 
           {/* Automation Info */}
           {isAutomationOn && (
