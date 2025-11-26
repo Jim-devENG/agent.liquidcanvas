@@ -72,9 +72,18 @@ export default function Dashboard() {
           console.warn('Failed to get jobs:', err.message)
           return null
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/automation/status`)
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
+        (async () => {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+          if (!token) return null
+          try {
+            const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/automation/status`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+            return r.ok ? r.json() : null
+          } catch {
+            return null
+          }
+        })()
       ]) as [Stats | null, LatestJobs | null, AutomationStatus | null]
       
       // Only update if we got valid data
