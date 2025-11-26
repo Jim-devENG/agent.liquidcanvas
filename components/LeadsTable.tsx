@@ -162,11 +162,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                         <div className="flex items-center">
                           <Mail className="w-4 h-4 text-olive-600 mr-2" />
                           <div>
-                            <div className="text-sm font-semibold text-gray-900">
+                            <div className="text-xs font-semibold text-gray-900">
                               {lead.email || 'No email'}
                             </div>
                             {lead.phone_number && (
-                              <div className="text-xs text-gray-500 mt-1">
+                              <div className="text-xs text-gray-500 mt-0.5">
                                 {lead.phone_number}
                               </div>
                             )}
@@ -174,12 +174,12 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                         </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-xs text-gray-900">
                           {lead.name || 'Unknown'}
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="text-sm text-gray-900">
+                        <div className="text-xs text-gray-900">
                           {lead.website_title || lead.website_url || 'Unknown'}
                         </div>
                         {lead.website_url && (
@@ -187,10 +187,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                             href={lead.website_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-olive-600 hover:text-olive-800 flex items-center mt-1"
+                            className="text-xs text-olive-600 hover:text-olive-800 flex items-center mt-0.5"
                           >
                             {lead.website_url}
-                            <Globe className="w-3 h-3 ml-1" />
+                            <Globe className="w-2.5 h-2.5 ml-1" />
                           </a>
                         )}
                       </td>
@@ -203,24 +203,24 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   ) : (
                     <>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-xs font-medium text-gray-900">
                           {lead.name || 'Unknown'}
                         </div>
                         {lead.email && (
-                          <div className="text-sm text-gray-500 flex items-center mt-1">
-                            <Mail className="w-3 h-3 mr-1" />
+                          <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                            <Mail className="w-2.5 h-2.5 mr-1" />
                             {lead.email}
                           </div>
                         )}
                         {lead.phone_number && (
-                          <div className="text-sm text-gray-500 flex items-center mt-1">
-                            <Phone className="w-3 h-3 mr-1" />
+                          <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                            <Phone className="w-2.5 h-2.5 mr-1" />
                             {lead.phone_number}
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-xs font-medium text-gray-900">
                           {lead.website_title || 'Unknown'}
                         </div>
                         {lead.website_url && (
@@ -228,21 +228,21 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                             href={lead.website_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm text-primary-600 hover:text-primary-800 flex items-center mt-1"
+                            className="text-xs text-primary-600 hover:text-primary-800 flex items-center mt-0.5"
                           >
-                            <Globe className="w-3 h-3 mr-1" />
+                            <Globe className="w-2.5 h-2.5 mr-1" />
                             {lead.website_url}
                           </a>
                         )}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-olive-100 text-olive-800">
+                        <span className="px-1.5 py-0.5 inline-flex text-xs leading-4 font-semibold rounded-full bg-olive-100 text-olive-800">
                           {lead.website_category?.replace('_', ' ') || 'unknown'}
                         </span>
                       </td>
                       <td className="px-3 py-2">
                         {lead.social_platform && (
-                          <div className="text-sm text-gray-500">
+                          <div className="text-xs text-gray-500">
                             <span className="font-medium">{lead.social_platform}:</span>{' '}
                             {lead.social_url ? (
                               <a
