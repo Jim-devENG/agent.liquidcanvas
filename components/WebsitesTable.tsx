@@ -271,13 +271,13 @@ export default function WebsitesTable() {
               {viewMode === 'discovered' ? (
                 discovered.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-xs font-medium text-gray-900">
                             {item.title || item.domain || 'Untitled'}
                           </div>
-                          <div className="text-sm text-gray-500 flex items-center">
+                          <div className="text-xs text-gray-500 flex items-center">
                             <a
                               href={item.url}
                               target="_blank"
@@ -296,17 +296,17 @@ export default function WebsitesTable() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-olive-100 text-olive-800">
                         {item.category || 'unknown'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
                         {item.source}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded-full ${
                           item.is_scraped
@@ -322,13 +322,13 @@ export default function WebsitesTable() {
               ) : (
                 websites.map((website) => (
                   <tr key={website.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-xs font-medium text-gray-900">
                             {website.title || website.domain || 'Untitled'}
                           </div>
-                          <div className="text-sm text-gray-500 flex items-center">
+                          <div className="text-xs text-gray-500 flex items-center">
                             <a
                               href={website.url}
                               target="_blank"
@@ -347,12 +347,12 @@ export default function WebsitesTable() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-olive-100 text-olive-800">
                         {website.category || 'unknown'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded-full ${
                           website.status === 'processed'
@@ -365,14 +365,14 @@ export default function WebsitesTable() {
                         {website.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                       {website.quality_score !== null ? (
                         <span className="font-medium">{website.quality_score}/100</span>
                       ) : (
                         <span className="text-gray-400">N/A</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
                       <button
                         onClick={() => extractContacts(website.id)}
                         className="text-primary-600 hover:text-primary-800 font-medium"
@@ -390,7 +390,7 @@ export default function WebsitesTable() {
 
       {/* Pagination */}
       {total > limit && (
-        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+        <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between">
           <button
             onClick={() => setSkip(Math.max(0, skip - limit))}
             disabled={skip === 0}
@@ -398,7 +398,7 @@ export default function WebsitesTable() {
           >
             Previous
           </button>
-          <span className="text-sm text-gray-700">
+          <span className="text-xs text-gray-700">
             Page {Math.floor(skip / limit) + 1} of {Math.ceil(total / limit)}
           </span>
           <button
