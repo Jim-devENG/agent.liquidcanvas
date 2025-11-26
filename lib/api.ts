@@ -209,27 +209,12 @@ export async function getPendingEmails(skip = 0, limit = 50): Promise<EmailsResp
  * Get statistics
  */
 export async function getStats(): Promise<Stats> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
-  
-  try {
-    const res = await fetch(`${API_BASE}/stats`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to fetch stats' }));
-      throw new Error(error.detail || 'Failed to fetch stats');
-    }
-    return res.json();
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error('Request timeout - backend may be slow or unresponsive');
-    }
-    throw error;
+  const res = await fetch(`${API_BASE}/stats`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to fetch stats' }));
+    throw new Error(error.detail || 'Failed to fetch stats');
   }
+  return res.json();
 }
 
 /**
@@ -249,27 +234,12 @@ export async function getJobStatus(limit = 20, jobType?: string, status?: string
  * Get latest job executions
  */
 export async function getLatestJobs(): Promise<LatestJobs> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 20000);
-  
-  try {
-    const res = await fetch(`${API_BASE}/jobs/latest`, {
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to fetch latest jobs' }));
-      throw new Error(error.detail || 'Failed to fetch latest jobs');
-    }
-    return res.json();
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error('Request timeout - backend may be slow or unresponsive');
-    }
-    throw error;
+  const res = await fetch(`${API_BASE}/jobs/latest`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to fetch latest jobs' }));
+    throw new Error(error.detail || 'Failed to fetch latest jobs');
   }
+  return res.json();
 }
 
 /**
