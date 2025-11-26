@@ -162,11 +162,11 @@ async def set_search_interval(
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
-    """Set search interval in seconds (minimum 10 seconds)"""
-    if request.interval_seconds < 10:
+    """Set search interval in seconds (minimum 900 seconds = 15 minutes)"""
+    if request.interval_seconds < 900:
         raise HTTPException(
             status_code=400,
-            detail="Minimum interval is 10 seconds to avoid rate limits"
+            detail="Minimum interval is 900 seconds (15 minutes) to avoid rate limits"
         )
     
     settings_manager = AppSettingsManager(db)

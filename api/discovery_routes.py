@@ -149,3 +149,47 @@ async def get_discovery_status(
         "completed_at": latest_job.completed_at.isoformat() if latest_job.completed_at else None
     }
 
+
+@router.post("/discovery/stop")
+async def stop_discovery(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Stop a running discovery job
+    """
+    from db.models import ScrapingJob
+    from jobs.scheduler import scheduler
+    
+    # Get latest running job
+    latest_job = db.query(ScrapingJob).filter(
+        ScrapingJob.job_type == "fetch_new_art_websites",
+        ScrapingJob.status == "running"
+    ).order_by(ScrapingJob.created_at.desc()).first()
+    
+    if not latest_job:
+        raise HTTPException(
+            status_code=404,
+            detail="No running discovery job found"
+        )
+    
+    # Mark job as cancelled
+    latest_job.status = "cancelled"
+    latest_job.error_message = "Cancelled by user"
+    db.commit()
+    
+    # Try to remove job from scheduler if it exists
+    if scheduler and scheduler.running:
+        try:
+            job = scheduler.get_job('fetch_new_art_websites')
+            if job:
+                scheduler.remove_job('fetch_new_art_websites')
+        except Exception as e:
+            logger.warning(f"Could not remove job from scheduler: {e}")
+    
+    return {
+        "message": "Discovery job stopped",
+        "job_id": latest_job.id,
+        "status": "cancelled"
+    }
+

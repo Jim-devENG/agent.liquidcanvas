@@ -91,7 +91,7 @@ class AppSettingsManager:
     
     def set_search_interval_seconds(self, seconds: int):
         """Set search interval in seconds"""
-        if seconds < 10:
-            raise ValueError("Minimum interval is 10 seconds to avoid rate limits")
+        if seconds < 900:
+            raise ValueError("Minimum interval is 900 seconds (15 minutes) to avoid rate limits")
         self.set("search_interval_seconds", seconds, "Interval between website discovery searches (seconds)")
 
