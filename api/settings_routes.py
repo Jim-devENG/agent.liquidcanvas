@@ -101,12 +101,15 @@ async def get_automation_status(
             search_interval = settings_manager.get_search_interval_seconds()
             next_search_time = (last_job.started_at + timedelta(seconds=search_interval)).isoformat()
     
+    all_settings = settings_manager.get_all_settings()
+    all_settings["automatic_scraper_enabled"] = settings_manager.get_automatic_scraper_enabled()
+    
     return AutomationStatusResponse(
         automation_enabled=settings_manager.get_automation_enabled(),
         email_trigger_mode=settings_manager.get_email_trigger_mode(),
         search_interval_seconds=settings_manager.get_search_interval_seconds(),
         next_search_time=next_search_time,
-        settings=settings_manager.get_all_settings()
+        settings=all_settings
     )
 
 
