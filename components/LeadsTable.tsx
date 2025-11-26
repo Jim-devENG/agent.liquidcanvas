@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { getLeads, type Lead, type LeadsResponse } from '@/lib/api'
 import { Mail, Phone, Globe, Filter } from 'lucide-react'
 
@@ -30,7 +30,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     'holiday_family',
   ]
 
-  const loadLeads = useCallback(async () => {
+  const loadLeads = async () => {
     setLoading(true)
     try {
       const data: LeadsResponse = await getLeads(skip, limit, category || undefined, hasEmail)
@@ -41,11 +41,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     } finally {
       setLoading(false)
     }
-  }, [skip, limit, category, hasEmail])
+  }
 
   useEffect(() => {
     loadLeads()
-  }, [loadLeads])
+  }, [skip, category, hasEmail])
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -219,49 +219,51 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           </div>
                         )}
                       </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">
-                      {lead.website_title || 'Unknown'}
-                    </div>
-                    {lead.website_url && (
-                      <a
-                        href={lead.website_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary-600 hover:text-primary-800 flex items-center mt-1"
-                      >
-                        <Globe className="w-3 h-3 mr-1" />
-                        {lead.website_url}
-                      </a>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-olive-100 text-olive-800">
-                      {lead.website_category?.replace('_', ' ') || 'unknown'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {lead.social_platform && (
-                      <div className="text-sm text-gray-500">
-                        <span className="font-medium">{lead.social_platform}:</span>{' '}
-                        {lead.social_url ? (
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">
+                          {lead.website_title || 'Unknown'}
+                        </div>
+                        {lead.website_url && (
                           <a
-                            href={lead.social_url}
+                            href={lead.website_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-primary-600 hover:text-primary-800"
+                            className="text-sm text-primary-600 hover:text-primary-800 flex items-center mt-1"
                           >
-                            View
+                            <Globe className="w-3 h-3 mr-1" />
+                            {lead.website_url}
                           </a>
-                        ) : (
-                          'N/A'
                         )}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(lead.created_at).toLocaleDateString()}
-                  </td>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-olive-100 text-olive-800">
+                          {lead.website_category?.replace('_', ' ') || 'unknown'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {lead.social_platform && (
+                          <div className="text-sm text-gray-500">
+                            <span className="font-medium">{lead.social_platform}:</span>{' '}
+                            {lead.social_url ? (
+                              <a
+                                href={lead.social_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary-600 hover:text-primary-800"
+                              >
+                                View
+                              </a>
+                            ) : (
+                              'N/A'
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(lead.created_at).toLocaleDateString()}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))
             )}
@@ -294,4 +296,3 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     </div>
   )
 }
-
