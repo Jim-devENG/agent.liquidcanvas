@@ -210,7 +210,7 @@ export async function getPendingEmails(skip = 0, limit = 50): Promise<EmailsResp
  */
 export async function getStats(): Promise<Stats> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   
   try {
     const res = await fetch(`${API_BASE}/stats`, {
@@ -250,7 +250,7 @@ export async function getJobStatus(limit = 20, jobType?: string, status?: string
  */
 export async function getLatestJobs(): Promise<LatestJobs> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   
   try {
     const res = await fetch(`${API_BASE}/jobs/latest`, {
