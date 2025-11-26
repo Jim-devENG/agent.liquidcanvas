@@ -277,7 +277,7 @@ export async function getJobStatus(limit = 20, jobType?: string, status?: string
  * Get latest job executions
  */
 export async function getLatestJobs(): Promise<LatestJobs> {
-  const res = await fetch(`${API_BASE}/jobs/latest`);
+  const res = await authenticatedFetch(`${API_BASE}/jobs/latest`);
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to fetch latest jobs' }));
     throw new Error(error.detail || 'Failed to fetch latest jobs');
