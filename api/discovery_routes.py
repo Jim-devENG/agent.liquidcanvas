@@ -18,14 +18,20 @@ router = APIRouter()
 @router.post("/discovery/search-now")
 async def trigger_website_discovery(
     background_tasks: BackgroundTasks,
+    location: str = None,
+    categories: str = None,
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     """
     Manually trigger website discovery and scraping
     
+    Query params:
+    - location: Optional location filter (usa, canada, uk_london, germany, france, europe)
+    - categories: Optional comma-separated category list (home_decor, holiday, parenting, etc.)
+    
     This will:
-    1. Search DuckDuckGo for art-related websites
+    1. Search DuckDuckGo for websites in specified location/categories
     2. Load URLs from seed_websites.txt
     3. Scrape discovered websites
     4. Extract contacts
@@ -33,12 +39,22 @@ async def trigger_website_discovery(
     Returns immediately, runs in background
     """
     try:
+        # Save location and categories to settings for the job
+        from utils.app_settings import AppSettingsManager
+        settings_manager = AppSettingsManager(db)
+        if location:
+            settings_manager.set("search_location", location)
+        if categories:
+            settings_manager.set("search_categories", categories)
+        
         # Run in background
         background_tasks.add_task(fetch_new_art_websites)
         
         return {
             "message": "Website discovery started in background",
             "status": "running",
+            "location": location or "all",
+            "categories": categories or "all",
             "note": "Check the Activity Feed for progress updates"
         }
     except Exception as e:
@@ -51,7 +67,7 @@ async def trigger_website_discovery(
 
 @router.get("/discovery/test-search")
 async def test_search(
-    query: str = "art gallery",
+    query: str = "home decor blog",
     db: Session = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
@@ -82,6 +98,24 @@ async def test_search(
             status_code=500,
             detail=f"Search test failed: {str(e)}"
         )
+
+
+@router.get("/discovery/locations")
+async def get_locations(
+    current_user: str = Depends(get_current_user)
+):
+    """Get all available search locations"""
+    from utils.location_search import get_all_locations
+    return {"locations": get_all_locations()}
+
+
+@router.get("/discovery/categories")
+async def get_categories(
+    current_user: str = Depends(get_current_user)
+):
+    """Get all available search categories"""
+    from utils.location_search import get_all_categories
+    return {"categories": get_all_categories()}
 
 
 @router.get("/discovery/status")

@@ -119,7 +119,7 @@ export default function WebsitesTable() {
                 setViewMode('discovered')
                 setSkip(0)
               }}
-              className={`px-3 py-1 text-sm rounded ${
+              className={`px-2 py-0.5 text-xs rounded ${
                 viewMode === 'discovered'
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-700 hover:bg-gray-100'
@@ -133,7 +133,7 @@ export default function WebsitesTable() {
                 setViewMode('scraped')
                 setSkip(0)
               }}
-              className={`px-3 py-1 text-sm rounded ${
+              className={`px-2 py-0.5 text-xs rounded ${
                 viewMode === 'scraped'
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-700 hover:bg-gray-100'
@@ -146,24 +146,24 @@ export default function WebsitesTable() {
         </div>
         <button
           onClick={viewMode === 'discovered' ? loadDiscovered : loadWebsites}
-          className="flex items-center px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
+          className="flex items-center px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+          <RefreshCw className="w-3 h-3 mr-1.5" />
           Refresh
         </button>
       </div>
 
       {/* Filters */}
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center space-x-4">
-          <Filter className="w-5 h-5 text-gray-500" />
+      <div className="p-2 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center space-x-2">
+          <Filter className="w-3.5 h-3.5 text-gray-500" />
           <select
             value={category}
             onChange={(e) => {
               setCategory(e.target.value)
               setSkip(0)
             }}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="px-2 py-1 border border-gray-300 rounded-md text-xs"
           >
             <option value="">All Categories</option>
             {categories.map((cat) => (
@@ -179,7 +179,7 @@ export default function WebsitesTable() {
                 setStatus(e.target.value)
                 setSkip(0)
               }}
-              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="px-2 py-1 border border-gray-300 rounded-md text-xs"
             >
               <option value="">All Status</option>
               <option value="pending">Pending</option>
@@ -194,7 +194,7 @@ export default function WebsitesTable() {
                   setSource(e.target.value)
                   setSkip(0)
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="px-2 py-1 border border-gray-300 rounded-md text-xs"
               >
                 <option value="">All Sources</option>
                 <option value="duckduckgo">DuckDuckGo</option>
@@ -209,7 +209,7 @@ export default function WebsitesTable() {
                   setIsScraped(val === '' ? undefined : val === 'true')
                   setSkip(0)
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="px-2 py-1 border border-gray-300 rounded-md text-xs"
               >
                 <option value="">All</option>
                 <option value="false">Not Scraped</option>
@@ -217,7 +217,7 @@ export default function WebsitesTable() {
               </select>
             </>
           )}
-          <div className="ml-auto text-sm text-gray-600">
+          <div className="ml-auto text-xs text-gray-600">
             Showing {viewMode === 'discovered' ? discovered.length : websites.length} of {total}
           </div>
         </div>
@@ -237,30 +237,30 @@ export default function WebsitesTable() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Website
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Category
                 </th>
                 {viewMode === 'discovered' ? (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Source
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                   </>
                 ) : (
                   <>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Quality
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </>
@@ -271,13 +271,13 @@ export default function WebsitesTable() {
               {viewMode === 'discovered' ? (
                 discovered.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-xs font-medium text-gray-900">
                             {item.title || item.domain || 'Untitled'}
                           </div>
-                          <div className="text-sm text-gray-500 flex items-center">
+                          <div className="text-xs text-gray-500 flex items-center">
                             <a
                               href={item.url}
                               target="_blank"
@@ -296,17 +296,17 @@ export default function WebsitesTable() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-olive-100 text-olive-800">
                         {item.category || 'unknown'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
                         {item.source}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded-full ${
                           item.is_scraped
@@ -322,13 +322,13 @@ export default function WebsitesTable() {
               ) : (
                 websites.map((website) => (
                   <tr key={website.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-xs font-medium text-gray-900">
                             {website.title || website.domain || 'Untitled'}
                           </div>
-                          <div className="text-sm text-gray-500 flex items-center">
+                          <div className="text-xs text-gray-500 flex items-center">
                             <a
                               href={website.url}
                               target="_blank"
@@ -347,12 +347,12 @@ export default function WebsitesTable() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-olive-100 text-olive-800">
                         {website.category || 'unknown'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded-full ${
                           website.status === 'processed'
@@ -365,14 +365,14 @@ export default function WebsitesTable() {
                         {website.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
                       {website.quality_score !== null ? (
                         <span className="font-medium">{website.quality_score}/100</span>
                       ) : (
                         <span className="text-gray-400">N/A</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
                       <button
                         onClick={() => extractContacts(website.id)}
                         className="text-primary-600 hover:text-primary-800 font-medium"
@@ -390,7 +390,7 @@ export default function WebsitesTable() {
 
       {/* Pagination */}
       {total > limit && (
-        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+        <div className="px-3 py-2 border-t border-gray-200 flex items-center justify-between">
           <button
             onClick={() => setSkip(Math.max(0, skip - limit))}
             disabled={skip === 0}
@@ -398,7 +398,7 @@ export default function WebsitesTable() {
           >
             Previous
           </button>
-          <span className="text-sm text-gray-700">
+          <span className="text-xs text-gray-700">
             Page {Math.floor(skip / limit) + 1} of {Math.ceil(total / limit)}
           </span>
           <button

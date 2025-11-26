@@ -67,8 +67,19 @@ def fetch_new_art_websites() -> Dict:
         db = SessionLocal()
         discovery = WebsiteDiscovery()
         logger.info("Starting website discovery...")
+        
+        # Get location and categories from settings
+        from utils.app_settings import AppSettingsManager
+        settings_manager = AppSettingsManager(db)
+        search_location = settings_manager.get("search_location", None)
+        search_categories = settings_manager.get("search_categories", None)
+        
         # Pass db session to save discovered websites
-        discoveries = discovery.discover_art_websites(db_session=db)
+        discoveries = discovery.discover_art_websites(
+            db_session=db,
+            location=search_location,
+            categories=search_categories.split(",") if search_categories else None
+        )
         urls = [d['url'] for d in discoveries]
         logger.info(f"Discovery completed. Found {len(urls)} URLs")
         

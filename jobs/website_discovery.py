@@ -2,7 +2,7 @@
 Website discovery via search engines and seed lists
 """
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from urllib.parse import quote_plus, urlparse
 from utils.config import settings
 import logging
@@ -151,62 +151,164 @@ class WebsiteDiscovery:
         
         return urls
     
-    def discover_art_websites(self, db_session: Optional[object] = None) -> List[Dict]:
+    def discover_art_websites(
+        self, 
+        db_session: Optional[object] = None,
+        location: Optional[str] = None,
+        categories: Optional[List[str]] = None
+    ) -> List[Dict]:
         """
-        Discover new art websites using multiple sources
+        Discover websites using multiple sources with location-based search
         
         Args:
             db_session: Optional database session to save discovered websites
+            location: Optional location filter (usa, canada, uk_london, germany, france, europe)
+            categories: Optional list of category keys to filter by
             
         Returns:
             List of dictionaries with discovered website info: {url, title, snippet, source, search_query, category}
         """
         all_discoveries = {}  # Use dict to track unique URLs with metadata
         
-        # Expanded search queries for comprehensive internet search
-        search_queries = [
-            # Art Galleries
-            ("art gallery website", "art_gallery"),
-            ("contemporary art gallery", "art_gallery"),
-            ("modern art gallery", "art_gallery"),
-            ("online art gallery", "art_gallery"),
-            ("art exhibition space", "art_gallery"),
-            # Interior Design
-            ("interior design blog", "interior_decor"),
-            ("interior decorator website", "interior_decor"),
-            ("home design blog", "interior_decor"),
-            ("interior design portfolio", "interior_decor"),
-            ("home decor blog", "interior_decor"),
-            # Home Tech
-            ("home tech blog", "home_tech"),
-            ("smart home blog", "home_tech"),
-            ("home automation blog", "home_tech"),
-            ("tech for home", "home_tech"),
-            ("home technology review", "home_tech"),
-            # Mom Blogs
-            ("mom blog", "mom_blogs"),
-            ("parenting blog", "mom_blogs"),
-            ("family lifestyle blog", "mom_blogs"),
-            ("mommy blog", "mom_blogs"),
-            ("family blog", "mom_blogs"),
-            # NFT & Tech
-            ("NFT art platform", "nft_tech"),
-            ("NFT marketplace", "nft_tech"),
-            ("digital art platform", "nft_tech"),
-            ("crypto art gallery", "nft_tech"),
-            ("blockchain art", "nft_tech"),
-            # Editorial Media
-            ("editorial media house", "editorial_media"),
-            ("lifestyle magazine", "editorial_media"),
-            ("design magazine", "editorial_media"),
-            ("art publication", "editorial_media"),
-            ("creative magazine", "editorial_media"),
-            # Holiday/Family
-            ("holiday family website", "holiday_family"),
-            ("family travel blog", "holiday_family"),
-            ("holiday planning blog", "holiday_family"),
-            ("family activities blog", "holiday_family"),
-            ("seasonal decor blog", "holiday_family")
+        # Generate location-based search queries
+        from utils.location_search import Location, generate_location_queries
+        
+        if location:
+            try:
+                location_enum = Location(location)
+                search_queries = generate_location_queries(
+                    location_enum, 
+                    categories=categories,
+                    include_social=True
+                )
+                logger.info(f"Generated {len(search_queries)} queries for location: {location}")
+            except ValueError:
+                logger.warning(f"Invalid location: {location}, using default queries")
+                search_queries = self._get_default_queries()
+        else:
+            # Default queries (all locations, all categories)
+            search_queries = []
+            for loc in Location:
+                queries = generate_location_queries(loc, categories=categories, include_social=True)
+                search_queries.extend(queries)
+            logger.info(f"Generated {len(search_queries)} queries for all locations")
+        
+        # If no queries generated, use default
+        if not search_queries:
+            search_queries = self._get_default_queries()
+        
+        # Search DuckDuckGo (no API key required)
+        import random
+        shuffled_queries = search_queries.copy()
+        random.shuffle(shuffled_queries)
+        
+        # Limit to 15 queries per run to avoid overwhelming (increased for location-based)
+        queries_to_search = shuffled_queries[:15]
+        
+        for query, category in queries_to_search:
+            try:
+                # Get detailed results from DuckDuckGo
+                results = self.search_duckduckgo_detailed(query, num_results=5)
+                for result in results:
+                    url = result.get('url', '')
+                    if url and url.startswith('http'):
+                        if url not in all_discoveries:
+                            all_discoveries[url] = {
+                                'url': url,
+                                'title': result.get('title', ''),
+                                'snippet': result.get('snippet', ''),
+                                'source': 'duckduckgo',
+                                'search_query': query,
+                                'category': category
+                            }
+                # Rate limiting
+                import time
+                time.sleep(1)
+            except Exception as e:
+                logger.error(f"Error searching for '{query}': {str(e)}")
+                continue
+        
+        # Fetch from seed list
+        seed_urls = self.fetch_from_seed_list()
+        for url in seed_urls:
+            if url not in all_discoveries:
+                parsed = urlparse(url)
+                all_discoveries[url] = {
+                    'url': url,
+                    'title': '',
+                    'snippet': '',
+                    'source': 'seed_list',
+                    'search_query': '',
+                    'category': 'unknown'
+                }
+        
+        # Save to database if session provided
+        if db_session:
+            from db.models import DiscoveredWebsite
+            saved_count = 0
+            for url, info in all_discoveries.items():
+                try:
+                    # Check if already exists
+                    existing = db_session.query(DiscoveredWebsite).filter(
+                        DiscoveredWebsite.url == url
+                    ).first()
+                    
+                    if not existing:
+                        parsed = urlparse(url)
+                        discovered = DiscoveredWebsite(
+                            url=info['url'],
+                            domain=parsed.netloc,
+                            title=info.get('title', ''),
+                            snippet=info.get('snippet', ''),
+                            source=info['source'],
+                            search_query=info.get('search_query', ''),
+                            category=info.get('category', 'unknown')
+                        )
+                        db_session.add(discovered)
+                        saved_count += 1
+                except Exception as e:
+                    logger.error(f"Error saving discovered website {url}: {str(e)}")
+                    continue
+            
+            try:
+                db_session.commit()
+                logger.info(f"Saved {saved_count} new discovered websites to database")
+            except Exception as e:
+                logger.error(f"Error committing discovered websites: {str(e)}")
+                db_session.rollback()
+        
+        unique_discoveries = list(all_discoveries.values())
+        logger.info(f"Discovered {len(unique_discoveries)} unique website URLs")
+        
+        return unique_discoveries
+    
+    def _get_default_queries(self) -> List[Tuple[str, str]]:
+        """Get default search queries (fallback)"""
+        return [
+            # Home Decor
+            ("home decor blog", "home_decor"),
+            ("interior design blog", "home_decor"),
+            ("home decoration website", "home_decor"),
+            # Holiday
+            ("holiday blog", "holiday"),
+            ("holiday planning website", "holiday"),
+            ("holiday ideas blog", "holiday"),
+            # Parenting
+            ("parenting blog", "parenting"),
+            ("mom blog", "parenting"),
+            ("family lifestyle blog", "parenting"),
+            # Audio Visuals
+            ("audio visual blog", "audio_visuals"),
+            ("home theater blog", "audio_visuals"),
+            ("audio equipment review", "audio_visuals"),
+            # Gift Guides
+            ("gift guide blog", "gift_guides"),
+            ("gift ideas blog", "gift_guides"),
+            ("gift recommendations website", "gift_guides"),
+            # Tech Innovation
+            ("tech innovation blog", "tech_innovation"),
+            ("technology blog", "tech_innovation"),
+            ("tech review blog", "tech_innovation")
         ]
         
         # Search DuckDuckGo (no API key required)

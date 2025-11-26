@@ -8,84 +8,69 @@ from bs4 import BeautifulSoup
 class ArtDetector:
     """Detect if a website is in target categories using keyword heuristics"""
     
-    # 1. Interior Decor sites
-    INTERIOR_DECOR_KEYWORDS = [
+    # 1. Home Decor sites
+    HOME_DECOR_KEYWORDS = [
         "interior decor", "interior decorating", "home decor", "decorating",
         "home decoration", "room decor", "decor ideas", "interior decorator",
         "decorative", "home styling", "interior styling", "decor tips",
         "furniture", "home accessories", "decorative arts", "home furnishings"
     ]
     
-    # 2. Art Gallery sites
-    ART_GALLERY_KEYWORDS = [
-        "art gallery", "gallery", "art exhibition", "art show", "art fair",
-        "contemporary art", "fine art", "art collection", "art museum",
-        "art dealer", "art curator", "artwork", "art pieces", "art display",
-        "painting", "sculpture", "artistic", "visual art", "art studio",
-        "artist", "illustrator", "photography", "photographer", "art market"
+    # 2. Holiday sites
+    HOLIDAY_KEYWORDS = [
+        "holiday", "holiday planning", "holiday ideas", "holiday activities",
+        "holiday travel", "holiday celebration", "holiday traditions",
+        "seasonal decor", "holiday lifestyle", "holiday events"
     ]
     
-    # 3. Home tech sites
-    HOME_TECH_KEYWORDS = [
-        "home tech", "smart home", "home automation", "home technology",
-        "smart devices", "home gadgets", "home electronics", "iot home",
-        "connected home", "home innovation", "home tech reviews",
-        "smart appliances", "home tech solutions", "residential tech"
-    ]
-    
-    # 4. Mom blogs sites
-    MOM_BLOGS_KEYWORDS = [
-        "mom blog", "mother blog", "mommy blog", "parenting blog",
+    # 3. Parenting sites
+    PARENTING_KEYWORDS = [
+        "parenting", "parenting blog", "parenting tips", "parenting advice",
+        "mom blog", "mother blog", "mommy blog", "family blog",
+        "parenting lifestyle", "family activities", "parenting community",
         "mom lifestyle", "motherhood", "mom tips", "mom advice",
-        "parenting tips", "family blog", "mommy lifestyle", "mom stories",
-        "parenting advice", "mom community", "motherhood blog"
+        "parenting tips", "family blog", "mommy lifestyle", "mom stories"
     ]
     
-    # 5. Tech sites for NFTs display tech
-    NFT_TECH_KEYWORDS = [
-        "nft", "non-fungible token", "nft marketplace", "nft platform",
-        "nft display", "nft gallery", "crypto art", "blockchain art",
-        "nft technology", "nft tech", "digital collectibles", "nft collection",
-        "web3", "metaverse", "nft art", "nft showcase", "nft exhibition",
-        "nft display technology", "nft viewing", "nft presentation"
+    # 4. Audio Visuals sites
+    AUDIO_VISUALS_KEYWORDS = [
+        "audio visual", "AV technology", "home theater", "sound system",
+        "audio equipment", "visual technology", "home entertainment",
+        "smart audio", "wireless speakers", "home audio", "visual display",
+        "surround sound", "home cinema", "audio visual equipment"
     ]
     
-    # 6. Editorial media houses
-    EDITORIAL_MEDIA_KEYWORDS = [
-        "editorial", "media house", "publishing", "magazine", "journalism",
-        "editorial content", "media company", "publisher", "editorial team",
-        "newsroom", "editorial department", "media outlet", "editorial design",
-        "editorial photography", "editorial style", "editorial coverage",
-        "media publication", "editorial work", "content creation"
+    # 5. Gift Guides sites
+    GIFT_GUIDES_KEYWORDS = [
+        "gift guide", "gift ideas", "gift recommendations", "gift blog",
+        "holiday gifts", "gift suggestions", "best gifts", "gift ideas blog",
+        "gift guide website", "gift recommendations blog", "gift buying guide"
     ]
     
-    # 7. Holiday/family oriented sites
-    HOLIDAY_FAMILY_KEYWORDS = [
-        "holiday", "family", "family holiday", "holiday planning",
-        "family travel", "holiday travel", "family vacation", "holiday ideas",
-        "family activities", "holiday activities", "family fun", "holiday fun",
-        "family entertainment", "holiday entertainment", "family lifestyle",
-        "holiday lifestyle", "family events", "holiday events", "family time",
-        "holiday traditions", "family traditions", "holiday celebration"
+    # 6. Tech Innovation sites
+    TECH_INNOVATION_KEYWORDS = [
+        "tech innovation", "technology blog", "tech review", "innovation blog",
+        "tech news", "technology news", "tech trends", "innovation technology",
+        "tech blog", "technology innovation", "tech startup", "tech products",
+        "tech innovation", "emerging technology", "tech solutions"
     ]
     
-    # All relevant keywords combined
+    # All relevant keywords combined (removed art_gallery)
     ALL_RELEVANT_KEYWORDS = (
-        INTERIOR_DECOR_KEYWORDS +
-        ART_GALLERY_KEYWORDS +
-        HOME_TECH_KEYWORDS +
-        MOM_BLOGS_KEYWORDS +
-        NFT_TECH_KEYWORDS +
-        EDITORIAL_MEDIA_KEYWORDS +
-        HOLIDAY_FAMILY_KEYWORDS
+        HOME_DECOR_KEYWORDS +
+        HOLIDAY_KEYWORDS +
+        PARENTING_KEYWORDS +
+        AUDIO_VISUALS_KEYWORDS +
+        GIFT_GUIDES_KEYWORDS +
+        TECH_INNOVATION_KEYWORDS
     )
     
     def is_art_related(self, soup: BeautifulSoup, url: str, text_content: str = None) -> bool:
         """
         Detect if website is in target categories
         
-        Categories: interior_decor, art_gallery, home_tech, mom_blogs, 
-                   nft_tech, editorial_media, holiday_family
+        Categories: home_decor, holiday, parenting, audio_visuals, 
+                   gift_guides, tech_innovation
         
         Args:
             soup: BeautifulSoup object
@@ -144,8 +129,8 @@ class ArtDetector:
         Determine the specific category of the website
         
         Returns:
-            Category: interior_decor, art_gallery, home_tech, mom_blogs, 
-                     nft_tech, editorial_media, holiday_family, or unknown
+            Category: home_decor, holiday, parenting, audio_visuals, 
+                     gift_guides, tech_innovation, or unknown
         """
         if not soup and not text_content:
             return "unknown"
@@ -157,23 +142,21 @@ class ArtDetector:
         combined_text = f"{url_lower} {text_content}"
         
         # Count matches for each category
-        interior_decor_score = sum(1 for kw in self.INTERIOR_DECOR_KEYWORDS if kw in combined_text)
-        art_gallery_score = sum(1 for kw in self.ART_GALLERY_KEYWORDS if kw in combined_text)
-        home_tech_score = sum(1 for kw in self.HOME_TECH_KEYWORDS if kw in combined_text)
-        mom_blogs_score = sum(1 for kw in self.MOM_BLOGS_KEYWORDS if kw in combined_text)
-        nft_tech_score = sum(1 for kw in self.NFT_TECH_KEYWORDS if kw in combined_text)
-        editorial_media_score = sum(1 for kw in self.EDITORIAL_MEDIA_KEYWORDS if kw in combined_text)
-        holiday_family_score = sum(1 for kw in self.HOLIDAY_FAMILY_KEYWORDS if kw in combined_text)
+        home_decor_score = sum(1 for kw in self.HOME_DECOR_KEYWORDS if kw in combined_text)
+        holiday_score = sum(1 for kw in self.HOLIDAY_KEYWORDS if kw in combined_text)
+        parenting_score = sum(1 for kw in self.PARENTING_KEYWORDS if kw in combined_text)
+        audio_visuals_score = sum(1 for kw in self.AUDIO_VISUALS_KEYWORDS if kw in combined_text)
+        gift_guides_score = sum(1 for kw in self.GIFT_GUIDES_KEYWORDS if kw in combined_text)
+        tech_innovation_score = sum(1 for kw in self.TECH_INNOVATION_KEYWORDS if kw in combined_text)
         
         # Return category with highest score
         scores = {
-            "interior_decor": interior_decor_score,
-            "art_gallery": art_gallery_score,
-            "home_tech": home_tech_score,
-            "mom_blogs": mom_blogs_score,
-            "nft_tech": nft_tech_score,
-            "editorial_media": editorial_media_score,
-            "holiday_family": holiday_family_score
+            "home_decor": home_decor_score,
+            "holiday": holiday_score,
+            "parenting": parenting_score,
+            "audio_visuals": audio_visuals_score,
+            "gift_guides": gift_guides_score,
+            "tech_innovation": tech_innovation_score
         }
         
         max_category = max(scores, key=scores.get)
