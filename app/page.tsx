@@ -23,7 +23,8 @@ import {
   Activity,
   Search,
   Zap,
-  XCircle
+  XCircle,
+  AtSign
 } from 'lucide-react'
 
 interface AutomationStatus {
@@ -39,7 +40,9 @@ export default function Dashboard() {
   const [automationStatus, setAutomationStatus] = useState<AutomationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'leads' | 'emails' | 'jobs' | 'websites' | 'settings'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings'
+  >('overview')
 
   useEffect(() => {
     loadData()
@@ -50,13 +53,7 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      // Use a longer timeout and better error handling
-      const timeout = 15000 // 15 seconds
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout - backend may not be running')), timeout)
-      )
-      
-      const apiCalls = Promise.all([
+      const [statsData, jobsData, automationData] = await Promise.all([
         getStats().catch(err => {
           console.warn('Failed to get stats:', err.message)
           return null
@@ -65,16 +62,9 @@ export default function Dashboard() {
           console.warn('Failed to get jobs:', err.message)
           return null
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/automation/status`, {
-          signal: AbortSignal.timeout(timeout)
-        })
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/automation/status`)
           .then(r => r.ok ? r.json() : null)
           .catch(() => null)
-      ])
-      
-      const [statsData, jobsData, automationData] = await Promise.race([
-        apiCalls,
-        timeoutPromise
       ]) as [Stats | null, LatestJobs | null, AutomationStatus | null]
       
       // Only update if we got valid data
@@ -136,10 +126,17 @@ export default function Dashboard() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
-    { id: 'emails', label: 'Emails', icon: Mail },
+    { id: 'scraped_emails', label: '📧 Scraped Emails', icon: AtSign },
+    { id: 'emails', label: 'Outreach Emails', icon: Mail },
     { id: 'jobs', label: 'Jobs', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
+  
+  // Debug: Log tabs on mount
+  useEffect(() => {
+    console.log('Available tabs:', tabs.map(t => t.id))
+    console.log('Scraped Emails tab exists:', tabs.find(t => t.id === 'scraped_emails'))
+  }, [tabs])
 
   if (loading) {
     return (
@@ -216,7 +213,10 @@ export default function Dashboard() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  onClick={() => {
+                    console.log('Tab clicked:', tab.id, tab.label)
+                    setActiveTab(tab.id as any)
+                  }}
                   className={`
                     flex items-center space-x-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all
                     ${
@@ -259,6 +259,8 @@ export default function Dashboard() {
         {activeTab === 'websites' && <WebsitesTable />}
 
         {activeTab === 'leads' && <LeadsTable />}
+
+        {activeTab === 'scraped_emails' && <LeadsTable emailsOnly />}
 
         {activeTab === 'emails' && <EmailsTable />}
 
