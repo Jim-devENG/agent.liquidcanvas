@@ -98,8 +98,13 @@ class BaseScraper:
         
         # Log at appropriate level
         if is_404 and silent_404:
-            logger.debug(f"Page not found (expected): {url}")
+            # Don't log 404s at all when silent_404 is True - they're expected
+            logger.debug(f"Page not found (expected, silent): {url}")
+        elif is_404:
+            # 404 but not silent - log at warning level
+            logger.warning(f"Page not found: {url}")
         else:
+            # Real error - log at error level
             logger.error(f"Error fetching {url} after {self.max_retries} attempts: {last_error}")
         return None, None
     
