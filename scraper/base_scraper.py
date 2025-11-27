@@ -58,22 +58,28 @@ class BaseScraper:
                 soup = BeautifulSoup(raw_html, "lxml")
                 return soup, raw_html
             except requests.exceptions.HTTPError as e:
-                # Check if it's a 404 error
+                # Check if it's a 404 error - check both response status and error message
                 status_code = None
-                if e.response:
-                    status_code = e.response.status_code
-                elif hasattr(e, 'response') and e.response:
+                if hasattr(e, 'response') and e.response is not None:
                     status_code = e.response.status_code
                 
-                # Also check the error message for 404
+                # Also check the error message string for 404 indicators
                 error_str = str(e).lower()
-                if status_code == 404 or '404' in error_str or 'not found' in error_str:
+                is_404_error = (
+                    status_code == 404 or 
+                    '404' in error_str or 
+                    'not found' in error_str or
+                    '404 client error' in error_str
+                )
+                
+                if is_404_error:
                     is_404 = True
                     last_error = f"404 Client Error: Not Found for url: {url}"
                     break  # Don't retry 404s
-                last_error = f"HTTP error: {str(e)}"
-                if attempt < self.max_retries - 1:
-                    time.sleep(1)
+                else:
+                    last_error = f"HTTP error: {str(e)}"
+                    if attempt < self.max_retries - 1:
+                        time.sleep(1)
             except requests.exceptions.Timeout as e:
                 last_error = f"Timeout: {str(e)}"
                 if attempt < self.max_retries - 1:
