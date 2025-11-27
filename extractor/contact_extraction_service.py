@@ -124,14 +124,24 @@ class ContactExtractionService:
             except:
                 pass
             
-            # Use enhanced extractor
+            # Use enhanced extractor with REAL-TIME Hunter.io
+            use_hunter = self.enhanced_email_extractor.hunter_io_client is not None and self.enhanced_email_extractor.hunter_io_client.is_configured()
+            if use_hunter:
+                logger.info(f"🔍 Using Hunter.io API for REAL-TIME email extraction on {page_url}")
+            
             email_results = self.enhanced_email_extractor.extract_all_emails(
                 html_content=html_content,
                 base_url=page_url,
-                use_hunter_io=True,
+                use_hunter_io=use_hunter,  # Only use if properly configured
                 use_playwright=(playwright_context is not None),
                 playwright_context=playwright_context
             )
+            
+            # Log Hunter.io results if used
+            if use_hunter and email_results.get("sources"):
+                hunter_emails = [e for e in email_results.get("emails", []) if "hunter_io" in e.get("sources", [])]
+                if hunter_emails:
+                    logger.info(f"✅ Hunter.io found {len(hunter_emails)} email(s) for {page_url}: {[e['email'] for e in hunter_emails]}")
             
             # Extract emails from enhanced results
             emails = [email_data["email"] for email_data in email_results.get("emails", [])]

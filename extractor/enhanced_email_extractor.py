@@ -295,18 +295,30 @@ class EnhancedEmailExtractor:
         return list(emails)
     
     def extract_from_hunter_io(self, domain: str) -> List[str]:
-        """Extract emails using Hunter.io API"""
+        """Extract emails using Hunter.io API in REAL-TIME"""
         if not self.hunter_io_client or not self.hunter_io_client.is_configured():
+            logger.debug(f"Hunter.io not configured, skipping for {domain}")
             return []
         
         try:
+            # Call Hunter.io API in real-time
+            logger.info(f"🌐 Making REAL-TIME API call to Hunter.io for domain: {domain}")
             result = self.hunter_io_client.domain_search(domain, limit=50)
+            
             if result.get("success") and result.get("emails"):
-                return [email_data["email"] for email_data in result["emails"]]
+                emails = [email_data["email"] for email_data in result["emails"]]
+                logger.info(f"✅ Hunter.io REAL-TIME API call successful: Found {len(emails)} email(s) for {domain}")
+                # Log email pattern if available
+                if result.get("pattern"):
+                    logger.info(f"📧 Hunter.io detected email pattern: {result.get('pattern')}")
+                return emails
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                logger.debug(f"Hunter.io returned no emails for {domain}: {error_msg}")
+                return []
         except Exception as e:
-            logger.warning(f"Error using Hunter.io for {domain}: {str(e)}")
-        
-        return []
+            logger.warning(f"⚠️ Error in REAL-TIME Hunter.io API call for {domain}: {str(e)}")
+            return []
     
     def _is_valid_email(self, email: str) -> bool:
         """Validate email address and filter out false positives"""
