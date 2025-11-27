@@ -107,19 +107,25 @@ class EnhancedEmailExtractor:
                 all_emails.add(email.lower())
                 sources[email.lower()] = sources.get(email.lower(), []) + ["hunter_io"]
         
-        # Filter and validate
+        # Filter and validate - IMPORTANT: Only return validated emails
         valid_emails = []
+        filtered_sources = {}
         for email in all_emails:
             if self._is_valid_email(email):
                 valid_emails.append({
                     "email": email,
                     "sources": list(set(sources.get(email, [])))
                 })
+                # Only include sources for valid emails
+                filtered_sources[email] = sources.get(email, [])
+            else:
+                # Log filtered false positives for debugging
+                logger.debug(f"Filtered invalid email: {email}")
         
         return {
             "emails": valid_emails,
             "total": len(valid_emails),
-            "sources": sources
+            "sources": filtered_sources  # Only return sources for valid emails
         }
     
     def extract_from_html(self, html_content: str) -> List[str]:
