@@ -341,17 +341,40 @@ class WebsiteDiscovery:
             
             logger.info(f"Found {len(all_existing_urls)} existing URLs in database (will filter from {len(all_discoveries)} discovered)")
             
+            filtered_count = 0
             for url, info in all_discoveries.items():
                 try:
-                    # Skip if URL already exists in either table
-                    if url in all_existing_urls:
+                    # Normalize URL for comparison (remove trailing slashes, www, etc.)
+                    normalized_url = url.rstrip('/').lower().replace('www.', '')
+                    normalized_existing = {u.rstrip('/').lower().replace('www.', '') for u in all_existing_urls}
+                    
+                    # Skip if normalized URL already exists in either table
+                    if normalized_url in normalized_existing:
+                        filtered_count += 1
+                        logger.debug(f"Skipping duplicate URL (normalized): {url}")
+                        continue
+                    
+                    # Double-check with database query to be absolutely sure
+                    from sqlalchemy import or_
+                    existing_check = db_session.query(DiscoveredWebsite).filter(
+                        or_(
+                            DiscoveredWebsite.url == url,
+                            DiscoveredWebsite.url == url.rstrip('/'),
+                            DiscoveredWebsite.url == url.replace('www.', ''),
+                            DiscoveredWebsite.url == url.replace('www.', '').rstrip('/')
+                        )
+                    ).first()
+                    
+                    if existing_check:
+                        filtered_count += 1
+                        logger.debug(f"Skipping duplicate URL (database check): {url}")
                         continue
                     
                     # Save new discovered website
                     parsed = urlparse(url)
                     discovered = DiscoveredWebsite(
                         url=info['url'],
-                        domain=parsed.netloc,
+                        domain=parsed.netloc.replace('www.', ''),
                         title=info.get('title', ''),
                         snippet=info.get('snippet', ''),
                         source=info['source'],
@@ -361,14 +384,17 @@ class WebsiteDiscovery:
                     db_session.add(discovered)
                     saved_count += 1
                     new_discoveries[url] = info
+                    logger.debug(f"✅ Saved new website: {url}")
                 except Exception as e:
                     logger.error(f"Error saving discovered website {url}: {str(e)}")
                     continue
             
             try:
                 db_session.commit()
-                filtered_count = len(all_discoveries) - saved_count
-                logger.info(f"Saved {saved_count} new discovered websites to database (filtered out {filtered_count} existing URLs)")
+                logger.info(f"✅ Saved {saved_count} NEW discovered websites to database (filtered out {filtered_count} duplicate/existing URLs)")
+                if saved_count == 0:
+                    logger.warning(f"⚠️ No new websites found! All {len(all_discoveries)} discovered URLs already exist in database.")
+                    logger.info(f"💡 Tip: Try different locations/categories or wait for new websites to appear in search results.")
             except Exception as e:
                 logger.error(f"Error committing discovered websites: {str(e)}")
                 db_session.rollback()
@@ -476,17 +502,40 @@ class WebsiteDiscovery:
             
             logger.info(f"Found {len(all_existing_urls)} existing URLs in database (will filter from {len(all_discoveries)} discovered)")
             
+            filtered_count = 0
             for url, info in all_discoveries.items():
                 try:
-                    # Skip if URL already exists in either table
-                    if url in all_existing_urls:
+                    # Normalize URL for comparison (remove trailing slashes, www, etc.)
+                    normalized_url = url.rstrip('/').lower().replace('www.', '')
+                    normalized_existing = {u.rstrip('/').lower().replace('www.', '') for u in all_existing_urls}
+                    
+                    # Skip if normalized URL already exists in either table
+                    if normalized_url in normalized_existing:
+                        filtered_count += 1
+                        logger.debug(f"Skipping duplicate URL (normalized): {url}")
+                        continue
+                    
+                    # Double-check with database query to be absolutely sure
+                    from sqlalchemy import or_
+                    existing_check = db_session.query(DiscoveredWebsite).filter(
+                        or_(
+                            DiscoveredWebsite.url == url,
+                            DiscoveredWebsite.url == url.rstrip('/'),
+                            DiscoveredWebsite.url == url.replace('www.', ''),
+                            DiscoveredWebsite.url == url.replace('www.', '').rstrip('/')
+                        )
+                    ).first()
+                    
+                    if existing_check:
+                        filtered_count += 1
+                        logger.debug(f"Skipping duplicate URL (database check): {url}")
                         continue
                     
                     # Save new discovered website
                     parsed = urlparse(url)
                     discovered = DiscoveredWebsite(
                         url=info['url'],
-                        domain=parsed.netloc,
+                        domain=parsed.netloc.replace('www.', ''),
                         title=info.get('title', ''),
                         snippet=info.get('snippet', ''),
                         source=info['source'],
@@ -496,14 +545,17 @@ class WebsiteDiscovery:
                     db_session.add(discovered)
                     saved_count += 1
                     new_discoveries[url] = info
+                    logger.debug(f"✅ Saved new website: {url}")
                 except Exception as e:
                     logger.error(f"Error saving discovered website {url}: {str(e)}")
                     continue
             
             try:
                 db_session.commit()
-                filtered_count = len(all_discoveries) - saved_count
-                logger.info(f"Saved {saved_count} new discovered websites to database (filtered out {filtered_count} existing URLs)")
+                logger.info(f"✅ Saved {saved_count} NEW discovered websites to database (filtered out {filtered_count} duplicate/existing URLs)")
+                if saved_count == 0:
+                    logger.warning(f"⚠️ No new websites found! All {len(all_discoveries)} discovered URLs already exist in database.")
+                    logger.info(f"💡 Tip: Try different locations/categories or wait for new websites to appear in search results.")
             except Exception as e:
                 logger.error(f"Error committing discovered websites: {str(e)}")
                 db_session.rollback()
