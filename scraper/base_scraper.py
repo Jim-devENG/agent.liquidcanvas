@@ -68,13 +68,12 @@ class BaseScraper:
                 error_msg_lower = error_str.lower()
                 
                 # Check for 404 in multiple ways - be very explicit
-                is_404_error = False
-                if status_code == 404:
-                    is_404_error = True
-                elif '404' in error_msg_lower:
-                    is_404_error = True
-                elif 'not found' in error_msg_lower:
-                    is_404_error = True
+                # The requests library formats 404 errors as "404 Client Error: Not Found for url: ..."
+                is_404_error = (
+                    status_code == 404 or 
+                    '404' in error_msg_lower or 
+                    'not found' in error_msg_lower
+                )
                 
                 if is_404_error:
                     is_404 = True
