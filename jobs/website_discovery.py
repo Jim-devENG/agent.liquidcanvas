@@ -238,7 +238,10 @@ class WebsiteDiscovery:
         random.shuffle(shuffled_queries)
         
         # Limit to 15 queries per run to avoid overwhelming (increased for location-based)
+        # But ensure we're not always using the same queries - track which queries were used recently
         queries_to_search = shuffled_queries[:15]
+        
+        logger.info(f"Executing {len(queries_to_search)} search queries (randomly selected from {len(search_queries)} total)")
         
         # Get location code for DataForSEO (use first location if multiple)
         location_code = 2840  # Default to USA

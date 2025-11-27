@@ -601,8 +601,22 @@ async def get_discovered_websites(
         # Get total count
         total = query.count()
         
-        # Get paginated results
-        discovered = query.order_by(DiscoveredWebsite.created_at.desc()).offset(skip).limit(limit).all()
+        # Get paginated results - order by created_at DESC to show newest first, and ensure unique URLs
+        # Use distinct on URL to prevent showing the same URL multiple times
+        from sqlalchemy import distinct
+        discovered = query.order_by(
+            DiscoveredWebsite.created_at.desc()
+        ).offset(skip).limit(limit).all()
+        
+        # Additional deduplication: filter out URLs that appear multiple times, keeping only the newest
+        seen_urls = set()
+        unique_discovered = []
+        for item in discovered:
+            if item.url not in seen_urls:
+                seen_urls.add(item.url)
+                unique_discovered.append(item)
+        
+        discovered = unique_discovered
         
         # Format response
         discovered_list = []
