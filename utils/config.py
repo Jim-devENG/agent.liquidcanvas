@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # Hunter.io API (for email finding)
     HUNTER_IO_API_KEY: str = ""
     
+    # DataForSEO API (for website discovery and quality metrics)
+    DATAFORSEO_LOGIN: str = ""  # Email address
+    DATAFORSEO_PASSWORD: str = ""  # API token/password
+    
     # Authentication
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "admin"

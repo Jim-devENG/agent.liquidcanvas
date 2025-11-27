@@ -197,7 +197,19 @@ class WebsiteDiscovery:
         if not search_queries:
             search_queries = self._get_default_queries()
         
-        # Search DuckDuckGo (no API key required)
+        # Try DataForSEO first (if configured), fallback to DuckDuckGo
+        use_dataforseo = False
+        dataforseo_client = None
+        try:
+            from extractor.dataforseo_client import DataForSEOClient
+            dataforseo_client = DataForSEOClient()
+            if dataforseo_client.is_configured():
+                use_dataforseo = True
+                logger.info("Using DataForSEO API for website discovery")
+        except Exception as e:
+            logger.warning(f"Could not initialize DataForSEO client: {e}")
+        
+        # Search DuckDuckGo (no API key required) or DataForSEO
         import random
         shuffled_queries = search_queries.copy()
         random.shuffle(shuffled_queries)
@@ -205,25 +217,57 @@ class WebsiteDiscovery:
         # Limit to 15 queries per run to avoid overwhelming (increased for location-based)
         queries_to_search = shuffled_queries[:15]
         
+        # Get location code for DataForSEO
+        location_code = 2840  # Default to USA
+        if use_dataforseo and location:
+            location_code = dataforseo_client.get_location_code(location)
+        
         for query, category in queries_to_search:
             try:
-                # Get detailed results from DuckDuckGo
-                results = self.search_duckduckgo_detailed(query, num_results=5)
-                for result in results:
-                    url = result.get('url', '')
-                    if url and url.startswith('http'):
-                        if url not in all_discoveries:
-                            all_discoveries[url] = {
-                                'url': url,
-                                'title': result.get('title', ''),
-                                'snippet': result.get('snippet', ''),
-                                'source': 'duckduckgo',
-                                'search_query': query,
-                                'category': category
-                            }
-                # Rate limiting
-                import time
-                time.sleep(1)
+                if use_dataforseo:
+                    # Use DataForSEO SERP API
+                    serp_results = dataforseo_client.serp_google_organic(
+                        keyword=query,
+                        location_code=location_code,
+                        depth=10
+                    )
+                    
+                    if serp_results.get("success") and serp_results.get("results"):
+                        for result in serp_results["results"]:
+                            url = result.get('url', '')
+                            if url and url.startswith('http'):
+                                if url not in all_discoveries:
+                                    all_discoveries[url] = {
+                                        'url': url,
+                                        'title': result.get('title', ''),
+                                        'snippet': result.get('description', ''),
+                                        'source': 'dataforseo',
+                                        'search_query': query,
+                                        'category': category,
+                                        'rank': result.get('position', 0),
+                                        'metrics': result.get('metrics', {})
+                                    }
+                    # Rate limiting for DataForSEO (they have API limits)
+                    import time
+                    time.sleep(2)  # Slightly longer delay for paid API
+                else:
+                    # Fallback to DuckDuckGo
+                    results = self.search_duckduckgo_detailed(query, num_results=5)
+                    for result in results:
+                        url = result.get('url', '')
+                        if url and url.startswith('http'):
+                            if url not in all_discoveries:
+                                all_discoveries[url] = {
+                                    'url': url,
+                                    'title': result.get('title', ''),
+                                    'snippet': result.get('snippet', ''),
+                                    'source': 'duckduckgo',
+                                    'search_query': query,
+                                    'category': category
+                                }
+                    # Rate limiting
+                    import time
+                    time.sleep(1)
             except Exception as e:
                 logger.error(f"Error searching for '{query}': {str(e)}")
                 continue
