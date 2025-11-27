@@ -15,6 +15,8 @@ interface DiscoveryStatus {
   error?: string
   started_at?: string
   completed_at?: string
+  search_sources?: Record<string, number>
+  recent_queries?: Array<{ query: string; count: number }>
 }
 
 interface AutomationStatus {
@@ -332,38 +334,73 @@ export default function DiscoveryControl() {
           </div>
 
           {/* Statistics Panel (Toggle) - Modern Design */}
-          {showStats && status?.result && (
-            <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl p-4 border-2 border-gray-200 shadow-md">
+          {showStats && status && (
+            <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl p-4 border-2 border-gray-200 shadow-md space-y-4">
               <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center">
                 <BarChart3 className="w-4 h-4 mr-2 text-olive-600" />
                 Last Search Results
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                  <p className="text-xs font-medium text-gray-500 mb-1">Discovered</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {status.result.discovered || 0}
-                  </p>
+              
+              {status.result && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+                    <p className="text-xs font-medium text-gray-500 mb-1">Discovered</p>
+                    <p className="text-xl font-bold text-gray-900">
+                      {status.result.discovered || 0}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 border border-green-200 shadow-sm">
+                    <p className="text-xs font-medium text-green-700 mb-1">New Websites</p>
+                    <p className="text-xl font-bold text-green-600">
+                      {status.result.new_websites || 0}
+                    </p>
+                  </div>
+                  <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200 shadow-sm">
+                    <p className="text-xs font-medium text-yellow-700 mb-1">Skipped</p>
+                    <p className="text-xl font-bold text-yellow-600">
+                      {status.result.skipped || 0}
+                    </p>
+                  </div>
+                  <div className="bg-red-50 rounded-lg p-3 border border-red-200 shadow-sm">
+                    <p className="text-xs font-medium text-red-700 mb-1">Failed</p>
+                    <p className="text-xl font-bold text-red-600">
+                      {status.result.failed || 0}
+                    </p>
+                  </div>
                 </div>
-                <div className="bg-green-50 rounded-lg p-3 border border-green-200 shadow-sm">
-                  <p className="text-xs font-medium text-green-700 mb-1">New Websites</p>
-                  <p className="text-xl font-bold text-green-600">
-                    {status.result.new_websites || 0}
-                  </p>
+              )}
+              
+              {/* Search Source Breakdown */}
+              {status.search_sources && Object.keys(status.search_sources).length > 0 && (
+                <div className="border-t border-gray-200 pt-3 mt-3">
+                  <h4 className="text-xs font-bold text-gray-700 mb-2">Search Sources</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(status.search_sources).map(([source, count]) => (
+                      <div key={source} className="bg-olive-50 border border-olive-200 rounded-lg px-3 py-1.5">
+                        <span className="text-xs font-semibold text-olive-800 capitalize">
+                          {source === 'dataforseo' ? 'DataForSEO (Google SERP)' : source === 'duckduckgo' ? 'DuckDuckGo' : source}
+                        </span>
+                        <span className="text-xs text-olive-600 ml-2">({count})</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200 shadow-sm">
-                  <p className="text-xs font-medium text-yellow-700 mb-1">Skipped</p>
-                  <p className="text-xl font-bold text-yellow-600">
-                    {status.result.skipped || 0}
-                  </p>
+              )}
+              
+              {/* Recent Search Queries */}
+              {status.recent_queries && status.recent_queries.length > 0 && (
+                <div className="border-t border-gray-200 pt-3 mt-3">
+                  <h4 className="text-xs font-bold text-gray-700 mb-2">Recent Search Queries</h4>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {status.recent_queries.map((item: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-xs bg-white rounded px-2 py-1 border border-gray-200">
+                        <span className="text-gray-700 font-medium">{item.query}</span>
+                        <span className="text-gray-500">({item.count} found)</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="bg-red-50 rounded-lg p-3 border border-red-200 shadow-sm">
-                  <p className="text-xs font-medium text-red-700 mb-1">Failed</p>
-                  <p className="text-xl font-bold text-red-600">
-                    {status.result.failed || 0}
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
