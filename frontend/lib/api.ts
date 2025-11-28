@@ -296,32 +296,35 @@ export interface Stats {
 
 export async function getStats(): Promise<Stats | null> {
   try {
-    // For now, calculate from prospects and jobs
-    const [prospects, jobs] = await Promise.all([
-      listProspects(0, 1).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
+    // Fetch all data in parallel
+    const [allProspects, jobs, prospectsWithEmail] = await Promise.all([
+      listProspects(0, 1000).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
       listJobs(0, 100).catch(() => []),
+      listProspects(0, 1000, undefined, undefined, true).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
     ])
     
+    // Count prospects by status
+    let prospects_pending = 0
+    let prospects_sent = 0
+    let prospects_replied = 0
+    
+    allProspects.prospects.forEach(p => {
+      if (p.outreach_status === 'pending') prospects_pending++
+      if (p.outreach_status === 'sent') prospects_sent++
+      if (p.outreach_status === 'replied') prospects_replied++
+    })
+    
     const stats: Stats = {
-      total_prospects: prospects.total,
-      prospects_with_email: 0, // Will need backend endpoint
-      prospects_pending: 0,
-      prospects_sent: 0,
-      prospects_replied: 0,
+      total_prospects: allProspects.total,
+      prospects_with_email: prospectsWithEmail.total,
+      prospects_pending,
+      prospects_sent,
+      prospects_replied,
       total_jobs: jobs.length,
       jobs_running: jobs.filter(j => j.status === 'running').length,
       jobs_completed: jobs.filter(j => j.status === 'completed').length,
       jobs_failed: jobs.filter(j => j.status === 'failed').length,
     }
-    
-    // Count prospects by status
-    const allProspects = await listProspects(0, 1000).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 }))
-    allProspects.prospects.forEach(p => {
-      if (p.contact_email) stats.prospects_with_email++
-      if (p.outreach_status === 'pending') stats.prospects_pending++
-      if (p.outreach_status === 'sent') stats.prospects_sent++
-      if (p.outreach_status === 'replied') stats.prospects_replied++
-    })
     
     return stats
   } catch (error) {
@@ -330,13 +333,16 @@ export async function getStats(): Promise<Stats | null> {
   }
 }
 
-// Auth API (placeholder - will need backend endpoint)
+// Auth API
 export async function login(username: string, password: string): Promise<{ access_token: string; token_type: string }> {
-  // For now, use a simple token (backend should implement proper auth)
+  const formData = new URLSearchParams()
+  formData.append('username', username)
+  formData.append('password', password)
+  
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ username, password }),
+    body: formData,
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Login failed' }))

@@ -36,6 +36,8 @@ app.add_middleware(
 )
 
 # Include routers
+from app.api import auth
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
 
