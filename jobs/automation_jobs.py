@@ -23,17 +23,34 @@ def is_automation_enabled(db: Session) -> bool:
     return settings_manager.get_automation_enabled()
 
 
-def log_job_to_db(job_type: str, status: str, result: Dict = None, error: str = None):
-    """Log job execution to database"""
+def log_job_to_db(job_type: str, status: str, result: Dict = None, error: str = None, job_id: int = None):
+    """Log job execution to database - updates existing job if job_id provided, otherwise creates new"""
     db = SessionLocal()
     try:
+        if job_id:
+            # Update existing job
+            job = db.query(ScrapingJob).filter(ScrapingJob.id == job_id).first()
+            if job:
+                job.status = status
+                if result:
+                    job.result = result
+                if error:
+                    job.error_message = error
+                if status in ["completed", "failed", "cancelled"]:
+                    job.completed_at = datetime.utcnow()
+                db.commit()
+                return job.id
+            else:
+                logger.warning(f"Job {job_id} not found, creating new job entry")
+        
+        # Create new job
         job = ScrapingJob(
             job_type=job_type,
             status=status,
             result=result,
             error_message=error,
             started_at=datetime.utcnow() if status == "running" else None,
-            completed_at=datetime.utcnow() if status in ["completed", "failed"] else None
+            completed_at=datetime.utcnow() if status in ["completed", "failed", "cancelled"] else None
         )
         db.add(job)
         db.commit()
@@ -61,7 +78,7 @@ def fetch_new_art_websites() -> Dict:
         db.close()
     
     job_id = log_job_to_db("fetch_new_art_websites", "running")
-    logger.info("Starting job: fetch_new_art_websites")
+    logger.info(f"Starting job: fetch_new_art_websites (job_id: {job_id})")
     
     try:
         db = SessionLocal()
@@ -158,15 +175,17 @@ def fetch_new_art_websites() -> Dict:
             "message": f"Found {len(urls)} new URLs, scraped {new_websites} successfully"
         }
         
-        log_job_to_db("fetch_new_art_websites", "completed", result)
+        # Update the existing job instead of creating a new one
+        log_job_to_db("fetch_new_art_websites", "completed", result, job_id=job_id)
         logger.info(f"Job completed: fetch_new_art_websites - {result}")
         
         return result
         
     except Exception as e:
         error_msg = str(e)
-        log_job_to_db("fetch_new_art_websites", "failed", error=error_msg)
-        logger.error(f"Job failed: fetch_new_art_websites - {error_msg}")
+        logger.error(f"Job failed: fetch_new_art_websites - {error_msg}", exc_info=True)
+        # Update the existing job instead of creating a new one
+        log_job_to_db("fetch_new_art_websites", "failed", error=error_msg, job_id=job_id)
         return {"error": error_msg}
 
 

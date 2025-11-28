@@ -219,6 +219,7 @@ async def stop_discovery(
     """
     from db.models import ScrapingJob
     from jobs.scheduler import scheduler
+    from datetime import datetime
     
     # Get latest running job
     latest_job = db.query(ScrapingJob).filter(
@@ -235,6 +236,7 @@ async def stop_discovery(
     # Mark job as cancelled
     latest_job.status = "cancelled"
     latest_job.error_message = "Cancelled by user"
+    latest_job.completed_at = datetime.utcnow()
     db.commit()
     
     # Try to remove job from scheduler if it exists
@@ -245,6 +247,8 @@ async def stop_discovery(
                 scheduler.remove_job('fetch_new_art_websites')
         except Exception as e:
             logger.warning(f"Could not remove job from scheduler: {e}")
+    
+    logger.info(f"Discovery job {latest_job.id} cancelled by user")
     
     return {
         "message": "Discovery job stopped",
