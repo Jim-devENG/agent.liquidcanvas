@@ -1,7 +1,9 @@
 /**
  * API client for new backend architecture
  */
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
+// Remove /v1 if present - new backend uses /api directly
+const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
+const API_BASE = envBase.replace('/api/v1', '/api').replace('/v1', '')
 
 // Get auth token from localStorage
 function getAuthToken(): string | null {
