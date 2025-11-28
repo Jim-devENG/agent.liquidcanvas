@@ -1,0 +1,87 @@
+"""
+FastAPI application entry point
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api import jobs, prospects
+from app.db.database import engine, Base
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Create FastAPI app
+app = FastAPI(
+    title="Art Outreach Automation API",
+    description="API for automated art website discovery and outreach",
+    version="2.0.0"
+)
+
+# CORS configuration
+cors_origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "https://agent.liquidcanvas.art",
+]
+
+if os.getenv("CORS_ORIGINS"):
+    cors_origins.extend(os.getenv("CORS_ORIGINS").split(","))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
+
+# Webhook routes
+from app.api import webhooks
+app.include_router(webhooks.router, prefix="/api", tags=["webhooks"])
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Art Outreach Automation API",
+        "version": "2.0.0",
+        "docs": "/docs"
+    }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
+@app.on_event("startup")
+async def startup():
+    """Startup event - create database tables and start scheduler"""
+    # In production, use Alembic migrations instead
+    # async with engine.begin() as conn:
+    #     await conn.run_sync(Base.metadata.create_all)
+    
+    # Start scheduler for periodic tasks
+    try:
+        from app.scheduler import start_scheduler
+        start_scheduler()
+        logger.info("Scheduler started successfully")
+    except Exception as e:
+        logger.warning(f"Failed to start scheduler: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Shutdown event - stop scheduler"""
+    try:
+        from app.scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception as e:
+        logger.warning(f"Error stopping scheduler: {e}")
+

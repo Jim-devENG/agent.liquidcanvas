@@ -1,364 +1,219 @@
 /**
- * API client for FastAPI backend
- * Defaults to production URL, falls back to localhost for development
+ * API client for backend communication
  */
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 
-  (typeof window !== 'undefined' && window.location.hostname !== 'localhost' 
-    ? `https://${window.location.hostname}/api/v1`
-    : 'http://localhost:8000/api/v1');
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
 
-/**
- * Get auth token from localStorage
- */
+// Auto-detect domain in production
+if (typeof window !== 'undefined') {
+  const hostname = window.location.hostname
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    // Production - use current domain
+    const protocol = window.location.protocol
+    API_BASE.replace('http://localhost:8000/api', `${protocol}//${hostname}/api`)
+  }
+}
+
+// Get auth token from localStorage
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('auth_token')
 }
 
-/**
- * Make authenticated API request
- */
+// Authenticated fetch wrapper
 async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAuthToken()
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
     'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
   }
   
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
   
-  const response = await fetch(url, {
+  return fetch(url, {
     ...options,
-    headers: headers as HeadersInit,
+    headers,
   })
+}
+
+// Types
+export interface Prospect {
+  id: string
+  domain: string
+  page_url?: string
+  page_title?: string
+  contact_email?: string
+  contact_method?: string
+  da_est?: number
+  score?: number
+  outreach_status: string
+  last_sent?: string
+  followups_sent: number
+  draft_subject?: string
+  draft_body?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Job {
+  id: string
+  job_type: string
+  status: string
+  params?: any
+  result?: any
+  error_message?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EmailLog {
+  id: string
+  prospect_id: string
+  subject: string
+  body: string
+  response?: any
+  sent_at: string
+}
+
+// Jobs API
+export async function createDiscoveryJob(keywords: string, location?: string, maxResults?: number, categories?: string[]): Promise<Job> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs/discover`, {
+    method: 'POST',
+    body: JSON.stringify({
+      keywords,
+      location,
+      max_results: maxResults || 100,
+      categories,
+    }),
+  })
+  if (!res.ok) throw new Error('Failed to create discovery job')
+  return res.json()
+}
+
+export async function createEnrichmentJob(prospectIds?: string[], maxProspects?: number): Promise<{ job_id: string; status: string }> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
   
-  // If unauthorized, redirect to login
-  if (response.status === 401) {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token')
-      window.location.href = '/login'
-    }
-    throw new Error('Unauthorized')
-  }
+  const res = await authenticatedFetch(`${API_BASE}/prospects/enrich?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error('Failed to create enrichment job')
+  return res.json()
+}
+
+export async function createScoringJob(prospectIds?: string[], maxProspects?: number): Promise<Job> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
   
-  return response
+  const res = await authenticatedFetch(`${API_BASE}/jobs/score?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error('Failed to create scoring job')
+  return res.json()
 }
 
-export interface Lead {
-  id: number;
-  email?: string;
-  phone_number?: string;
-  social_platform?: string;
-  social_url?: string;
-  name?: string;
-  website_id: number;
-  website_title?: string;
-  website_url?: string;
-  website_category?: string;
-  source?: string;  // Email source: hunter_io, html, footer, header, contact_form, javascript
-  created_at: string;
+export async function createSendJob(prospectIds?: string[], maxProspects?: number, autoSend?: boolean): Promise<Job> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  if (autoSend !== undefined) params.append('auto_send', autoSend.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/jobs/send?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error('Failed to create send job')
+  return res.json()
 }
 
-export interface LeadsResponse {
-  leads: Lead[];
-  total: number;
-  skip: number;
-  limit: number;
+export async function createFollowupJob(daysSinceSent?: number, maxFollowups?: number, maxProspects?: number): Promise<Job> {
+  const params = new URLSearchParams()
+  if (daysSinceSent) params.append('days_since_sent', daysSinceSent.toString())
+  if (maxFollowups) params.append('max_followups', maxFollowups.toString())
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/jobs/followup?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error('Failed to create follow-up job')
+  return res.json()
 }
 
-export interface Email {
-  id: number;
-  subject: string;
-  recipient_email: string;
-  status: string;
-  website_id: number;
-  contact_id?: number;
-  website_title?: string;
-  sent_at?: string;
-  created_at: string;
+export async function getJobStatus(jobId: string): Promise<Job> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs/${jobId}/status`)
+  if (!res.ok) throw new Error('Failed to get job status')
+  return res.json()
 }
 
-export interface EmailsResponse {
-  emails: Email[];
-  total: number;
-  skip: number;
-  limit: number;
+export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs?skip=${skip}&limit=${limit}`)
+  if (!res.ok) throw new Error('Failed to list jobs')
+  return res.json()
 }
 
-export interface Stats {
-  leads_collected: number;
-  emails_extracted: number;
-  phones_extracted: number;
-  social_links_extracted: number;
-  outreach_sent: number;
-  outreach_pending: number;
-  outreach_failed: number;
-  websites_scraped: number;
-  websites_pending: number;
-  websites_failed: number;
-  jobs_completed: number;
-  jobs_running: number;
-  jobs_failed: number;
-  recent_activity: {
-    leads_last_24h: number;
-    emails_sent_last_24h: number;
-    websites_scraped_last_24h: number;
-  };
-}
-
-export interface JobStatus {
-  id: number;
-  job_type: string;
-  status: string;
-  result?: any;
-  error_message?: string;
-  started_at?: string;
-  completed_at?: string;
-  created_at: string;
-}
-
-export interface LatestJobs {
-  [key: string]: {
-    status: string;
-    result?: any;
-    error_message?: string;
-    started_at?: string;
-    completed_at?: string;
-    created_at?: string;
-  };
-}
-
-export interface Website {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  website_type?: string;
-  status: string;
-  is_art_related?: boolean;
-  quality_score?: number;
-  created_at: string;
-}
-
-export interface ScrapeResult {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  website_type?: string;
-  quality_score?: number;
-  is_art_related?: boolean;
-  status: string;
-  created_at: string;
-}
-
-export interface DiscoveredWebsite {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  snippet?: string;
-  source: string;
-  search_query?: string;
-  category?: string;
-  is_scraped: boolean;
-  scraped_website_id?: number;
-  created_at: string;
-}
-
-export interface DiscoveredWebsitesResponse {
-  discovered: DiscoveredWebsite[];
-  total: number;
-  skip: number;
-  limit: number;
-  filters?: {
-    is_scraped?: boolean;
-    source?: string;
-    category?: string;
-  };
-  contacts?: Array<{
-    id: number;
-    email?: string;
-    phone_number?: string;
-    social_platform?: string;
-    social_url?: string;
-    name?: string;
-    role?: string;
-  }>;
-  extraction_stats?: {
-    emails_found: number;
-    phones_found: number;
-    social_links_found: number;
-    total_contacts: number;
-  };
-}
-
-export interface Activity {
-  id: number;
-  activity_type: string;
-  message: string;
-  status: string;
-  website_id?: number;
-  job_id?: number;
-  metadata?: any;
-  created_at: string;
-}
-
-/**
- * Get leads with pagination and filtering
- */
-export async function getLeads(
+// Prospects API
+export async function listProspects(
   skip = 0,
   limit = 50,
-  category?: string,
+  status?: string,
+  minScore?: number,
   hasEmail?: boolean
-): Promise<LeadsResponse> {
+): Promise<{ prospects: Prospect[]; total: number; skip: number; limit: number }> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
-  });
-  if (category) params.append('category', category);
-  if (hasEmail !== undefined) params.append('has_email', hasEmail.toString());
-
-  const res = await authenticatedFetch(`${API_BASE}/leads?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch leads');
-  return res.json();
+  })
+  if (status) params.append('status', status)
+  if (minScore !== undefined) params.append('min_score', minScore.toString())
+  if (hasEmail !== undefined) params.append('has_email', hasEmail.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
+  if (!res.ok) throw new Error('Failed to list prospects')
+  return res.json()
 }
 
-/**
- * Get sent emails
- */
-export async function getSentEmails(skip = 0, limit = 50): Promise<EmailsResponse> {
-  const res = await authenticatedFetch(`${API_BASE}/emails/sent?skip=${skip}&limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch sent emails');
-  return res.json();
+export async function getProspect(prospectId: string): Promise<Prospect> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}`)
+  if (!res.ok) throw new Error('Failed to get prospect')
+  return res.json()
 }
 
-/**
- * Get pending emails
- */
-export async function getPendingEmails(skip = 0, limit = 50): Promise<EmailsResponse> {
-  const res = await authenticatedFetch(`${API_BASE}/emails/pending?skip=${skip}&limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch pending emails');
-  return res.json();
-}
-
-/**
- * Get statistics
- */
-export async function getStats(): Promise<Stats> {
-  const res = await authenticatedFetch(`${API_BASE}/stats`);
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to fetch stats' }));
-    throw new Error(error.detail || 'Failed to fetch stats');
-  }
-  return res.json();
-}
-
-/**
- * Get job status
- */
-export async function getJobStatus(limit = 20, jobType?: string, status?: string): Promise<JobStatus[]> {
-  const params = new URLSearchParams({ limit: limit.toString() });
-  if (jobType) params.append('job_type', jobType);
-  if (status) params.append('status', status);
-
-  const res = await authenticatedFetch(`${API_BASE}/jobs/status?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch job status');
-  return res.json();
-}
-
-/**
- * Get latest job executions
- */
-export async function getLatestJobs(): Promise<LatestJobs> {
-  const res = await authenticatedFetch(`${API_BASE}/jobs/latest`);
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to fetch latest jobs' }));
-    throw new Error(error.detail || 'Failed to fetch latest jobs');
-  }
-  return res.json();
-}
-
-/**
- * Scrape a URL
- */
-export async function scrapeUrl(url: string, skipQualityCheck = false): Promise<ScrapeResult> {
-  const params = new URLSearchParams({ url });
-  if (skipQualityCheck) params.append('skip_quality_check', 'true');
-
-  const res = await authenticatedFetch(`${API_BASE}/scrape-url?${params}`, {
+export async function composeEmail(prospectId: string): Promise<{ prospect_id: string; subject: string; body: string; draft_saved: boolean }> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/compose`, {
     method: 'POST',
-  });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || 'Failed to scrape URL');
-  }
-  return res.json();
+  })
+  if (!res.ok) throw new Error('Failed to compose email')
+  return res.json()
 }
 
-/**
- * Get activity logs
- */
-export async function getActivity(
-  limit = 50,
-  activityType?: string,
-  status?: string
-): Promise<{ activities: Activity[]; total: number }> {
-  const params = new URLSearchParams({ limit: limit.toString() });
-  if (activityType) params.append('activity_type', activityType);
-  if (status) params.append('status', status);
-
-  const res = await authenticatedFetch(`${API_BASE}/activity?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch activity');
-  return res.json();
-}
-
-/**
- * Get discovered websites
- */
-export async function getDiscoveredWebsites(
-  skip = 0,
-  limit = 50,
-  isScraped?: boolean,
-  source?: string,
-  category?: string
-): Promise<DiscoveredWebsitesResponse> {
-  const params = new URLSearchParams({
-    skip: skip.toString(),
-    limit: limit.toString(),
-  });
-  if (isScraped !== undefined) params.append('is_scraped', isScraped.toString());
-  if (source) params.append('source', source);
-  if (category) params.append('category', category);
-
-  const res = await authenticatedFetch(`${API_BASE}/discovered?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch discovered websites');
-  return res.json();
-}
-
-/**
- * Get websites
- */
-export async function getWebsites(): Promise<Website[]> {
-  const res = await authenticatedFetch(`${API_BASE}/websites`);
-  if (!res.ok) throw new Error('Failed to fetch websites');
-  return res.json();
-}
-
-/**
- * Extract contacts for a website
- */
-export async function extractContactsForWebsite(websiteId: number): Promise<void> {
-  const res = await authenticatedFetch(`${API_BASE}/websites/${websiteId}/extract-contacts`, {
+export async function sendEmail(prospectId: string, subject?: string, body?: string): Promise<{
+  prospect_id: string
+  email_log_id: string
+  sent_at: string
+  success: boolean
+  message_id?: string
+}> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/send`, {
     method: 'POST',
-  });
-  if (!res.ok) throw new Error('Failed to extract contacts');
+    body: JSON.stringify({
+      subject,
+      body,
+    }),
+  })
+  if (!res.ok) throw new Error('Failed to send email')
+  return res.json()
+}
+
+// Auth API
+export async function login(username: string, password: string): Promise<{ access_token: string; token_type: string }> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ username, password }),
+  })
+  if (!res.ok) throw new Error('Login failed')
+  return res.json()
 }
 

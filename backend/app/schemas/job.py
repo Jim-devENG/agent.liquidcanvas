@@ -1,0 +1,40 @@
+"""
+Pydantic schemas for job-related endpoints
+"""
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
+from datetime import datetime
+from uuid import UUID
+
+
+class JobCreateRequest(BaseModel):
+    """Request schema for creating a discovery job"""
+    keywords: str = Field(..., description="Search keywords")
+    location: Optional[str] = Field(None, description="Location filter (e.g., 'usa', 'canada')")
+    max_results: int = Field(100, ge=1, le=1000, description="Maximum number of results")
+    categories: Optional[list[str]] = Field(None, description="Category filters")
+
+
+class JobResponse(BaseModel):
+    """Response schema for job status"""
+    id: UUID
+    job_type: str
+    status: str
+    params: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class JobStatusResponse(BaseModel):
+    """Response schema for job status check"""
+    id: UUID
+    status: str
+    progress: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
