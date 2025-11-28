@@ -1,28 +1,22 @@
 /**
- * API client for FastAPI backend
- * Defaults to production URL, falls back to localhost for development
+ * API client for new backend architecture
  */
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 
-  (typeof window !== 'undefined' && window.location.hostname !== 'localhost' 
-    ? `https://${window.location.hostname}/api/v1`
-    : 'http://localhost:8000/api/v1');
+// Remove /v1 if present - new backend uses /api directly
+const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
+const API_BASE = envBase.replace('/api/v1', '/api').replace('/v1', '')
 
-/**
- * Get auth token from localStorage
- */
+// Get auth token from localStorage
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('auth_token')
 }
 
-/**
- * Make authenticated API request
- */
+// Authenticated fetch wrapper
 async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAuthToken()
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
     'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
   }
   
   if (token) {
@@ -31,7 +25,7 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   
   const response = await fetch(url, {
     ...options,
-    headers: headers as HeadersInit,
+    headers,
   })
   
   // If unauthorized, redirect to login
@@ -46,324 +40,313 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   return response
 }
 
-export interface Lead {
-  id: number;
-  email?: string;
-  phone_number?: string;
-  social_platform?: string;
-  social_url?: string;
-  name?: string;
-  website_id: number;
-  website_title?: string;
-  website_url?: string;
-  website_category?: string;
-  source?: string;  // Email source: hunter_io, html, footer, header, contact_form, javascript
-  created_at: string;
+// Types
+export interface Prospect {
+  id: string
+  domain: string
+  page_url?: string
+  page_title?: string
+  contact_email?: string
+  contact_method?: string
+  da_est?: number
+  score?: number
+  outreach_status: string
+  last_sent?: string
+  followups_sent: number
+  draft_subject?: string
+  draft_body?: string
+  dataforseo_payload?: any
+  hunter_payload?: any
+  created_at: string
+  updated_at: string
 }
 
-export interface LeadsResponse {
-  leads: Lead[];
-  total: number;
-  skip: number;
-  limit: number;
+export interface Job {
+  id: string
+  job_type: string
+  status: string
+  params?: any
+  result?: any
+  error_message?: string
+  created_at: string
+  updated_at: string
 }
 
-export interface Email {
-  id: number;
-  subject: string;
-  recipient_email: string;
-  status: string;
-  website_id: number;
-  contact_id?: number;
-  website_title?: string;
-  sent_at?: string;
-  created_at: string;
+export interface EmailLog {
+  id: string
+  prospect_id: string
+  subject: string
+  body: string
+  response?: any
+  sent_at: string
 }
 
-export interface EmailsResponse {
-  emails: Email[];
-  total: number;
-  skip: number;
-  limit: number;
+export interface ProspectListResponse {
+  prospects: Prospect[]
+  total: number
+  skip: number
+  limit: number
 }
 
-export interface Stats {
-  leads_collected: number;
-  emails_extracted: number;
-  phones_extracted: number;
-  social_links_extracted: number;
-  outreach_sent: number;
-  outreach_pending: number;
-  outreach_failed: number;
-  websites_scraped: number;
-  websites_pending: number;
-  websites_failed: number;
-  jobs_completed: number;
-  jobs_running: number;
-  jobs_failed: number;
-  recent_activity: {
-    leads_last_24h: number;
-    emails_sent_last_24h: number;
-    websites_scraped_last_24h: number;
-  };
+// Jobs API
+export async function createDiscoveryJob(
+  keywords: string,
+  location?: string,
+  maxResults?: number,
+  categories?: string[]
+): Promise<Job> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs/discover`, {
+    method: 'POST',
+    body: JSON.stringify({
+      keywords,
+      location,
+      max_results: maxResults || 100,
+      categories,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create discovery job' }))
+    throw new Error(error.detail || 'Failed to create discovery job')
+  }
+  return res.json()
 }
 
-export interface JobStatus {
-  id: number;
-  job_type: string;
-  status: string;
-  result?: any;
-  error_message?: string;
-  started_at?: string;
-  completed_at?: string;
-  created_at: string;
+export async function createEnrichmentJob(
+  prospectIds?: string[],
+  maxProspects?: number
+): Promise<{ job_id: string; status: string; message?: string }> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/prospects/enrich?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create enrichment job' }))
+    throw new Error(error.detail || 'Failed to create enrichment job')
+  }
+  return res.json()
 }
 
-export interface LatestJobs {
-  [key: string]: {
-    status: string;
-    result?: any;
-    error_message?: string;
-    started_at?: string;
-    completed_at?: string;
-    created_at?: string;
-  };
+export async function createScoringJob(
+  prospectIds?: string[],
+  maxProspects?: number
+): Promise<Job> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/jobs/score?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create scoring job' }))
+    throw new Error(error.detail || 'Failed to create scoring job')
+  }
+  return res.json()
 }
 
-export interface Website {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  website_type?: string;
-  status: string;
-  is_art_related?: boolean;
-  quality_score?: number;
-  created_at: string;
+export async function createSendJob(
+  prospectIds?: string[],
+  maxProspects?: number,
+  autoSend?: boolean
+): Promise<Job> {
+  const params = new URLSearchParams()
+  if (prospectIds) params.append('prospect_ids', prospectIds.join(','))
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  if (autoSend !== undefined) params.append('auto_send', autoSend.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/jobs/send?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create send job' }))
+    throw new Error(error.detail || 'Failed to create send job')
+  }
+  return res.json()
 }
 
-export interface ScrapeResult {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  description?: string;
-  category?: string;
-  website_type?: string;
-  quality_score?: number;
-  is_art_related?: boolean;
-  status: string;
-  created_at: string;
+export async function createFollowupJob(
+  daysSinceSent?: number,
+  maxFollowups?: number,
+  maxProspects?: number
+): Promise<Job> {
+  const params = new URLSearchParams()
+  if (daysSinceSent) params.append('days_since_sent', daysSinceSent.toString())
+  if (maxFollowups) params.append('max_followups', maxFollowups.toString())
+  if (maxProspects) params.append('max_prospects', maxProspects.toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/jobs/followup?${params}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create follow-up job' }))
+    throw new Error(error.detail || 'Failed to create follow-up job')
+  }
+  return res.json()
 }
 
-export interface DiscoveredWebsite {
-  id: number;
-  url: string;
-  domain?: string;
-  title?: string;
-  snippet?: string;
-  source: string;
-  search_query?: string;
-  category?: string;
-  is_scraped: boolean;
-  scraped_website_id?: number;
-  created_at: string;
+export async function getJobStatus(jobId: string): Promise<Job> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs/${jobId}/status`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get job status' }))
+    throw new Error(error.detail || 'Failed to get job status')
+  }
+  return res.json()
 }
 
-export interface DiscoveredWebsitesResponse {
-  discovered: DiscoveredWebsite[];
-  total: number;
-  skip: number;
-  limit: number;
-  filters?: {
-    is_scraped?: boolean;
-    source?: string;
-    category?: string;
-  };
-  contacts?: Array<{
-    id: number;
-    email?: string;
-    phone_number?: string;
-    social_platform?: string;
-    social_url?: string;
-    name?: string;
-    role?: string;
-  }>;
-  extraction_stats?: {
-    emails_found: number;
-    phones_found: number;
-    social_links_found: number;
-    total_contacts: number;
-  };
+export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
+  const res = await authenticatedFetch(`${API_BASE}/jobs?skip=${skip}&limit=${limit}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to list jobs' }))
+    throw new Error(error.detail || 'Failed to list jobs')
+  }
+  return res.json()
 }
 
-export interface Activity {
-  id: number;
-  activity_type: string;
-  message: string;
-  status: string;
-  website_id?: number;
-  job_id?: number;
-  metadata?: any;
-  created_at: string;
-}
-
-/**
- * Get leads with pagination and filtering
- */
-export async function getLeads(
+// Prospects API
+export async function listProspects(
   skip = 0,
   limit = 50,
-  category?: string,
+  status?: string,
+  minScore?: number,
   hasEmail?: boolean
-): Promise<LeadsResponse> {
+): Promise<ProspectListResponse> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
-  });
-  if (category) params.append('category', category);
-  if (hasEmail !== undefined) params.append('has_email', hasEmail.toString());
-
-  const res = await authenticatedFetch(`${API_BASE}/leads?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch leads');
-  return res.json();
-}
-
-/**
- * Get sent emails
- */
-export async function getSentEmails(skip = 0, limit = 50): Promise<EmailsResponse> {
-  const res = await authenticatedFetch(`${API_BASE}/emails/sent?skip=${skip}&limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch sent emails');
-  return res.json();
-}
-
-/**
- * Get pending emails
- */
-export async function getPendingEmails(skip = 0, limit = 50): Promise<EmailsResponse> {
-  const res = await authenticatedFetch(`${API_BASE}/emails/pending?skip=${skip}&limit=${limit}`);
-  if (!res.ok) throw new Error('Failed to fetch pending emails');
-  return res.json();
-}
-
-/**
- * Get statistics
- */
-export async function getStats(): Promise<Stats> {
-  const res = await authenticatedFetch(`${API_BASE}/stats`);
+  })
+  if (status) params.append('status', status)
+  if (minScore !== undefined) params.append('min_score', minScore.toString())
+  if (hasEmail !== undefined) params.append('has_email', hasEmail.toString())
+  // Cache busting
+  params.append('_t', Date.now().toString())
+  
+  const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to fetch stats' }));
-    throw new Error(error.detail || 'Failed to fetch stats');
+    const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
+    throw new Error(error.detail || 'Failed to list prospects')
   }
-  return res.json();
+  return res.json()
 }
 
-/**
- * Get job status
- */
-export async function getJobStatus(limit = 20, jobType?: string, status?: string): Promise<JobStatus[]> {
-  const params = new URLSearchParams({ limit: limit.toString() });
-  if (jobType) params.append('job_type', jobType);
-  if (status) params.append('status', status);
-
-  const res = await authenticatedFetch(`${API_BASE}/jobs/status?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch job status');
-  return res.json();
-}
-
-/**
- * Get latest job executions
- */
-export async function getLatestJobs(): Promise<LatestJobs> {
-  const res = await authenticatedFetch(`${API_BASE}/jobs/latest`);
+export async function getProspect(prospectId: string): Promise<Prospect> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}`)
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to fetch latest jobs' }));
-    throw new Error(error.detail || 'Failed to fetch latest jobs');
+    const error = await res.json().catch(() => ({ detail: 'Failed to get prospect' }))
+    throw new Error(error.detail || 'Failed to get prospect')
   }
-  return res.json();
+  return res.json()
 }
 
-/**
- * Scrape a URL
- */
-export async function scrapeUrl(url: string, skipQualityCheck = false): Promise<ScrapeResult> {
-  const params = new URLSearchParams({ url });
-  if (skipQualityCheck) params.append('skip_quality_check', 'true');
-
-  const res = await authenticatedFetch(`${API_BASE}/scrape-url?${params}`, {
+export async function composeEmail(prospectId: string): Promise<{
+  prospect_id: string
+  subject: string
+  body: string
+  draft_saved: boolean
+}> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/compose`, {
     method: 'POST',
-  });
+  })
   if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.detail || 'Failed to scrape URL');
+    const error = await res.json().catch(() => ({ detail: 'Failed to compose email' }))
+    throw new Error(error.detail || 'Failed to compose email')
   }
-  return res.json();
+  return res.json()
 }
 
-/**
- * Get activity logs
- */
-export async function getActivity(
-  limit = 50,
-  activityType?: string,
-  status?: string
-): Promise<{ activities: Activity[]; total: number }> {
-  const params = new URLSearchParams({ limit: limit.toString() });
-  if (activityType) params.append('activity_type', activityType);
-  if (status) params.append('status', status);
-
-  const res = await authenticatedFetch(`${API_BASE}/activity?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch activity');
-  return res.json();
-}
-
-/**
- * Get discovered websites
- */
-export async function getDiscoveredWebsites(
-  skip = 0,
-  limit = 50,
-  isScraped?: boolean,
-  source?: string,
-  category?: string,
-  autoRefresh = false
-): Promise<DiscoveredWebsitesResponse> {
-  const params = new URLSearchParams({
-    skip: skip.toString(),
-    limit: limit.toString(),
-  });
-  if (isScraped !== undefined) params.append('is_scraped', isScraped.toString());
-  if (source) params.append('source', source);
-  if (category) params.append('category', category);
-  // Add cache-busting timestamp for auto-refresh
-  if (autoRefresh) {
-    params.append('_t', Date.now().toString());
-  }
-
-  const res = await authenticatedFetch(`${API_BASE}/discovered?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch discovered websites');
-  return res.json();
-}
-
-/**
- * Get websites
- */
-export async function getWebsites(): Promise<Website[]> {
-  const res = await authenticatedFetch(`${API_BASE}/websites`);
-  if (!res.ok) throw new Error('Failed to fetch websites');
-  return res.json();
-}
-
-/**
- * Extract contacts for a website
- */
-export async function extractContactsForWebsite(websiteId: number): Promise<void> {
-  const res = await authenticatedFetch(`${API_BASE}/websites/${websiteId}/extract-contacts`, {
+export async function sendEmail(
+  prospectId: string,
+  subject?: string,
+  body?: string
+): Promise<{
+  prospect_id: string
+  email_log_id: string
+  sent_at: string
+  success: boolean
+  message_id?: string
+}> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/send`, {
     method: 'POST',
-  });
-  if (!res.ok) throw new Error('Failed to extract contacts');
+    body: JSON.stringify({
+      subject,
+      body,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to send email' }))
+    throw new Error(error.detail || 'Failed to send email')
+  }
+  return res.json()
 }
 
+// Stats API (will need to be added to backend)
+export interface Stats {
+  total_prospects: number
+  prospects_with_email: number
+  prospects_pending: number
+  prospects_sent: number
+  prospects_replied: number
+  total_jobs: number
+  jobs_running: number
+  jobs_completed: number
+  jobs_failed: number
+}
+
+export async function getStats(): Promise<Stats | null> {
+  try {
+    // Fetch all data in parallel
+    const [allProspects, jobs, prospectsWithEmail] = await Promise.all([
+      listProspects(0, 1000).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
+      listJobs(0, 100).catch(() => []),
+      listProspects(0, 1000, undefined, undefined, true).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
+    ])
+    
+    // Count prospects by status
+    let prospects_pending = 0
+    let prospects_sent = 0
+    let prospects_replied = 0
+    
+    allProspects.prospects.forEach(p => {
+      if (p.outreach_status === 'pending') prospects_pending++
+      if (p.outreach_status === 'sent') prospects_sent++
+      if (p.outreach_status === 'replied') prospects_replied++
+    })
+    
+    const stats: Stats = {
+      total_prospects: allProspects.total,
+      prospects_with_email: prospectsWithEmail.total,
+      prospects_pending,
+      prospects_sent,
+      prospects_replied,
+      total_jobs: jobs.length,
+      jobs_running: jobs.filter(j => j.status === 'running').length,
+      jobs_completed: jobs.filter(j => j.status === 'completed').length,
+      jobs_failed: jobs.filter(j => j.status === 'failed').length,
+    }
+    
+    return stats
+  } catch (error) {
+    console.error('Failed to get stats:', error)
+    return null
+  }
+}
+
+// Auth API
+export async function login(username: string, password: string): Promise<{ access_token: string; token_type: string }> {
+  const formData = new URLSearchParams()
+  formData.append('username', username)
+  formData.append('password', password)
+  
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData,
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Login failed' }))
+    throw new Error(error.detail || 'Login failed')
+  }
+  return res.json()
+}

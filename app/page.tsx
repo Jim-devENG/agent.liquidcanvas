@@ -6,16 +6,13 @@ import StatsCards from '@/components/StatsCards'
 import LeadsTable from '@/components/LeadsTable'
 import EmailsTable from '@/components/EmailsTable'
 import JobStatusPanel from '@/components/JobStatusPanel'
-import ScrapeForm from '@/components/ScrapeForm'
 import ActivityFeed from '@/components/ActivityFeed'
 import AutomationControl from '@/components/AutomationControl'
-import EmailTemplateEditor from '@/components/EmailTemplateEditor'
 import DiscoveryControl from '@/components/DiscoveryControl'
 import WebsitesTable from '@/components/WebsitesTable'
 import SystemStatus from '@/components/SystemStatus'
-import SearchFrequencyControl from '@/components/SearchFrequencyControl'
-import { getStats, getLatestJobs } from '@/lib/api'
-import type { Stats, LatestJobs } from '@/lib/api'
+import { getStats, listJobs } from '@/lib/api'
+import type { Stats, Job } from '@/lib/api'
 import { 
   LayoutDashboard, 
   Globe, 
@@ -23,26 +20,15 @@ import {
   Mail, 
   Settings, 
   Activity,
-  Search,
-  Zap,
-  XCircle,
   AtSign,
   LogOut as LogOutIcon,
   BookOpen
 } from 'lucide-react'
 
-interface AutomationStatus {
-  automation_enabled: boolean
-  email_trigger_mode: string
-  search_interval_seconds: number
-  next_search_time?: string
-}
-
 export default function Dashboard() {
   const router = useRouter()
   const [stats, setStats] = useState<Stats | null>(null)
-  const [jobs, setJobs] = useState<LatestJobs | null>(null)
-  const [automationStatus, setAutomationStatus] = useState<AutomationStatus | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
@@ -58,81 +44,38 @@ export default function Dashboard() {
     }
 
     loadData()
-    // Refresh every 5 seconds for real-time updates
-    const interval = setInterval(loadData, 5000)
+    // Refresh every 10 seconds for real-time updates
+    const interval = setInterval(loadData, 10000)
     return () => clearInterval(interval)
   }, [router])
 
   const loadData = async () => {
     try {
-      const [statsData, jobsData, automationData] = await Promise.all([
+      const [statsData, jobsData] = await Promise.all([
         getStats().catch(err => {
           console.warn('Failed to get stats:', err.message)
           return null
         }),
-        getLatestJobs().catch(err => {
+        listJobs(0, 20).catch(err => {
           console.warn('Failed to get jobs:', err.message)
-          return null
+          return []
         }),
-        (async () => {
-          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-          if (!token) return null
-          try {
-            const r = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/automation/status`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            })
-            return r.ok ? r.json() : null
-          } catch {
-            return null
-          }
-        })()
-      ]) as [Stats | null, LatestJobs | null, AutomationStatus | null]
+      ])
       
-      // Only update if we got valid data
       if (statsData) setStats(statsData)
       if (jobsData) setJobs(jobsData)
-      if (automationData) setAutomationStatus(automationData)
       
-      // Check if backend is actually responding
-      const backendResponding = statsData !== null || jobsData !== null || automationData !== null
+      const backendResponding = statsData !== null || jobsData.length > 0
       setConnectionError(!backendResponding)
     } catch (error: any) {
       console.error('Error loading data:', error)
       const isConnectionError = 
         error.message?.includes('Failed to fetch') || 
         error.message?.includes('ERR_CONNECTION_REFUSED') ||
-        error.message?.includes('Request timeout') ||
         error.message?.includes('NetworkError')
       
       if (isConnectionError) {
         setConnectionError(true)
-      }
-      
-      if (!stats) {
-        setStats({
-          leads_collected: 0,
-          emails_extracted: 0,
-          phones_extracted: 0,
-          social_links_extracted: 0,
-          outreach_sent: 0,
-          outreach_pending: 0,
-          outreach_failed: 0,
-          websites_scraped: 0,
-          websites_pending: 0,
-          websites_failed: 0,
-          jobs_completed: 0,
-          jobs_running: 0,
-          jobs_failed: 0,
-          recent_activity: {
-            leads_last_24h: 0,
-            emails_sent_last_24h: 0,
-            websites_scraped_last_24h: 0
-          }
-        })
-      }
-      
-      if (!jobs) {
-        setJobs({})
       }
     } finally {
       setLoading(false)
@@ -147,18 +90,12 @@ export default function Dashboard() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
-    { id: 'scraped_emails', label: '📧 Scraped Emails', icon: AtSign },
+    { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
     { id: 'emails', label: 'Outreach Emails', icon: Mail },
     { id: 'jobs', label: 'Jobs', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'guide', label: 'Guide', icon: BookOpen },
   ]
-  
-  // Debug: Log tabs on mount
-  useEffect(() => {
-    console.log('Available tabs:', tabs.map(t => t.id))
-    console.log('Scraped Emails tab exists:', tabs.find(t => t.id === 'scraped_emails'))
-  }, [tabs])
 
   if (loading) {
     return (
@@ -180,19 +117,13 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-black">
-                Art Outreach Scraper
+                Art Outreach Automation
               </h1>
               <p className="text-gray-600 mt-0.5 text-xs">
-                Autonomous website discovery and outreach automation
+                Automated website discovery and outreach system
               </p>
             </div>
             <div className="flex items-center space-x-3">
-              {automationStatus?.automation_enabled && (
-                <div className="flex items-center space-x-1.5 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-xs font-medium text-green-800">Active</span>
-                </div>
-              )}
               <button
                 onClick={() => {
                   localStorage.removeItem('auth_token')
@@ -213,13 +144,12 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
           <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
             <div className="flex items-center">
-              <XCircle className="h-5 w-5 text-red-500 mr-3" />
               <div>
                 <p className="text-sm font-medium text-red-800">
                   Backend not connected
                 </p>
                 <p className="text-xs text-red-600 mt-1">
-                  Unable to connect to API server. Please ensure the FastAPI backend is running.
+                  Unable to connect to API server. Please ensure the backend is running.
                 </p>
               </div>
             </div>
@@ -229,14 +159,10 @@ export default function Dashboard() {
 
       {/* System Status Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3">
-        <SystemStatus 
-          automationStatus={automationStatus}
-          jobs={jobs}
-          loading={loading}
-        />
+        <SystemStatus jobs={jobs} loading={loading} />
       </div>
 
-      {/* Navigation Tabs - Modern Design */}
+      {/* Navigation Tabs */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
         <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-md border-2 border-gray-200/60 p-2">
           <nav className="flex space-x-2 overflow-x-auto">
@@ -245,10 +171,7 @@ export default function Dashboard() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => {
-                    console.log('Tab clicked:', tab.id, tab.label)
-                    setActiveTab(tab.id as any)
-                  }}
+                  onClick={() => setActiveTab(tab.id as any)}
                   className={`
                     flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all whitespace-nowrap
                     ${
@@ -277,15 +200,11 @@ export default function Dashboard() {
               </div>
             )}
             <AutomationControl />
+            <DiscoveryControl />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DiscoveryControl />
-              <SearchFrequencyControl automationStatus={automationStatus} />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ScrapeForm onScrape={refreshData} />
-              {jobs ? <JobStatusPanel jobs={jobs} /> : (
+              {jobs.length > 0 ? <JobStatusPanel jobs={jobs} /> : (
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                  <p className="text-gray-500">Job status unavailable.</p>
+                  <p className="text-gray-500">No jobs found.</p>
                 </div>
               )}
             </div>
@@ -301,11 +220,12 @@ export default function Dashboard() {
 
         {activeTab === 'emails' && <EmailsTable />}
 
-        {activeTab === 'jobs' && jobs && <JobStatusPanel jobs={jobs} expanded />}
+        {activeTab === 'jobs' && jobs.length > 0 && <JobStatusPanel jobs={jobs} expanded />}
 
         {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <EmailTemplateEditor />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Settings</h2>
+            <p className="text-gray-600">Settings panel coming soon...</p>
           </div>
         )}
 
@@ -313,7 +233,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">User Guide</h2>
-              <p className="text-gray-600">Complete documentation on how to use the Art Outreach Scraper</p>
+              <p className="text-gray-600">Complete documentation on how to use the Art Outreach Automation</p>
             </div>
             <div className="prose prose-sm max-w-none">
               <p className="text-gray-700 mb-4">

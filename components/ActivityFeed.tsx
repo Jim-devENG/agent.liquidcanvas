@@ -1,17 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Activity, CheckCircle, AlertCircle, Info, Loader2, Clock } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Activity as ActivityIcon } from 'lucide-react'
 
-interface ActivityItem {
-  id: number
-  activity_type: string
+interface Activity {
+  id: string
+  type: string
   message: string
-  status: string
-  website_id?: number
-  job_id?: number
-  metadata?: any
-  created_at: string
+  timestamp: string
 }
 
 interface ActivityFeedProps {
@@ -19,153 +15,53 @@ interface ActivityFeedProps {
   autoRefresh?: boolean
 }
 
-export default function ActivityFeed({ limit = 50, autoRefresh = true }: ActivityFeedProps) {
-  const [activities, setActivities] = useState<ActivityItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const loadActivities = async () => {
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) return
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 seconds
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}/activity?limit=${limit}`,
-        {
-          signal: controller.signal,
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      )
-      clearTimeout(timeoutId);
-      if (response.ok) {
-        const data = await response.json()
-        setActivities(data.activities || [])
-      } else {
-        // Don't clear activities if we have some, just don't update
-        if (activities.length === 0) {
-          setActivities([])
-        }
-      }
-    } catch (error: any) {
-      // Only log if it's not an abort (timeout is expected sometimes)
-      if (error.name !== 'AbortError') {
-        console.warn('Error loading activities:', error.message)
-      }
-      // Keep existing activities if we have them
-      if (activities.length === 0) {
-        setActivities([])
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
+export default function ActivityFeed({ limit = 20, autoRefresh = false }: ActivityFeedProps) {
+  const [activities, setActivities] = useState<Activity[]>([])
 
   useEffect(() => {
+    // For now, generate mock activities from jobs
+    // In production, this should fetch from a real activity endpoint
+    const loadActivities = () => {
+      // Mock activities - replace with real API call
+      const mockActivities: Activity[] = [
+        {
+          id: '1',
+          type: 'info',
+          message: 'System initialized',
+          timestamp: new Date().toISOString(),
+        },
+      ]
+      setActivities(mockActivities)
+    }
+
     loadActivities()
     if (autoRefresh) {
-      // Refresh every 5 seconds for real-time updates
-      const interval = setInterval(() => {
-        loadActivities()
-      }, 5000)
+      const interval = setInterval(loadActivities, 10000)
       return () => clearInterval(interval)
     }
-  }, [limit, autoRefresh])
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
-      case 'error':
-        return <AlertCircle className="w-4 h-4 text-red-500" />
-      case 'warning':
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />
-      default:
-        return <Info className="w-4 h-4 text-olive-600" />
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'bg-green-50 border-green-200'
-      case 'error':
-        return 'bg-red-50 border-red-200'
-      case 'warning':
-        return 'bg-yellow-50 border-yellow-200'
-      default:
-        return 'bg-olive-50 border-olive-200'
-    }
-  }
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString)
-    // Show actual time instead of "ago" format
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  }
+  }, [autoRefresh])
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-md border border-gray-200/50 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-1.5">
-          <div className="p-1.5 bg-olive-600 rounded-md">
-            <Activity className="w-3.5 h-3.5 text-white" />
-          </div>
-          <h2 className="text-sm font-bold text-gray-900">Activity Feed</h2>
-        </div>
-        {autoRefresh && (
-          <div className="flex items-center space-x-1.5 text-xs text-gray-500">
-            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-            <span>Live</span>
-          </div>
-        )}
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
+      <div className="flex items-center space-x-2 mb-4">
+        <ActivityIcon className="w-5 h-5 text-olive-600" />
+        <h2 className="text-lg font-bold text-gray-900">Activity Feed</h2>
       </div>
-
-      {loading && activities.length === 0 ? (
-        <div className="text-center py-4">
-          <Loader2 className="w-5 h-5 animate-spin text-olive-600 mx-auto mb-1.5" />
-          <p className="text-xs text-gray-500">Loading activities...</p>
-        </div>
-      ) : activities.length === 0 ? (
-        <div className="text-center py-4 text-gray-500">
-          <Activity className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-          <p className="text-xs">No activities yet. Start scraping to see activity here.</p>
-        </div>
+      {activities.length === 0 ? (
+        <p className="text-gray-500 text-sm">No recent activity</p>
       ) : (
-        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
           {activities.map((activity) => (
             <div
               key={activity.id}
-              className={`p-2 rounded-md border ${getStatusColor(activity.status)} transition-all hover:shadow-sm`}
+              className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              <div className="flex items-start space-x-2">
-                <div className="flex-shrink-0 mt-0.5">
-                  {getStatusIcon(activity.status)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                      {activity.activity_type}
-                    </span>
-                    <div className="flex items-center space-x-1 text-xs text-gray-500">
-                      <Clock className="w-2.5 h-2.5" />
-                      <span>{formatTime(activity.created_at)}</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-900 mt-0.5">{activity.message}</p>
-                  {activity.metadata && Object.keys(activity.metadata).length > 0 && (
-                    <div className="mt-1 text-xs text-gray-600">
-                      {JSON.stringify(activity.metadata, null, 2)}
-                    </div>
-                  )}
-                </div>
+              <div className="w-2 h-2 bg-olive-600 rounded-full mt-2"></div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-900">{activity.message}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {new Date(activity.timestamp).toLocaleString()}
+                </p>
               </div>
             </div>
           ))}
@@ -174,3 +70,4 @@ export default function ActivityFeed({ limit = 50, autoRefresh = true }: Activit
     </div>
   )
 }
+
