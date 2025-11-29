@@ -1,4 +1,5 @@
 'use client'
+// Version: 3.0 - Discovery feature removed
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
