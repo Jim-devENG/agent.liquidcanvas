@@ -399,3 +399,34 @@ export async function getAPIKeysStatus(): Promise<Record<string, boolean>> {
   }
   return res.json()
 }
+
+// Automation Settings
+export interface AutomationSettings {
+  enabled: boolean
+  automatic_scraper: boolean
+  locations: string[]
+  categories: string[]
+  keywords?: string
+  max_results: number
+}
+
+export async function getAutomationSettings(): Promise<AutomationSettings> {
+  const res = await authenticatedFetch(`${API_BASE}/settings/automation`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to load automation settings' }))
+    throw new Error(error.detail || 'Failed to load automation settings')
+  }
+  return res.json()
+}
+
+export async function updateAutomationSettings(settings: AutomationSettings): Promise<AutomationSettings> {
+  const res = await authenticatedFetch(`${API_BASE}/settings/automation`, {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to update automation settings' }))
+    throw new Error(error.detail || 'Failed to update automation settings')
+  }
+  return res.json()
+}

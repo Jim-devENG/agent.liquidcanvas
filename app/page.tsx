@@ -9,6 +9,7 @@ import EmailsTable from '@/components/EmailsTable'
 import JobStatusPanel from '@/components/JobStatusPanel'
 import ActivityFeed from '@/components/ActivityFeed'
 import AutomationControl from '@/components/AutomationControl'
+import ManualScrape from '@/components/ManualScrape'
 import WebsitesTable from '@/components/WebsitesTable'
 import SystemStatus from '@/components/SystemStatus'
 import { getStats, listJobs } from '@/lib/api'
@@ -200,6 +201,7 @@ export default function Dashboard() {
               </div>
             )}
             <AutomationControl />
+            <ManualScrape />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {jobs.length > 0 ? <JobStatusPanel jobs={jobs} /> : (
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
