@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Play, Square } from 'lucide-react'
+import { Search, Play, Square, Loader2, MapPin, Tag } from 'lucide-react'
 import { createDiscoveryJob } from '@/lib/api'
 
 const LOCATION_OPTIONS = [
@@ -28,70 +28,65 @@ export default function DiscoveryControl() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const toggleLocation = (value: string) => {
     setSelectedLocations((prev) => {
       if (prev.includes(value)) {
         const next = prev.filter((v) => v !== value)
-        // Ensure at least one location remains selected
         return next.length > 0 ? next : prev
       }
       return [...prev, value]
     })
+    setError(null)
   }
 
   const toggleCategory = (value: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
-    )
+    setSelectedCategories((prev) => {
+      const newCategories = prev.includes(value)
+        ? prev.filter((v) => v !== value)
+        : [...prev, value]
+      setError(null)
+      return newCategories
+    })
+  }
+
+  const canStart = () => {
+    // Can start if: (keywords OR categories) AND at least one location
+    const hasSearchCriteria = keywords.trim().length > 0 || selectedCategories.length > 0
+    const hasLocation = selectedLocations.length > 0
+    return hasSearchCriteria && hasLocation
   }
 
   const handleDiscover = async () => {
-    // Debug: log current state - use console.error so it always shows
-    const debugInfo = {
-      keywords: keywords.trim(),
-      keywordsLength: keywords.trim().length,
-      selectedCategories: selectedCategories,
-      categoriesLength: selectedCategories.length,
-      selectedLocations: selectedLocations,
-      locationsLength: selectedLocations.length
-    }
-    console.error('🔍 DISCOVERY DEBUG:', debugInfo)
-    console.log('🔍 DISCOVERY DEBUG:', debugInfo)
+    setError(null)
 
-    // Require at least one signal to search: keywords or categories
-    const hasKeywords = keywords.trim().length > 0
-    const hasCategories = selectedCategories.length > 0
-    
-    if (!hasKeywords && !hasCategories) {
-      console.error('❌ VALIDATION FAILED: No keywords and no categories selected')
-      alert(`Please enter keywords OR select at least one category.\n\nCurrent state:\n- Keywords: "${keywords.trim()}"\n- Categories selected: ${selectedCategories.length}\n- Categories: ${selectedCategories.join(', ') || 'none'}`)
+    // Validation
+    if (!keywords.trim() && selectedCategories.length === 0) {
+      setError('Please select at least one category OR enter keywords')
       return
     }
 
     if (selectedLocations.length === 0) {
-      console.error('❌ VALIDATION FAILED: No locations selected')
-      alert('Please select at least one location')
+      setError('Please select at least one location')
       return
     }
 
     setLoading(true)
     try {
-      // Pass locations and categories arrays to the API
-      // Send empty string if no keywords (backend expects string, not null)
       await createDiscoveryJob(
-        hasKeywords ? keywords.trim() : '', 
-        selectedLocations, 
-        100, 
-        hasCategories ? selectedCategories : []
+        keywords.trim() || '',
+        selectedLocations,
+        100,
+        selectedCategories.length > 0 ? selectedCategories : []
       )
       setIsRunning(true)
-      // Clear form after successful start
-      setKeywords('')
-      setSelectedCategories([])
+      setError(null)
+      // Don't clear form - let user see what was submitted
     } catch (error: any) {
       console.error('Discovery error:', error)
-      alert(`Failed to start discovery: ${error.message || 'Unknown error'}`)
+      setError(error.message || 'Failed to start discovery. Check console for details.')
+      setIsRunning(false)
     } finally {
       setLoading(false)
     }
@@ -104,111 +99,147 @@ export default function DiscoveryControl() {
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-      <h2 className="text-lg font-bold text-gray-900 mb-4">Website Discovery</h2>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Keywords
-          </label>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="w-4 h-4 text-gray-400" />
-            </span>
-            <input
-              type="text"
-              value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
-              placeholder="e.g., home decor blog, parenting website"
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-olive-500"
-            />
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-gray-900">Website Discovery</h2>
+        {isRunning && (
+          <div className="flex items-center space-x-2 text-olive-600">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm font-medium">Running...</span>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Locations (select one or more)
-          </label>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {LOCATION_OPTIONS.map((loc) => (
-              <label
-                key={loc.value}
-                className={`flex items-center space-x-2 px-3 py-2 border rounded-lg text-sm cursor-pointer ${
-                  selectedLocations.includes(loc.value)
-                    ? 'border-olive-600 bg-olive-50 text-olive-800'
-                    : 'border-gray-300 text-gray-700 hover:border-olive-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={selectedLocations.includes(loc.value)}
-                  onChange={() => toggleLocation(loc.value)}
-                />
-                <span>{loc.label}</span>
-              </label>
-            ))}
-          </div>
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-800">{error}</p>
         </div>
+      )}
 
+      <div className="space-y-6">
+        {/* Categories Section - Primary */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Categories (optional, select multiple)
+          <label className="flex items-center space-x-2 text-sm font-semibold text-gray-700 mb-3">
+            <Tag className="w-4 h-4" />
+            <span>Select Categories (Recommended)</span>
           </label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {CATEGORY_OPTIONS.map((cat) => (
-              <label
-                key={cat.value}
-                className={`flex items-center space-x-2 px-3 py-2 border rounded-lg text-sm cursor-pointer ${
-                  selectedCategories.includes(cat.value)
-                    ? 'border-olive-600 bg-olive-50 text-olive-800'
-                    : 'border-gray-300 text-gray-700 hover:border-olive-400'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={selectedCategories.includes(cat.value)}
-                  onChange={() => toggleCategory(cat.value)}
-                />
-                <span>{cat.label}</span>
-              </label>
-            ))}
+            {CATEGORY_OPTIONS.map((cat) => {
+              const isSelected = selectedCategories.includes(cat.value)
+              return (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => toggleCategory(cat.value)}
+                  className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'bg-olive-600 text-white shadow-md transform scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              )
+            })}
           </div>
+          {selectedCategories.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedCategories.length} categor{selectedCategories.length === 1 ? 'y' : 'ies'} selected
+            </p>
+          )}
         </div>
 
-        {/* Debug panel - shows current state */}
-        <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-600">
-          <div className="font-semibold mb-1">Debug Info:</div>
-          <div>Keywords: "{keywords.trim()}" ({keywords.trim().length} chars)</div>
-          <div>Categories: {selectedCategories.length} selected - {selectedCategories.join(', ') || 'none'}</div>
-          <div>Locations: {selectedLocations.length} selected - {selectedLocations.join(', ')}</div>
-          <div className="mt-1">
-            Can start: {((keywords.trim().length > 0 || selectedCategories.length > 0) && selectedLocations.length > 0) ? '✅ YES' : '❌ NO'}
-          </div>
+        {/* Keywords Section - Optional */}
+        <div>
+          <label className="flex items-center space-x-2 text-sm font-semibold text-gray-700 mb-2">
+            <Search className="w-4 h-4" />
+            <span>Keywords (Optional)</span>
+          </label>
+          <input
+            type="text"
+            value={keywords}
+            onChange={(e) => {
+              setKeywords(e.target.value)
+              setError(null)
+            }}
+            placeholder="e.g., art blog, creative agency, design studio"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500 focus:border-transparent"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Leave empty if using categories only
+          </p>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {!isRunning ? (
-            <button
-              onClick={handleDiscover}
-              disabled={loading}
-              className="flex items-center space-x-2 px-4 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700 disabled:opacity-50"
-            >
-              <Play className="w-4 h-4" />
-              <span>Start Discovery</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleStop}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-            >
-              <Square className="w-4 h-4" />
-              <span>Stop</span>
-            </button>
+        {/* Locations Section */}
+        <div>
+          <label className="flex items-center space-x-2 text-sm font-semibold text-gray-700 mb-3">
+            <MapPin className="w-4 h-4" />
+            <span>Locations (Required)</span>
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {LOCATION_OPTIONS.map((loc) => {
+              const isSelected = selectedLocations.includes(loc.value)
+              return (
+                <button
+                  key={loc.value}
+                  type="button"
+                  onClick={() => toggleLocation(loc.value)}
+                  className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-md transform scale-105'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                  }`}
+                >
+                  {loc.label}
+                </button>
+              )
+            })}
+          </div>
+          {selectedLocations.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedLocations.length} location{selectedLocations.length === 1 ? '' : 's'} selected
+            </p>
+          )}
+        </div>
+
+        {/* Action Button */}
+        <div className="pt-4 border-t border-gray-200">
+          <button
+            onClick={handleDiscover}
+            disabled={loading || !canStart() || isRunning}
+            className={`w-full flex items-center justify-center space-x-2 px-6 py-3 rounded-lg font-semibold transition-all ${
+              canStart() && !loading && !isRunning
+                ? 'bg-olive-600 text-white hover:bg-olive-700 shadow-md hover:shadow-lg transform hover:scale-105'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Starting Discovery...</span>
+              </>
+            ) : isRunning ? (
+              <>
+                <Square className="w-5 h-5" />
+                <span>Stop Discovery</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-5 h-5" />
+                <span>Start Discovery</span>
+              </>
+            )}
+          </button>
+          
+          {!canStart() && (
+            <p className="mt-2 text-xs text-center text-gray-500">
+              {!keywords.trim() && selectedCategories.length === 0
+                ? 'Select at least one category or enter keywords'
+                : 'Select at least one location'}
+            </p>
           )}
         </div>
       </div>
     </div>
   )
 }
-
