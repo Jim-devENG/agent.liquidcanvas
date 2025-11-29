@@ -142,33 +142,75 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
         all_prospects = []
         discovered_domains = set()
         
+        # Detailed tracking
+        search_stats = {
+            "total_queries": 0,
+            "queries_executed": 0,
+            "queries_successful": 0,
+            "queries_failed": 0,
+            "total_results_found": 0,
+            "results_processed": 0,
+            "results_skipped_duplicate": 0,
+            "results_skipped_existing": 0,
+            "results_saved": 0,
+            "queries_detail": []
+        }
+        
         try:
             for loc in locations:
                 location_code = client.get_location_code(loc)
                 search_queries = _generate_search_queries(keywords, categories)
+                search_stats["total_queries"] += len(search_queries)
                 
-                logger.info(f"Processing location {loc} with {len(search_queries)} queries")
+                logger.info(f"📍 Processing location '{loc}' (code: {location_code}) with {len(search_queries)} queries")
                 
                 for query in search_queries:
                     if len(all_prospects) >= max_results:
+                        logger.info(f"⏹️  Reached max_results limit ({max_results}), stopping search")
                         break
                     
+                    query_stats = {
+                        "query": query,
+                        "location": loc,
+                        "status": "pending",
+                        "results_found": 0,
+                        "results_saved": 0,
+                        "error": None
+                    }
+                    search_stats["queries_executed"] += 1
+                    
                     try:
+                        logger.info(f"🔍 Searching: '{query}' in {loc}...")
                         # Call DataForSEO API
                         serp_results = await client.serp_google_organic(query, location_code, depth=10)
                         
                         if not serp_results or not serp_results.get("success"):
-                            logger.warning(f"No results for query: {query} - {serp_results.get('error', 'Unknown error')}")
+                            error_msg = serp_results.get('error', 'Unknown error') if serp_results else 'No response'
+                            logger.warning(f"❌ No results for query '{query}' in {loc}: {error_msg}")
+                            query_stats["status"] = "failed"
+                            query_stats["error"] = error_msg
+                            search_stats["queries_failed"] += 1
+                            search_stats["queries_detail"].append(query_stats)
                             continue
+                        
+                        search_stats["queries_successful"] += 1
+                        query_stats["status"] = "success"
                         
                         # Process results
                         results = serp_results.get("results", [])
+                        query_stats["results_found"] = len(results)
+                        search_stats["total_results_found"] += len(results)
+                        logger.info(f"✅ Found {len(results)} results for '{query}' in {loc}")
+                        
                         for result_item in results:
                             if len(all_prospects) >= max_results:
                                 break
                             
+                            search_stats["results_processed"] += 1
+                            
                             url = result_item.get("url", "")
                             if not url or not url.startswith("http"):
+                                search_stats["results_skipped_duplicate"] += 1
                                 continue
                             
                             # Parse and normalize URL
@@ -176,8 +218,10 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             domain = parsed.netloc.lower().replace("www.", "")
                             normalized_url = url
                             
-                            # Check if domain already discovered
+                            # Check if domain already discovered in this job
                             if domain in discovered_domains:
+                                search_stats["results_skipped_duplicate"] += 1
+                                logger.debug(f"⏭️  Skipping duplicate domain in this job: {domain}")
                                 continue
                             
                             # Check database for existing prospect
@@ -186,6 +230,8 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             )
                             if existing.scalar_one_or_none():
                                 discovered_domains.add(domain)
+                                search_stats["results_skipped_existing"] += 1
+                                logger.debug(f"⏭️  Skipping existing domain in database: {domain}")
                                 continue
                             
                             # Create prospect
@@ -201,14 +247,22 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             db.add(prospect)
                             discovered_domains.add(domain)
                             all_prospects.append(prospect)
+                            query_stats["results_saved"] += 1
+                            search_stats["results_saved"] += 1
                             
-                            logger.info(f"Discovered: {domain}")
+                            logger.info(f"💾 Saved new prospect: {domain} - {result_item.get('title', '')[:50]}")
+                        
+                        search_stats["queries_detail"].append(query_stats)
                         
                         # Small delay to respect rate limits
                         await asyncio.sleep(1)
                     
                     except Exception as e:
-                        logger.error(f"Error processing query '{query}': {e}", exc_info=True)
+                        logger.error(f"❌ Error processing query '{query}' in {loc}: {e}", exc_info=True)
+                        query_stats["status"] = "error"
+                        query_stats["error"] = str(e)
+                        search_stats["queries_failed"] += 1
+                        search_stats["queries_detail"].append(query_stats)
                         continue
                 
                 if len(all_prospects) >= max_results:
@@ -216,23 +270,40 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
             
             # Commit all prospects
             await db.commit()
+            logger.info(f"💾 Committed {len(all_prospects)} new prospects to database")
             
-            # Update job status
+            # Update job status with detailed results
             job.status = "completed"
             job.result = {
                 "prospects_discovered": len(all_prospects),
                 "locations": locations,
                 "categories": categories,
-                "keywords": keywords
+                "keywords": keywords,
+                "search_statistics": {
+                    "total_queries": search_stats["total_queries"],
+                    "queries_executed": search_stats["queries_executed"],
+                    "queries_successful": search_stats["queries_successful"],
+                    "queries_failed": search_stats["queries_failed"],
+                    "total_results_found": search_stats["total_results_found"],
+                    "results_processed": search_stats["results_processed"],
+                    "results_saved": search_stats["results_saved"],
+                    "results_skipped_duplicate": search_stats["results_skipped_duplicate"],
+                    "results_skipped_existing": search_stats["results_skipped_existing"]
+                },
+                "queries_detail": search_stats["queries_detail"][:20]  # Limit to first 20 for size
             }
             await db.commit()
             
-            logger.info(f"✅ Discovery job {job_id} completed: {len(all_prospects)} prospects discovered")
+            logger.info(f"✅ Discovery job {job_id} completed:")
+            logger.info(f"   📊 Queries: {search_stats['queries_executed']} executed, {search_stats['queries_successful']} successful, {search_stats['queries_failed']} failed")
+            logger.info(f"   🔍 Results: {search_stats['total_results_found']} found, {search_stats['results_saved']} saved")
+            logger.info(f"   ⏭️  Skipped: {search_stats['results_skipped_duplicate']} duplicates, {search_stats['results_skipped_existing']} existing")
             
             return {
                 "job_id": job_id,
                 "status": "completed",
-                "prospects_discovered": len(all_prospects)
+                "prospects_discovered": len(all_prospects),
+                "search_statistics": job.result["search_statistics"]
             }
         
         except Exception as e:
