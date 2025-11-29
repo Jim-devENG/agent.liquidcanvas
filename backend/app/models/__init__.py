@@ -6,4 +6,4 @@ from app.models.job import Job
 from app.models.email_log import EmailLog
 from app.models.settings import Settings
 
-__all__ = ["Prospect", "Job", "EmailLog"]
+__all__ = ["Prospect", "Job", "EmailLog", "Settings"]
