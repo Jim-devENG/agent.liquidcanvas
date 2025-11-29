@@ -50,6 +50,20 @@ def get_queue(name: str):
     return _queues.get(name)
 
 
+def job_to_response(job: Job) -> JobResponse:
+    """Convert Job model to JobResponse, handling async SQLAlchemy attributes"""
+    return JobResponse(
+        id=job.id,
+        job_type=job.job_type,
+        status=job.status,
+        params=job.params,
+        result=job.result,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        updated_at=job.updated_at
+    )
+
+
 @router.post("/discover", response_model=JobResponse)
 async def create_discovery_job(
     request: JobCreateRequest,
@@ -106,8 +120,10 @@ async def create_discovery_job(
         job.status = "failed"
         job.error_message = "Worker service not available"
         await db.commit()
+        await db.refresh(job)
     
-    return JobResponse.model_validate(job)
+    # Use helper function to avoid async SQLAlchemy attribute access issues
+    return job_to_response(job)
 
 
 @router.get("/{job_id}/status", response_model=JobStatusResponse)
@@ -172,7 +188,7 @@ async def create_scoring_job(
         job.error_message = "Worker service not available"
         await db.commit()
     
-    return JobResponse.model_validate(job)
+    return job_to_response(job)
 
 
 @router.post("/send", response_model=JobResponse)
@@ -219,7 +235,7 @@ async def create_send_job(
         job.error_message = "Worker service not available"
         await db.commit()
     
-    return JobResponse.model_validate(job)
+    return job_to_response(job)
 
 
 @router.post("/followup", response_model=JobResponse)
@@ -266,7 +282,7 @@ async def create_followup_job(
         job.error_message = "Worker service not available"
         await db.commit()
     
-    return JobResponse.model_validate(job)
+    return job_to_response(job)
 
 
 @router.post("/check-replies")
@@ -328,4 +344,4 @@ async def list_jobs(
         .limit(limit)
     )
     jobs = result.scalars().all()
-    return [JobResponse.model_validate(job) for job in jobs]
+    return [job_to_response(job) for job in jobs]
