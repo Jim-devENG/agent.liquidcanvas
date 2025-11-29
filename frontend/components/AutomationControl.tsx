@@ -35,7 +35,7 @@ export default function AutomationControl() {
             <Zap className="w-5 h-5 text-gray-600" />
             <div>
               <p className="font-semibold text-gray-900">Automatic Scraper</p>
-              <p className="text-sm text-gray-600">Run discovery jobs automatically</p>
+              <p className="text-sm text-gray-600">Run automation jobs automatically</p>
             </div>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
