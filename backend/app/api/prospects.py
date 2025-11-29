@@ -208,7 +208,7 @@ async def compose_email(
     
     # Import Gemini client
     try:
-        from worker.clients.gemini import GeminiClient
+        from app.clients.gemini import GeminiClient
         client = GeminiClient()
     except ImportError:
         raise HTTPException(status_code=500, detail="Worker clients not available. Ensure worker service is running.")
@@ -301,7 +301,7 @@ async def send_email(
     import asyncio
     
     try:
-        from worker.clients.gmail import GmailClient
+        from app.clients.gmail import GmailClient
         gmail_client = GmailClient()
     except ImportError:
         raise HTTPException(status_code=500, detail="Worker clients not available. Ensure worker service is running.")

@@ -169,7 +169,7 @@ async def test_service(service_name: str):
         service_lower = service_name.lower().replace(" ", "").replace(".", "")
         
         if "hunter" in service_lower:
-            from worker.clients.hunter import HunterIOClient
+            from app.clients.hunter import HunterIOClient
             api_key = os.getenv("HUNTER_IO_API_KEY")
             if not api_key:
                 return {
@@ -188,7 +188,7 @@ async def test_service(service_name: str):
             }
         
         elif "dataforseo" in service_lower:
-            from worker.clients.dataforseo import DataForSEOClient
+            from app.clients.dataforseo import DataForSEOClient
             login = os.getenv("DATAFORSEO_LOGIN")
             password = os.getenv("DATAFORSEO_PASSWORD")
             if not login or not password:
@@ -208,7 +208,7 @@ async def test_service(service_name: str):
             }
         
         elif "gemini" in service_lower:
-            from worker.clients.gemini import GeminiClient
+            from app.clients.gemini import GeminiClient
             api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
                 return {
@@ -231,7 +231,7 @@ async def test_service(service_name: str):
             }
         
         elif "gmail" in service_lower:
-            from worker.clients.gmail import GmailClient
+            from app.clients.gmail import GmailClient
             client_id = os.getenv("GMAIL_CLIENT_ID")
             client_secret = os.getenv("GMAIL_CLIENT_SECRET")
             refresh_token = os.getenv("GMAIL_REFRESH_TOKEN")
