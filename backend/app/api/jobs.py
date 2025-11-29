@@ -128,18 +128,19 @@ async def create_discovery_job(
         await db.commit()
         await db.refresh(job)
     
-    # Queue RQ task
+    # Process job directly in backend (free tier compatible - no separate worker needed)
     try:
-        from worker.tasks.discovery import discover_websites_task
-        queue = get_queue("discovery")
-        if queue:
-            queue.enqueue(discover_websites_task, str(job.id))
-        else:
-            logger.warning("Redis not available - discovery job not queued")
-    except ImportError:
-        logger.warning("Worker tasks not available - discovery job not queued. Ensure worker service is running.")
+        from app.tasks.discovery import process_discovery_job
+        import asyncio
+        
+        # Start background task to process job
+        # This runs asynchronously without blocking the API response
+        asyncio.create_task(process_discovery_job(str(job.id)))
+        logger.info(f"Discovery job {job.id} started in background")
+    except Exception as e:
+        logger.error(f"Failed to start discovery job {job.id}: {e}", exc_info=True)
         job.status = "failed"
-        job.error_message = "Worker service not available"
+        job.error_message = f"Failed to start job: {e}"
         await db.commit()
         await db.refresh(job)
     
