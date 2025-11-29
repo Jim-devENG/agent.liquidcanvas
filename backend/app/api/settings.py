@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 import logging
 
 from app.db.database import get_db
+from app.models.settings import Settings
+from sqlalchemy import select
+from sqlalchemy.sql import func
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -271,4 +274,72 @@ async def test_service(service_name: str):
             "status": "error",
             "message": f"Test failed: {str(e)}"
         }
+
+
+# Automation Settings Models
+class AutomationSettings(BaseModel):
+    """Request/Response model for automation settings"""
+    enabled: bool = Field(False, description="Master switch for automation")
+    automatic_scraper: bool = Field(False, description="Enable automatic scraping")
+    locations: list[str] = Field(default_factory=list, description="Selected locations for scraping")
+    categories: list[str] = Field(default_factory=list, description="Selected categories for scraping")
+    keywords: Optional[str] = Field(None, description="Optional keywords for scraping")
+    max_results: int = Field(100, ge=1, le=1000, description="Maximum results per scrape")
+
+
+@router.get("/automation", response_model=AutomationSettings)
+async def get_automation_settings(db: AsyncSession = Depends(get_db)):
+    """
+    Get current automation settings
+    """
+    try:
+        result = await db.execute(
+            select(Settings).where(Settings.key == "automation")
+        )
+        settings_row = result.scalar_one_or_none()
+        
+        if settings_row and settings_row.value:
+            return AutomationSettings(**settings_row.value)
+        else:
+            # Return defaults
+            return AutomationSettings()
+    except Exception as e:
+        logger.error(f"Error getting automation settings: {e}", exc_info=True)
+        return AutomationSettings()
+
+
+@router.post("/automation", response_model=AutomationSettings)
+async def update_automation_settings(
+    settings: AutomationSettings,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update automation settings
+    """
+    try:
+        result = await db.execute(
+            select(Settings).where(Settings.key == "automation")
+        )
+        settings_row = result.scalar_one_or_none()
+        
+        if settings_row:
+            # Update existing
+            settings_row.value = settings.dict()
+            settings_row.updated_at = func.now()
+        else:
+            # Create new
+            settings_row = Settings(
+                key="automation",
+                value=settings.dict()
+            )
+            db.add(settings_row)
+        
+        await db.commit()
+        await db.refresh(settings_row)
+        
+        return AutomationSettings(**settings_row.value)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error updating automation settings: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
 
