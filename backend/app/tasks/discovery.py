@@ -13,19 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from dotenv import load_dotenv
 
-# Add repo root to path to import worker.clients
-# This allows us to import from worker.clients.dataforseo
-backend_dir = Path(__file__).resolve().parents[2]
-repo_root = backend_dir.parent  # Go up one more level to repo root
-if repo_root.exists():
-    sys.path.insert(0, str(repo_root))
-    logger = logging.getLogger(__name__)
-    logger.info(f"Added repo root to path: {repo_root}")
-else:
-    # Fallback: try adding worker directory directly
-    worker_dir = backend_dir / "worker"
-    if worker_dir.exists():
-        sys.path.insert(0, str(worker_dir))
+# Configure logging first
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -116,36 +109,16 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
         logger.info(f"Starting discovery job {job_id}: keywords='{keywords}', locations={locations}, categories={categories}")
         
         try:
-            # Import DataForSEO client
+            # Import DataForSEO client from backend (self-contained)
             try:
-                from worker.clients.dataforseo import DataForSEOClient
-                logger.info("✅ Successfully imported DataForSEO client")
+                from app.clients.dataforseo import DataForSEOClient
+                logger.info("✅ Successfully imported DataForSEO client from backend")
             except ImportError as import_err:
                 logger.error(f"❌ Failed to import DataForSEO client: {import_err}")
-                logger.error(f"Python path: {sys.path}")
-                logger.error(f"Looking for: worker.clients.dataforseo")
-                logger.error(f"Repo root: {repo_root}")
-                logger.error(f"Worker dir exists: {(repo_root / 'worker').exists()}")
-                logger.error(f"Client file exists: {(repo_root / 'worker' / 'clients' / 'dataforseo.py').exists()}")
-                # Try alternative import path
-                try:
-                    # Try importing directly from the file
-                    import importlib.util
-                    worker_clients_path = repo_root / "worker" / "clients" / "dataforseo.py"
-                    if worker_clients_path.exists():
-                        spec = importlib.util.spec_from_file_location("dataforseo", worker_clients_path)
-                        dataforseo_module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(dataforseo_module)
-                        DataForSEOClient = dataforseo_module.DataForSEOClient
-                        logger.info("✅ Successfully imported DataForSEO client via direct file import")
-                    else:
-                        raise ImportError(f"DataForSEO client file not found at {worker_clients_path}")
-                except Exception as alt_err:
-                    logger.error(f"❌ Alternative import also failed: {alt_err}")
-                    job.status = "failed"
-                    job.error_message = f"DataForSEO client not available: {import_err}"
-                    await db.commit()
-                    return {"error": f"DataForSEO client not available: {import_err}"}
+                job.status = "failed"
+                job.error_message = f"DataForSEO client not available: {import_err}"
+                await db.commit()
+                return {"error": f"DataForSEO client not available: {import_err}"}
             
             # Initialize client (will check credentials)
             try:
