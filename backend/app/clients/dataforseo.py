@@ -4,6 +4,7 @@ DataForSEO API client for website discovery and on-page crawling
 import httpx
 import base64
 import asyncio
+import json
 from typing import Dict, List, Optional, Any
 import os
 from dotenv import load_dotenv
@@ -87,12 +88,13 @@ class DataForSEOClient:
         # According to DataForSEO API v3 docs, the payload must be wrapped in "data" array
         # Required fields: keyword, location_code, language_code
         # Optional fields: depth (defaults to 10 if not specified)
+        # CRITICAL: Do NOT include device, os, or other fields that cause 40503 error
         payload = {
             "data": [{
-                "keyword": str(keyword).strip(),  # Ensure it's a string and trimmed
-                "location_code": int(location_code),  # Ensure it's an integer
-                "language_code": str(language_code).strip().lower(),  # Ensure lowercase string
-                "depth": int(depth) if depth else 10  # Ensure integer, default to 10
+                "keyword": str(keyword).strip(),
+                "location_code": int(location_code),
+                "language_code": str(language_code).strip().lower(),
+                "depth": int(depth) if depth else 10
             }]
         }
         
@@ -104,6 +106,9 @@ class DataForSEOClient:
         if payload["data"][0]["location_code"] <= 0:
             logger.error(f"Invalid location_code: {location_code}")
             return {"success": False, "error": f"Invalid location_code: {location_code}"}
+        
+        # Log exact payload for debugging (this will help identify the issue)
+        logger.info(f"DataForSEO task_post payload: {json.dumps(payload, indent=2)}")
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
