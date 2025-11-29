@@ -1,4 +1,5 @@
 'use client'
+// Version: 3.1 - Discovery feature removed - FORCE REDEPLOY
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -194,22 +195,33 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {stats ? <StatsCards stats={stats} /> : (
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                <p className="text-gray-500">Stats unavailable. Check backend connection.</p>
-              </div>
-            )}
-            <AutomationControl />
-            <ManualScrape />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {jobs.length > 0 ? <JobStatusPanel jobs={jobs} /> : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Stats Cards - Full Width */}
+            <div className="lg:col-span-12">
+              {stats ? <StatsCards stats={stats} /> : (
+                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
+                  <p className="text-gray-500">Stats unavailable. Check backend connection.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Left Column - Automation & Manual Scrape */}
+            <div className="lg:col-span-7 space-y-6">
+              <AutomationControl />
+              <ManualScrape />
+            </div>
+
+            {/* Right Column - Jobs & Activity */}
+            <div className="lg:col-span-5 space-y-6">
+              {jobs.length > 0 ? (
+                <JobStatusPanel jobs={jobs} />
+              ) : (
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
                   <p className="text-gray-500">No jobs found.</p>
                 </div>
               )}
+              <ActivityFeed limit={15} autoRefresh={true} />
             </div>
-            <ActivityFeed limit={20} autoRefresh={true} />
           </div>
         )}
 
