@@ -127,9 +127,13 @@ class DataForSEOClient:
         Returns:
             Dictionary with parsed results
         """
-        # DataForSEO requires POST request with task ID in body
+        # DataForSEO requires POST request with array of task IDs in body
         url = f"{self.BASE_URL}/serp/google/organic/task_get/advanced"
         payload = {"id": task_id}
+        
+        # Try different payload formats - DataForSEO expects array format
+        # Format 1: Direct array (most common)
+        payload_array = [{"id": task_id}]
         
         # Wait a bit before first poll (task needs time to be created)
         await asyncio.sleep(3)
@@ -138,7 +142,8 @@ class DataForSEOClient:
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
                     logger.debug(f"Polling DataForSEO task {task_id} (attempt {attempt + 1}/{max_attempts})")
-                    response = await client.post(url, headers=self.headers, json=payload)
+                    # DataForSEO task_get expects an array of task objects
+                    response = await client.post(url, headers=self.headers, json=payload_array)
                     response.raise_for_status()
                     result = response.json()
                     
