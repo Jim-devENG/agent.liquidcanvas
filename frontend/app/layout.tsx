@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Art Outreach Automation',
-  description: 'Automated art website discovery and outreach',
+  description: 'Automated outreach system',
 }
 
 export default function RootLayout({
