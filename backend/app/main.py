@@ -1,12 +1,16 @@
 """
 FastAPI application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import jobs, prospects
 from app.db.database import engine, Base
 import os
 import logging
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +23,66 @@ app = FastAPI(
 
 
 @app.middleware("http")
-async def add_cors_headers(request, call_next):
+async def add_cors_headers(request: Request, call_next):
     """
     Fallback middleware to guarantee CORS headers on all responses.
     This runs in addition to CORSMiddleware, but ensures that even
     unexpected 500 errors include Access-Control-Allow-* headers so
     the frontend can read the response instead of seeing a CORS block.
     """
-    response = await call_next(request)
-    response.headers.setdefault("Access-Control-Allow-Origin", "*")
-    response.headers.setdefault("Access-Control-Allow-Methods", "*")
-    response.headers.setdefault("Access-Control-Allow-Headers", "*")
-    return response
+    try:
+        response = await call_next(request)
+        # Always add CORS headers, even if CORSMiddleware didn't
+        response.headers.setdefault("Access-Control-Allow-Origin", "*")
+        response.headers.setdefault("Access-Control-Allow-Methods", "*")
+        response.headers.setdefault("Access-Control-Allow-Headers", "*")
+        return response
+    except Exception as e:
+        # If an exception occurs, create a response with CORS headers
+        logger.error(f"Unhandled exception in middleware: {e}", exc_info=True)
+        error_response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "error": str(e)}
+        )
+        error_response.headers["Access-Control-Allow-Origin"] = "*"
+        error_response.headers["Access-Control-Allow-Methods"] = "*"
+        error_response.headers["Access-Control-Allow-Headers"] = "*"
+        return error_response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Global exception handler to ensure all errors include CORS headers.
+    """
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    error_response = JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "error": str(exc),
+            "type": type(exc).__name__
+        }
+    )
+    error_response.headers["Access-Control-Allow-Origin"] = "*"
+    error_response.headers["Access-Control-Allow-Methods"] = "*"
+    error_response.headers["Access-Control-Allow-Headers"] = "*"
+    return error_response
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """
+    HTTP exception handler with CORS headers.
+    """
+    error_response = JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+    error_response.headers["Access-Control-Allow-Origin"] = "*"
+    error_response.headers["Access-Control-Allow-Methods"] = "*"
+    error_response.headers["Access-Control-Allow-Headers"] = "*"
+    return error_response
 
 
 app.add_middleware(
