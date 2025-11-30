@@ -406,17 +406,16 @@ class DataForSEOClient:
         """
         url = f"{self.BASE_URL}/on_page/task_post"
         
-        payload = {
-            "data": [{
-                "target": domain,
-                "max_crawl_pages": max_crawl_pages,
-                "enable_javascript": True,
-                "load_resources": True,
-                "fetch_html": True,
-                "respect_robot_txt": False,
-                "custom_headers": {"User-Agent": "Mozilla/5.0"}
-            }]
-        }
+        # CRITICAL: DataForSEO expects direct JSON array, NOT wrapped in "data"
+        payload = [{
+            "target": domain,
+            "max_crawl_pages": max_crawl_pages,
+            "enable_javascript": True,
+            "load_resources": True,
+            "fetch_html": True,
+            "respect_robot_txt": False,
+            "custom_headers": {"User-Agent": "Mozilla/5.0"}
+        }]
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
