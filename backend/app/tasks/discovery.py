@@ -180,9 +180,15 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                     search_stats["queries_executed"] += 1
                     
                     try:
-                        logger.info(f"🔍 Searching: '{query}' in {loc}...")
-                        # Call DataForSEO API
-                        serp_results = await client.serp_google_organic(query, location_code, depth=10)
+                        logger.info(f"🔍 Searching: '{query}' in {loc} (location_code: {location_code})...")
+                        # Call DataForSEO API with explicit parameters
+                        serp_results = await client.serp_google_organic(
+                            keyword=query,
+                            location_code=location_code,
+                            language_code="en",
+                            depth=10,
+                            device="desktop"
+                        )
                         
                         if not serp_results or not serp_results.get("success"):
                             error_msg = serp_results.get('error', 'Unknown error') if serp_results else 'No response'
