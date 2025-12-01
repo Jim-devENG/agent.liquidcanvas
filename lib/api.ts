@@ -542,8 +542,8 @@ export async function getStats(): Promise<Stats | null> {
     if (allProspects) {
       if (Array.isArray(allProspects.prospects)) {
         allProspectsList = allProspects.prospects
-      } else if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
-        allProspectsList = allProspects.data.prospects
+      } else if ('data' in allProspects && allProspects.data && Array.isArray((allProspects as any).data.prospects)) {
+        allProspectsList = (allProspects as any).data.prospects
       } else if (Array.isArray(allProspects)) {
         allProspectsList = allProspects
       }
@@ -553,16 +553,16 @@ export async function getStats(): Promise<Stats | null> {
     if (prospectsWithEmail) {
       if (Array.isArray(prospectsWithEmail.prospects)) {
         prospectsWithEmailList = prospectsWithEmail.prospects
-      } else if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
-        prospectsWithEmailList = prospectsWithEmail.data.prospects
+      } else if ('data' in prospectsWithEmail && prospectsWithEmail.data && Array.isArray((prospectsWithEmail as any).data.prospects)) {
+        prospectsWithEmailList = (prospectsWithEmail as any).data.prospects
       } else if (Array.isArray(prospectsWithEmail)) {
         prospectsWithEmailList = prospectsWithEmail
       }
     }
     
     // Safely extract totals with defensive checks
-    const allProspectsTotal = (allProspects?.total ?? allProspects?.data?.total ?? 0) || 0
-    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? prospectsWithEmail?.data?.total ?? 0) || 0
+    const allProspectsTotal = (allProspects?.total ?? ('data' in allProspects ? (allProspects as any).data?.total : undefined) ?? 0) || 0
+    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? ('data' in prospectsWithEmail ? (prospectsWithEmail as any).data?.total : undefined) ?? 0) || 0
     
     // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
@@ -593,10 +593,11 @@ export async function getStats(): Promise<Stats | null> {
     // Safely handle jobs array - defensive guard
     let jobsArray: any[] = []
     if (jobs) {
-      if (Array.isArray(jobs)) {
-        jobsArray = jobs
-      } else if (jobs.data && Array.isArray(jobs.data)) {
-        jobsArray = jobs.data
+      const jobsAny = jobs as any
+      if (Array.isArray(jobsAny)) {
+        jobsArray = jobsAny
+      } else if ('data' in jobsAny && jobsAny.data && Array.isArray(jobsAny.data)) {
+        jobsArray = jobsAny.data
       }
     }
     
