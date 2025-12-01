@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter } from 'lucide-react'
-import type { Job } from '@/lib/api'
+import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter, X } from 'lucide-react'
+import { cancelJob, type Job } from '@/lib/api'
 
 interface JobStatusPanelProps {
   jobs: Job[]
@@ -11,6 +11,7 @@ interface JobStatusPanelProps {
 
 export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPanelProps) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
+  const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
 
   const toggleJob = (jobId: string) => {
     const newExpanded = new Set(expandedJobs)
@@ -20,6 +21,27 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
       newExpanded.add(jobId)
     }
     setExpandedJobs(newExpanded)
+  }
+
+  const handleCancelJob = async (jobId: string, jobType: string) => {
+    if (!confirm(`Are you sure you want to cancel this ${jobType} job?`)) {
+      return
+    }
+    
+    setCancellingJobs(prev => new Set(prev).add(jobId))
+    try {
+      await cancelJob(jobId)
+      // Refresh the page to update job status
+      window.location.reload()
+    } catch (error: any) {
+      alert(`Failed to cancel job: ${error.message}`)
+    } finally {
+      setCancellingJobs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(jobId)
+        return newSet
+      })
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -215,6 +237,17 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-gray-500">{formatDate(job.created_at)}</span>
+                    {(job.status === 'running' || job.status === 'pending') && (
+                      <button
+                        onClick={() => handleCancelJob(job.id, job.job_type)}
+                        disabled={cancellingJobs.has(job.id)}
+                        className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        title="Stop this job"
+                      >
+                        <X className="w-3 h-3" />
+                        {cancellingJobs.has(job.id) ? 'Stopping...' : 'Stop'}
+                      </button>
+                    )}
                     {job.result && (
                       <button
                         onClick={() => toggleJob(job.id)}
