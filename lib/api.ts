@@ -548,20 +548,23 @@ export async function getStats(): Promise<Stats | null> {
     }
     
     // CRITICAL: Always ensure allProspectsList is an array, never {} or null
-    // Backend returns: { success: true, data: { prospects: [], total: 0, ... } }
+    // listProspects returns ProspectListResponse: { prospects: [], total: 0, skip: 0, limit: 0 }
     let allProspectsList: any[] = []
     if (allProspects) {
-      // Handle new backend format: { success: true, data: { prospects: [], total: 0, ... } }
-      if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
-        allProspectsList = allProspects.data.prospects
-      }
-      // Handle direct ProspectListResponse format: { prospects: [], total: 0, ... }
-      else if (Array.isArray(allProspects.prospects)) {
-        allProspectsList = allProspects.prospects
+      // Type guard: Check if it's a ProspectListResponse with prospects array
+      if ('prospects' in allProspects && Array.isArray((allProspects as any).prospects)) {
+        allProspectsList = (allProspects as any).prospects
       }
       // Handle array directly (shouldn't happen but be safe)
       else if (Array.isArray(allProspects)) {
         allProspectsList = allProspects
+      }
+      // Handle backend response format if listProspects didn't unwrap it: { success: true, data: { prospects: [] } }
+      else if ('data' in allProspects) {
+        const data = (allProspects as any).data
+        if (data && 'prospects' in data && Array.isArray(data.prospects)) {
+          allProspectsList = data.prospects
+        }
       }
       // If we got something unexpected, log it and use empty array
       else {
@@ -573,13 +576,22 @@ export async function getStats(): Promise<Stats | null> {
     // CRITICAL: Always ensure prospectsWithEmailList is an array
     let prospectsWithEmailList: any[] = []
     if (prospectsWithEmail) {
-      if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
-        prospectsWithEmailList = prospectsWithEmail.data.prospects
-      } else if (Array.isArray(prospectsWithEmail.prospects)) {
-        prospectsWithEmailList = prospectsWithEmail.prospects
-      } else if (Array.isArray(prospectsWithEmail)) {
+      // Type guard: Check if it's a ProspectListResponse with prospects array
+      if ('prospects' in prospectsWithEmail && Array.isArray((prospectsWithEmail as any).prospects)) {
+        prospectsWithEmailList = (prospectsWithEmail as any).prospects
+      }
+      // Handle array directly
+      else if (Array.isArray(prospectsWithEmail)) {
         prospectsWithEmailList = prospectsWithEmail
-      } else {
+      }
+      // Handle backend response format if listProspects didn't unwrap it
+      else if ('data' in prospectsWithEmail) {
+        const data = (prospectsWithEmail as any).data
+        if (data && 'prospects' in data && Array.isArray(data.prospects)) {
+          prospectsWithEmailList = data.prospects
+        }
+      }
+      else {
         console.warn('⚠️ getStats: Unexpected prospectsWithEmail format:', typeof prospectsWithEmail, prospectsWithEmail)
         prospectsWithEmailList = []  // ALWAYS return array, never {}
       }
