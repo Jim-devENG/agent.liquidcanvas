@@ -657,13 +657,11 @@ export async function getStats(): Promise<Stats | null> {
       return null
     }
     
-    // Safely extract prospects array with multiple fallbacks
+    // Safely extract prospects array - ProspectListResponse has .prospects directly
     let allProspectsList: any[] = []
     if (allProspects) {
-      if (Array.isArray(allProspects.prospects)) {
+      if (typeof allProspects === 'object' && 'prospects' in allProspects && Array.isArray(allProspects.prospects)) {
         allProspectsList = allProspects.prospects
-      } else if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
-        allProspectsList = allProspects.data.prospects
       } else if (Array.isArray(allProspects)) {
         allProspectsList = allProspects
       }
@@ -671,18 +669,20 @@ export async function getStats(): Promise<Stats | null> {
     
     let prospectsWithEmailList: any[] = []
     if (prospectsWithEmail) {
-      if (Array.isArray(prospectsWithEmail.prospects)) {
+      if (typeof prospectsWithEmail === 'object' && 'prospects' in prospectsWithEmail && Array.isArray(prospectsWithEmail.prospects)) {
         prospectsWithEmailList = prospectsWithEmail.prospects
-      } else if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
-        prospectsWithEmailList = prospectsWithEmail.data.prospects
       } else if (Array.isArray(prospectsWithEmail)) {
         prospectsWithEmailList = prospectsWithEmail
       }
     }
     
-    // Safely extract totals with defensive checks
-    const allProspectsTotal = (allProspects?.total ?? allProspects?.data?.total ?? 0) || 0
-    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? prospectsWithEmail?.data?.total ?? 0) || 0
+    // Safely extract totals with defensive checks - ProspectListResponse has .total directly
+    const allProspectsTotal = (allProspects && typeof allProspects === 'object' && 'total' in allProspects) 
+      ? (allProspects.total ?? 0) 
+      : 0
+    const prospectsWithEmailTotal = (prospectsWithEmail && typeof prospectsWithEmail === 'object' && 'total' in prospectsWithEmail)
+      ? (prospectsWithEmail.total ?? 0)
+      : 0
     
     // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
