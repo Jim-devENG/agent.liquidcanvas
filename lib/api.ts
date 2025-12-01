@@ -515,8 +515,8 @@ export async function getStats(): Promise<Stats | null> {
     if (allProspects) {
       if (Array.isArray(allProspects.prospects)) {
         allProspectsList = allProspects.prospects
-      } else if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
-        allProspectsList = allProspects.data.prospects
+      } else if ('data' in allProspects && allProspects.data && Array.isArray((allProspects as any).data.prospects)) {
+        allProspectsList = (allProspects as any).data.prospects
       } else if (Array.isArray(allProspects)) {
         allProspectsList = allProspects
       }
@@ -526,16 +526,16 @@ export async function getStats(): Promise<Stats | null> {
     if (prospectsWithEmail) {
       if (Array.isArray(prospectsWithEmail.prospects)) {
         prospectsWithEmailList = prospectsWithEmail.prospects
-      } else if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
-        prospectsWithEmailList = prospectsWithEmail.data.prospects
+      } else if ('data' in prospectsWithEmail && prospectsWithEmail.data && Array.isArray((prospectsWithEmail as any).data.prospects)) {
+        prospectsWithEmailList = (prospectsWithEmail as any).data.prospects
       } else if (Array.isArray(prospectsWithEmail)) {
         prospectsWithEmailList = prospectsWithEmail
       }
     }
     
     // Safely extract totals with defensive checks
-    const allProspectsTotal = (allProspects?.total ?? allProspects?.data?.total ?? 0) || 0
-    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? prospectsWithEmail?.data?.total ?? 0) || 0
+    const allProspectsTotal = (allProspects?.total ?? ('data' in allProspects ? (allProspects as any).data?.total : undefined) ?? 0) || 0
+    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? ('data' in prospectsWithEmail ? (prospectsWithEmail as any).data?.total : undefined) ?? 0) || 0
     
     // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
