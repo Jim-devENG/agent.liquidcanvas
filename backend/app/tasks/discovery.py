@@ -225,6 +225,12 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                 query_category = cat
                                 break
                     
+                    # Check if job was cancelled before starting new query
+                    await db.refresh(job)
+                    if job.status == "cancelled":
+                        logger.info(f"Job {job_id} was cancelled, stopping query execution")
+                        return {"error": "Job was cancelled"}
+                    
                     # Create DiscoveryQuery record
                     discovery_query = DiscoveryQuery(
                         job_id=job.id,
@@ -291,6 +297,12 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         logger.info(f"✅ Found {len(results)} results for '{query}' in {loc}")
                         
                         for result_item in results:
+                            # Check if job was cancelled before processing each result
+                            await db.refresh(job)
+                            if job.status == "cancelled":
+                                logger.info(f"Job {job_id} was cancelled, stopping result processing")
+                                return {"error": "Job was cancelled"}
+                            
                             # Defensive check: ensure result_item is a dict
                             if not isinstance(result_item, dict):
                                 logger.warning(f"⚠️  Skipping invalid result_item (not a dict): {type(result_item)}")

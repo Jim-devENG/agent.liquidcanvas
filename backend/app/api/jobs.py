@@ -295,6 +295,52 @@ async def get_job_status(
     )
 
 
+@router.patch("/{job_id}/cancel")
+async def cancel_job(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: str = Depends(get_current_user)  # REQUIRE AUTHENTICATION
+):
+    """
+    Cancel a running or pending job
+    
+    REQUIRES AUTHENTICATION: Valid JWT token must be provided
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required"
+        )
+    
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Only allow cancelling pending or running jobs
+    if job.status not in ["pending", "running"]:
+        return {
+            "success": False,
+            "error": f"Cannot cancel job with status '{job.status}'. Only pending or running jobs can be cancelled.",
+            "status": job.status
+        }
+    
+    # Update job status to cancelled
+    job.status = "cancelled"
+    job.error_message = "Job cancelled by user"
+    await db.commit()
+    await db.refresh(job)
+    
+    logger.info(f"Job {job_id} cancelled by user {current_user}")
+    
+    return {
+        "success": True,
+        "message": f"Job {job_id} has been cancelled",
+        "job": job_to_response(job)
+    }
+
+
 @router.get("")
 async def list_jobs(
     skip: int = 0,
