@@ -24,18 +24,18 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
   }
 
   const handleCancelJob = async (jobId: string, jobType: string) => {
-    if (!confirm(`Are you sure you want to cancel this ${jobType} job?`)) {
-      return
-    }
-    
+    // Skip confirmation since browser popups are disabled
+    // User can click again if they change their mind
     setCancellingJobs(prev => new Set(prev).add(jobId))
     try {
       await cancelJob(jobId)
-      // Refresh the page to update job status
-      window.location.reload()
+      // Refresh the page to update job status after a short delay
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
     } catch (error: any) {
-      alert(`Failed to cancel job: ${error.message}`)
-    } finally {
+      console.error(`Failed to cancel job: ${error.message}`)
+      // Show error in console since alerts are disabled
       setCancellingJobs(prev => {
         const newSet = new Set(prev)
         newSet.delete(jobId)

@@ -24,17 +24,13 @@ export default function JobList({ jobs, onRefresh }: JobListProps) {
   }
 
   const handleCancelJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to cancel this job?')) {
-      return
-    }
-    
+    // Skip confirmation since browser popups are disabled
     setCancellingJobs(prev => new Set(prev).add(jobId))
     try {
       await cancelJob(jobId)
       onRefresh() // Refresh the job list
     } catch (error: any) {
-      alert(`Failed to cancel job: ${error.message}`)
-    } finally {
+      console.error(`Failed to cancel job: ${error.message}`)
       setCancellingJobs(prev => {
         const newSet = new Set(prev)
         newSet.delete(jobId)
