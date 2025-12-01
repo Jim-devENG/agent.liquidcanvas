@@ -32,6 +32,7 @@ if 'logger' not in locals():
 
 # Import database session from backend
 from app.db.database import AsyncSessionLocal
+from app.db.transaction_helpers import safe_commit, safe_flush
 
 
 def _generate_search_queries(keywords: str, categories: List[str]) -> List[str]:
@@ -106,7 +107,9 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
         # Update job status and record start time
         job.status = "running"
         start_time = datetime.now(timezone.utc)
-        await db.commit()
+        if not await safe_commit(db, f"starting job {job_id}"):
+            logger.error(f"❌ [DISCOVERY] Failed to commit job start status for {job_id}")
+            return {"error": "Failed to update job status"}
         
         # Maximum execution time: 2 hours
         MAX_EXECUTION_TIME = timedelta(hours=2)
@@ -128,7 +131,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                 logger.error(f"❌ Failed to import DataForSEO client: {import_err}")
                 job.status = "failed"
                 job.error_message = f"DataForSEO client not available: {import_err}"
-                await db.commit()
+                await safe_commit(db, f"marking job {job_id} as failed (import error)")
                 return {"error": f"DataForSEO client not available: {import_err}"}
             
             # Initialize client (will check credentials)
@@ -141,13 +144,13 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                 logger.error(f"DATAFORSEO_PASSWORD is set: {bool(os.getenv('DATAFORSEO_PASSWORD'))}")
                 job.status = "failed"
                 job.error_message = f"DataForSEO credentials not configured: {cred_err}"
-                await db.commit()
+                await safe_commit(db, f"marking job {job_id} as failed (credentials error)")
                 return {"error": f"DataForSEO credentials not configured: {cred_err}"}
         except Exception as e:
             logger.error(f"Unexpected error initializing DataForSEO client: {e}", exc_info=True)
             job.status = "failed"
             job.error_message = f"Failed to initialize DataForSEO client: {e}"
-            await db.commit()
+            await safe_commit(db, f"marking job {job_id} as failed (init error)")
             return {"error": str(e)}
         
         all_prospects = []
@@ -179,7 +182,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                     logger.warning(f"⏱️  Job {job_id} exceeded maximum execution time ({MAX_EXECUTION_TIME}), stopping")
                     job.status = "failed"
                     job.error_message = f"Job exceeded maximum execution time of {MAX_EXECUTION_TIME}"
-                    await db.commit()
+                    await safe_commit(db, f"marking job {job_id} as failed (timeout)")
                     return {"error": "Job exceeded maximum execution time"}
                 
                 # Re-check job status in case it was cancelled
@@ -201,7 +204,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         logger.warning(f"⏱️  Job {job_id} exceeded maximum execution time, stopping")
                         job.status = "failed"
                         job.error_message = f"Job exceeded maximum execution time of {MAX_EXECUTION_TIME}"
-                        await db.commit()
+                        await safe_commit(db, f"marking job {job_id} as failed (timeout in query loop)")
                         return {"error": "Job exceeded maximum execution time"}
                     
                     # Re-check job status
@@ -245,7 +248,9 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         status="pending"
                     )
                     db.add(discovery_query)
-                    await db.flush()  # Flush to get the ID
+                    if not await safe_flush(db, f"creating discovery_query for {query} in {loc}"):
+                        logger.error(f"❌ [DISCOVERY] Failed to flush discovery_query, skipping query")
+                        continue
                     
                     query_stats = {
                         "query": query,
@@ -279,7 +284,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             # Update DiscoveryQuery record
                             discovery_query.status = "failed"
                             discovery_query.error_message = error_msg
-                            await db.commit()
+                            await safe_commit(db, f"updating discovery_query {discovery_query.id} status to failed")
                             continue
                         
                         search_stats["queries_successful"] += 1
@@ -362,6 +367,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             
                             # MANDATORY: Enrich email before saving prospect
                             # Discovery MUST NOT save prospects without emails
+                            # DEFENSIVE: Enrichment failures should NOT break the entire discovery pipeline
                             from app.services.enrichment import enrich_prospect_email
                             
                             enrich_result = None
@@ -385,8 +391,10 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                     logger.warning(f"⚠️  [DISCOVERY] No email found for {domain} during enrichment")
                                     
                             except Exception as e:
+                                # DEFENSIVE: Log error but don't break pipeline - just skip this prospect
                                 logger.error(f"❌ [DISCOVERY] Enrichment failed for {domain}: {e}", exc_info=True)
-                                # Continue to skip logic below
+                                logger.warning(f"⏭️  [DISCOVERY] Skipping {domain} due to enrichment failure - pipeline continues")
+                                # Continue to skip logic below - don't raise, don't break loop
                             
                             # MANDATORY RULE: Do not save prospect without email
                             if not contact_email:
@@ -444,14 +452,19 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         # Update DiscoveryQuery record
                         discovery_query.status = "failed"
                         discovery_query.error_message = str(e)
-                        await db.commit()
+                        await safe_commit(db, f"updating discovery_query {discovery_query.id} status to failed (exception)")
                         continue
                 
                 if len(all_prospects) >= max_results:
                     break
             
             # Commit all prospects
-            await db.commit()
+            if not await safe_commit(db, f"committing {len(all_prospects)} prospects for job {job_id}"):
+                logger.error(f"❌ [DISCOVERY] Failed to commit prospects for job {job_id}")
+                job.status = "failed"
+                job.error_message = "Failed to commit prospects to database"
+                await safe_commit(db, f"marking job {job_id} as failed (commit error)")
+                return {"error": "Failed to commit prospects to database"}
             logger.info(f"💾 Committed {len(all_prospects)} new prospects to database")
             
             # Update job status with detailed results
@@ -475,7 +488,9 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                 },
                 "queries_detail": search_stats["queries_detail"][:20]  # Limit to first 20 for size
             }
-            await db.commit()
+            if not await safe_commit(db, f"completing job {job_id}"):
+                logger.error(f"❌ [DISCOVERY] Failed to commit job completion for {job_id}")
+                return {"error": "Failed to update job status"}
             
             # Calculate total execution time
             total_time = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -508,9 +523,12 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
         
         except Exception as e:
             logger.error(f"Discovery job {job_id} failed: {e}", exc_info=True)
-            job.status = "failed"
-            job.error_message = str(e)
-            await db.commit()
+            try:
+                job.status = "failed"
+                job.error_message = str(e)
+                await safe_commit(db, f"marking job {job_id} as failed (exception handler)")
+            except Exception as commit_err:
+                logger.error(f"❌ [DISCOVERY] Failed to commit error status for job {job_id}: {commit_err}", exc_info=True)
             return {"error": str(e)}
 
 
