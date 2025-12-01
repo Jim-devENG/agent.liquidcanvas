@@ -11,7 +11,10 @@ function getAuthToken(): string | null {
   return localStorage.getItem('auth_token')
 }
 
-// Authenticated fetch wrapper
+/**
+ * Authenticated fetch wrapper with robust error handling and SSL support
+ * Handles network errors, SSL issues, and undefined responses gracefully
+ */
 async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAuthToken()
   const headers: Record<string, string> = {
@@ -22,22 +25,54 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
+  // Note: No console warning if token is missing - auth is optional for some endpoints
   
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  })
-  
-  // If unauthorized, redirect to login
-  if (response.status === 401) {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token')
-      window.location.href = '/login'
+  try {
+    // Attempt fetch with error handling
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      // Add credentials for CORS if needed (but don't require SSL verification in browser)
+      credentials: 'omit', // Browser handles SSL automatically, but we don't send cookies
+    })
+    
+    // If unauthorized, redirect to login (only if auth was actually required)
+    if (response.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token')
+        // Only redirect if we actually sent a token (meaning auth was expected)
+        if (token) {
+          window.location.href = '/login'
+        }
+      }
+      throw new Error('Unauthorized')
     }
-    throw new Error('Unauthorized')
+    
+    return response
+  } catch (error: any) {
+    // Handle network errors, SSL errors, and other fetch failures
+    const errorMessage = error?.message || String(error)
+    
+    // Log clear error message for debugging
+    if (errorMessage.includes('Failed to fetch') || 
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('ERR_CONNECTION_REFUSED') ||
+        errorMessage.includes('ERR_SSL')) {
+      console.error('❌ Network/SSL Error:', {
+        url,
+        error: errorMessage,
+        message: 'Backend may be unreachable or SSL certificate issue. App will continue running.',
+      })
+    } else {
+      console.error('❌ Fetch Error:', {
+        url,
+        error: errorMessage,
+      })
+    }
+    
+    // Re-throw to allow caller to handle, but app won't crash
+    throw error
   }
-  
-  return response
 }
 
 // Types
@@ -89,43 +124,150 @@ export interface ProspectListResponse {
 }
 
 // Jobs API
+/**
+ * Create a discovery job with robust error handling and authentication
+ * 
+ * @param keywords - Search keywords (optional if categories provided)
+ * @param locations - Array of location codes/names (required)
+ * @param maxResults - Maximum number of results (default: 100)
+ * @param categories - Array of category names (optional if keywords provided)
+ * @returns Promise resolving to job object or throws error
+ * 
+ * REQUIRES AUTHENTICATION: Valid JWT token must be present in localStorage
+ */
 export async function createDiscoveryJob(
   keywords: string,
   locations?: string[],
   maxResults?: number,
   categories?: string[]
 ): Promise<Job> {
+  // Check for authentication token before making request
+  const token = getAuthToken()
+  if (!token) {
+    const errorMsg = 'Authentication required. Please log in first.'
+    console.error('❌ createDiscoveryJob: No auth token found:', errorMsg)
+    throw new Error(errorMsg)
+  }
+  
+  // Validate required parameters
+  if (!locations || !Array.isArray(locations) || locations.length === 0) {
+    const errorMsg = 'At least one location is required'
+    console.error('❌ createDiscoveryJob: Missing locations:', errorMsg)
+    throw new Error(errorMsg)
+  }
+  
+  if (!keywords?.trim() && (!categories || !Array.isArray(categories) || categories.length === 0)) {
+    const errorMsg = 'Either keywords or at least one category is required'
+    console.error('❌ createDiscoveryJob: Missing search criteria:', errorMsg)
+    throw new Error(errorMsg)
+  }
+  
   // Add cache-busting timestamp to ensure fresh requests
   const timestamp = Date.now()
   const url = `${API_BASE}/jobs/discover?_t=${timestamp}`
   
-  const res = await authenticatedFetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache',
-    },
-    body: JSON.stringify({
-      keywords: keywords || '',
-      locations: locations || [],
-      max_results: maxResults || 100,
-      categories: categories || [],
-    }),
-  })
-  
-  if (!res.ok) {
-    let errorDetail = 'Failed to create discovery job'
-    try {
-      const errorData = await res.json()
-      errorDetail = errorData.detail || errorData.message || errorDetail
-    } catch {
-      // If JSON parsing fails, use status text
-      errorDetail = res.statusText || errorDetail
-    }
-    throw new Error(errorDetail)
+  // Prepare request payload
+  const payload = {
+    keywords: keywords?.trim() || '',
+    locations: Array.isArray(locations) ? locations : [],
+    max_results: maxResults && maxResults > 0 ? maxResults : 100,
+    categories: Array.isArray(categories) ? categories : [],
   }
   
-  return res.json()
+  try {
+    console.log('📤 Creating discovery job:', { 
+      keywords: payload.keywords || '(none)', 
+      locations: payload.locations.length, 
+      categories: payload.categories.length,
+      maxResults: payload.max_results 
+    })
+    
+    const res = await authenticatedFetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+      body: JSON.stringify(payload),
+    })
+    
+    // Parse response - handle both success and error cases
+    let responseData: any
+    try {
+      responseData = await res.json()
+    } catch (parseError) {
+      console.error('❌ createDiscoveryJob: Failed to parse JSON response:', parseError)
+      throw new Error(`Invalid response from server (HTTP ${res.status}): ${res.statusText}`)
+    }
+    
+    // Handle structured error responses from backend
+    if (!res.ok || (responseData && responseData.success === false)) {
+      const errorDetail = responseData?.error || responseData?.detail || responseData?.message || `HTTP ${res.status}: ${res.statusText}`
+      const statusCode = responseData?.status_code || res.status
+      
+      console.error('❌ createDiscoveryJob: Request failed:', {
+        status: statusCode,
+        error: errorDetail,
+        response: responseData
+      })
+      
+      throw new Error(errorDetail)
+    }
+    
+    // Handle success response - extract job from structured response
+    if (responseData && responseData.success === true) {
+      // Backend returns structured response: { success: true, job_id, job, ... }
+      const job = responseData.job || {
+        id: responseData.job_id,
+        job_type: 'discover',
+        status: responseData.status || 'pending',
+        params: payload,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('✅ Discovery job created successfully:', {
+        job_id: job.id || responseData.job_id,
+        status: job.status || responseData.status
+      })
+      
+      return job
+    }
+    
+    // Fallback: if response doesn't have success field, assume it's the job object directly
+    if (responseData && responseData.id) {
+      console.log('✅ Discovery job created (legacy format):', responseData.id)
+      return responseData
+    }
+    
+    // If we get here, response format is unexpected
+    console.warn('⚠️ createDiscoveryJob: Unexpected response format:', responseData)
+    throw new Error('Unexpected response format from server')
+    
+  } catch (error: any) {
+    // Enhanced error logging with context
+    const errorMessage = error?.message || String(error)
+    
+    // Check for specific error types
+    if (errorMessage.includes('Authentication required') || errorMessage.includes('Unauthorized')) {
+      console.error('❌ createDiscoveryJob: Authentication error - redirecting to login')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token')
+        window.location.href = '/login'
+      }
+    } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      console.error('❌ createDiscoveryJob: Network error - backend may be unreachable')
+    } else {
+      console.error('❌ createDiscoveryJob: Error details:', {
+        message: errorMessage,
+        error: error,
+        stack: error?.stack
+      })
+    }
+    
+    // Re-throw with clear message
+    throw new Error(errorMessage)
+  }
 }
 
 export async function createEnrichmentJob(
@@ -214,12 +356,33 @@ export async function getJobStatus(jobId: string): Promise<Job> {
 }
 
 export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
-  const res = await authenticatedFetch(`${API_BASE}/jobs?skip=${skip}&limit=${limit}`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to list jobs' }))
-    throw new Error(error.detail || 'Failed to list jobs')
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/jobs?skip=${skip}&limit=${limit}`)
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to list jobs' }))
+      throw new Error(error.detail || 'Failed to list jobs')
+    }
+    const data = await res.json()
+    
+    // Validate response is an array
+    if (!Array.isArray(data)) {
+      console.warn('⚠️ listJobs: Response is not an array. Got:', typeof data, data)
+      // Try to extract array from response
+      if (data && typeof data === 'object') {
+        const jobs = data.jobs || data.data || data.items || []
+        if (Array.isArray(jobs)) {
+          return jobs
+        }
+      }
+      return [] // Return empty array instead of crashing
+    }
+    
+    return data
+  } catch (error: any) {
+    console.error('❌ Error in listJobs:', error)
+    // Return empty array to prevent app crash
+    return []
   }
-  return res.json()
 }
 
 // Prospects API
@@ -245,7 +408,21 @@ export async function listProspects(
     const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
     throw new Error(error.detail || 'Failed to list prospects')
   }
-  return res.json()
+  const response = await res.json()
+  
+  // Handle new response format: {success: bool, data: {prospects, total, skip, limit}, error: null | string}
+  if (response.success && response.data) {
+    return response.data
+  }
+  
+  // Fallback for old format or error case
+  if (response.error) {
+    throw new Error(response.error)
+  }
+  
+  // If response doesn't match expected format, return empty structure
+  console.warn('Unexpected response format from /api/prospects:', response)
+  return { prospects: [], total: 0, skip: 0, limit: 0 }
 }
 
 export async function getProspect(prospectId: string): Promise<Prospect> {
@@ -313,39 +490,121 @@ export interface Stats {
 
 export async function getStats(): Promise<Stats | null> {
   try {
-    // Fetch all data in parallel
+    // Fetch all data in parallel with defensive error handling
     const [allProspects, jobs, prospectsWithEmail] = await Promise.all([
       listProspects(0, 1000).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
       listJobs(0, 100).catch(() => []),
       listProspects(0, 1000, undefined, undefined, true).catch(() => ({ prospects: [], total: 0, skip: 0, limit: 0 })),
     ])
     
-    // Count prospects by status
+    // Log actual API responses for debugging (only in development)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 getStats - allProspects response:', allProspects)
+      console.log('🔍 getStats - prospectsWithEmail response:', prospectsWithEmail)
+      console.log('🔍 getStats - jobs response:', jobs)
+    }
+    
+    // Defensive guard: Ensure all inputs are defined before processing
+    if (!allProspects && !prospectsWithEmail && !jobs) {
+      console.warn('⚠️ getStats: All API responses are undefined/null')
+      return null
+    }
+    
+    // Safely extract prospects array with multiple fallbacks
+    let allProspectsList: any[] = []
+    if (allProspects) {
+      if (Array.isArray(allProspects.prospects)) {
+        allProspectsList = allProspects.prospects
+      } else if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
+        allProspectsList = allProspects.data.prospects
+      } else if (Array.isArray(allProspects)) {
+        allProspectsList = allProspects
+      }
+    }
+    
+    let prospectsWithEmailList: any[] = []
+    if (prospectsWithEmail) {
+      if (Array.isArray(prospectsWithEmail.prospects)) {
+        prospectsWithEmailList = prospectsWithEmail.prospects
+      } else if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
+        prospectsWithEmailList = prospectsWithEmail.data.prospects
+      } else if (Array.isArray(prospectsWithEmail)) {
+        prospectsWithEmailList = prospectsWithEmail
+      }
+    }
+    
+    // Safely extract totals with defensive checks
+    const allProspectsTotal = (allProspects?.total ?? allProspects?.data?.total ?? 0) || 0
+    const prospectsWithEmailTotal = (prospectsWithEmail?.total ?? prospectsWithEmail?.data?.total ?? 0) || 0
+    
+    // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
     let prospects_sent = 0
     let prospects_replied = 0
     
-    allProspects.prospects.forEach(p => {
-      if (p.outreach_status === 'pending') prospects_pending++
-      if (p.outreach_status === 'sent') prospects_sent++
-      if (p.outreach_status === 'replied') prospects_replied++
-    })
+    // Critical defensive guard: Never call forEach on undefined/null
+    // Use safe array check and try-catch for maximum safety
+    if (Array.isArray(allProspectsList) && allProspectsList.length > 0) {
+      try {
+        allProspectsList.forEach((p: any) => {
+          // Additional safety check for each item
+          if (p && typeof p === 'object' && p.outreach_status) {
+            if (p.outreach_status === 'pending') prospects_pending++
+            if (p.outreach_status === 'sent') prospects_sent++
+            if (p.outreach_status === 'replied') prospects_replied++
+          }
+        })
+      } catch (forEachError) {
+        console.error('⚠️ Error in forEach loop (likely from devtools hook or invalid data):', forEachError)
+        // Continue with zero counts rather than failing - app stays running
+      }
+    } else if (allProspectsList !== null && allProspectsList !== undefined) {
+      // Log warning if we expected an array but got something else
+      console.warn('⚠️ getStats: allProspectsList is not a valid array:', typeof allProspectsList, allProspectsList)
+    }
+    
+    // Safely handle jobs array - defensive guard
+    let jobsArray: any[] = []
+    if (jobs) {
+      if (Array.isArray(jobs)) {
+        jobsArray = jobs
+      } else if (jobs.data && Array.isArray(jobs.data)) {
+        jobsArray = jobs.data
+      }
+    }
+    
+    // Defensive filter operations with safe array checks
+    let jobs_running = 0
+    let jobs_completed = 0
+    let jobs_failed = 0
+    
+    if (Array.isArray(jobsArray) && jobsArray.length > 0) {
+      try {
+        jobs_running = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'running').length
+        jobs_completed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'completed').length
+        jobs_failed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'failed').length
+      } catch (filterError) {
+        console.error('⚠️ Error in filter operations:', filterError)
+        // Continue with zero counts - app stays running
+      }
+    }
     
     const stats: Stats = {
-      total_prospects: allProspects.total,
-      prospects_with_email: prospectsWithEmail.total,
+      total_prospects: allProspectsTotal,
+      prospects_with_email: prospectsWithEmailTotal,
       prospects_pending,
       prospects_sent,
       prospects_replied,
-      total_jobs: jobs.length,
-      jobs_running: jobs.filter(j => j.status === 'running').length,
-      jobs_completed: jobs.filter(j => j.status === 'completed').length,
-      jobs_failed: jobs.filter(j => j.status === 'failed').length,
+      total_jobs: jobsArray.length || 0,
+      jobs_running,
+      jobs_completed,
+      jobs_failed,
     }
     
     return stats
   } catch (error) {
     console.error('Failed to get stats:', error)
+    // Return null instead of throwing to prevent crashes from devtools hooks
     return null
   }
 }
@@ -413,37 +672,6 @@ export async function getAPIKeysStatus(): Promise<Record<string, boolean>> {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to get API keys status' }))
     throw new Error(error.detail || 'Failed to get API keys status')
-  }
-  return res.json()
-}
-
-// Automation Settings
-export interface AutomationSettings {
-  enabled: boolean
-  automatic_scraper: boolean
-  locations: string[]
-  categories: string[]
-  keywords?: string
-  max_results: number
-}
-
-export async function getAutomationSettings(): Promise<AutomationSettings> {
-  const res = await authenticatedFetch(`${API_BASE}/settings/automation`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to load automation settings' }))
-    throw new Error(error.detail || 'Failed to load automation settings')
-  }
-  return res.json()
-}
-
-export async function updateAutomationSettings(settings: AutomationSettings): Promise<AutomationSettings> {
-  const res = await authenticatedFetch(`${API_BASE}/settings/automation`, {
-    method: 'POST',
-    body: JSON.stringify(settings),
-  })
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to update automation settings' }))
-    throw new Error(error.detail || 'Failed to update automation settings')
   }
   return res.json()
 }

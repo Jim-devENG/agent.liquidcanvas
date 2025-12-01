@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, Play, Loader2, MapPin, Tag, AlertCircle } from 'lucide-react'
+import { Search, Play, Loader2, MapPin, Tag, CheckCircle, XCircle } from 'lucide-react'
 import { createDiscoveryJob } from '@/lib/api'
 
 const LOCATION_OPTIONS = [
@@ -29,69 +29,152 @@ export default function ManualScrape() {
   const [maxResults, setMaxResults] = useState(100)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess] = useState<boolean>(false)
 
   const toggleLocation = (value: string) => {
     setSelectedLocations((prev) => {
       if (prev.includes(value)) {
         const next = prev.filter((v) => v !== value)
-        return next.length > 0 ? next : prev
+        return next.length > 0 ? next : prev // Ensure at least one is always selected
       }
       return [...prev, value]
     })
     setError(null)
+    setSuccess(false)
   }
 
   const toggleCategory = (value: string) => {
-    setSelectedCategories((prev) => {
-      const newCategories = prev.includes(value)
-        ? prev.filter((v) => v !== value)
-        : [...prev, value]
-      setError(null)
-      return newCategories
-    })
+    setSelectedCategories((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    )
+    setError(null)
+    setSuccess(false)
+  }
+
+  const handleMaxResultsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value)
+    if (!isNaN(value) && value >= 1 && value <= 1000) {
+      setMaxResults(value)
+    } else if (e.target.value === '') {
+      setMaxResults(0) // Allow empty input temporarily
+    }
+    setError(null)
+    setSuccess(false)
   }
 
   const canStart = () => {
     const hasSearchCriteria = keywords.trim().length > 0 || selectedCategories.length > 0
     const hasLocation = selectedLocations.length > 0
-    return hasSearchCriteria && hasLocation
+    const hasMaxResults = maxResults > 0
+    return hasSearchCriteria && hasLocation && hasMaxResults
   }
 
+  /**
+   * Handle manual scraping with robust error handling and validation
+   * Ensures authentication, validates input, and handles all error cases gracefully
+   */
   const handleScrape = async () => {
+    // Reset state
     setError(null)
     setSuccess(false)
 
-    if (!keywords.trim() && selectedCategories.length === 0) {
-      setError('Please select at least one category OR enter keywords')
+    // Validate input before making request
+    if (!canStart()) {
+      if (!keywords.trim() && selectedCategories.length === 0) {
+        setError('Please select at least one category OR enter keywords to search.')
+      } else if (selectedLocations.length === 0) {
+        setError('Please select at least one location.')
+      } else if (maxResults === 0) {
+        setError('Please enter a valid number for max results (1-1000).')
+      }
       return
     }
 
-    if (selectedLocations.length === 0) {
-      setError('Please select at least one location')
+    // Check for authentication token before proceeding
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (!token) {
+      setError('Authentication required. Please log in first.')
+      // Optionally redirect to login
+      if (typeof window !== 'undefined') {
+        setTimeout(() => {
+          window.location.href = '/login'
+        }, 2000)
+      }
       return
     }
 
     setLoading(true)
+    
     try {
-      await createDiscoveryJob(
-        keywords.trim() || '',
-        selectedLocations,
-        maxResults,
-        selectedCategories.length > 0 ? selectedCategories : []
+      console.log('🚀 Starting manual scrape:', {
+        keywords: keywords.trim() || '(none)',
+        locations: selectedLocations.length,
+        categories: selectedCategories.length,
+        maxResults
+      })
+      
+      // Call API with validated parameters
+      const result = await createDiscoveryJob(
+        keywords.trim(),
+        selectedLocations, // Already validated as non-empty array
+        maxResults, // Already validated as > 0
+        selectedCategories // Already validated (either this or keywords exists)
       )
+      
+      // Validate response - ensure we got a valid job object
+      if (!result || typeof result !== 'object') {
+        throw new Error('Invalid response from server: expected job object')
+      }
+      
+      // Check if result has required fields (id or job_id)
+      const jobId = result.id || (result as any).job_id
+      if (!jobId) {
+        console.warn('⚠️ Manual scrape: Response missing job ID:', result)
+        // Still show success if status indicates job was created
+        if (result.status === 'pending' || result.status === 'running') {
+          setSuccess(true)
+          setKeywords('')
+          setSelectedCategories([])
+          return
+        }
+        throw new Error('Server response missing job ID')
+      }
+      
+      console.log('✅ Manual scrape job created successfully:', jobId)
+      
+      // Success - clear form and show message
       setSuccess(true)
-      setError(null)
-      // Clear form after successful start
-      setTimeout(() => {
-        setKeywords('')
-        setSelectedCategories([])
-        setSuccess(false)
-      }, 3000)
-    } catch (error: any) {
-      setError(error.message || 'Failed to start scraping. Check console for details.')
-      setSuccess(false)
-      console.error('Scraping error:', error)
+      setKeywords('') // Clear keywords after successful job creation
+      setSelectedCategories([]) // Clear categories after successful job creation
+      // Keep locations selected as they are often reused
+      
+    } catch (err: any) {
+      // Enhanced error handling with specific error messages
+      const errorMessage = err?.message || String(err) || 'Failed to start manual scraping'
+      
+      console.error('❌ Manual scrape error:', {
+        message: errorMessage,
+        error: err,
+        stack: err?.stack
+      })
+      
+      // Set user-friendly error message
+      if (errorMessage.includes('Authentication') || errorMessage.includes('Unauthorized')) {
+        setError('Authentication required. Please log in and try again.')
+        // Redirect to login after showing error
+        if (typeof window !== 'undefined') {
+          setTimeout(() => {
+            window.location.href = '/login'
+          }, 2000)
+        }
+      } else if (errorMessage.includes('already running')) {
+        setError('A discovery job is already running. Please wait for it to complete or cancel it first.')
+      } else if (errorMessage.includes('Network') || errorMessage.includes('Failed to fetch')) {
+        setError('Network error: Unable to connect to server. Please check your connection and try again.')
+      } else {
+        // Use the error message from the API or a generic one
+        setError(errorMessage || 'Failed to start manual scraping. Please check the console for details.')
+      }
     } finally {
       setLoading(false)
     }
@@ -100,27 +183,26 @@ export default function ManualScrape() {
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Manual Scrape</h2>
+        <h2 className="text-xl font-bold text-gray-900">Manual Website Scrape</h2>
         {loading && (
           <div className="flex items-center space-x-2 text-olive-600">
             <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm font-medium">Scraping...</span>
+            <span className="text-sm font-medium">Starting job...</span>
           </div>
         )}
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-sm text-red-800">{error}</p>
         </div>
       )}
-
-      {/* Success Message */}
       {success && (
         <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-          <p className="text-sm text-green-800">✅ Scraping job started successfully!</p>
+          <p className="text-sm text-green-800 flex items-center">
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Discovery job started successfully! Check the &quot;Jobs&quot; tab for status.
+          </p>
         </div>
       )}
 
@@ -129,7 +211,7 @@ export default function ManualScrape() {
         <div>
           <label className="flex items-center space-x-2 text-sm font-semibold text-gray-700 mb-3">
             <Tag className="w-4 h-4" />
-            <span>Select Categories</span>
+            <span>Select Categories (Recommended)</span>
           </label>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {CATEGORY_OPTIONS.map((cat) => {
@@ -150,6 +232,11 @@ export default function ManualScrape() {
               )
             })}
           </div>
+          {selectedCategories.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedCategories.length} categor{selectedCategories.length === 1 ? 'y' : 'ies'} selected
+            </p>
+          )}
         </div>
 
         {/* Keywords Section */}
@@ -164,10 +251,14 @@ export default function ManualScrape() {
             onChange={(e) => {
               setKeywords(e.target.value)
               setError(null)
+              setSuccess(false)
             }}
             placeholder="e.g., art blog, creative agency, design studio"
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500 focus:border-transparent"
           />
+          <p className="mt-1 text-xs text-gray-500">
+            Leave empty if using categories only
+          </p>
         </div>
 
         {/* Locations Section */}
@@ -195,20 +286,25 @@ export default function ManualScrape() {
               )
             })}
           </div>
+          {selectedLocations.length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedLocations.length} location{selectedLocations.length === 1 ? '' : 's'} selected
+            </p>
+          )}
         </div>
 
         {/* Max Results */}
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Max Results
+            Max Results (1-1000)
           </label>
           <input
             type="number"
+            value={maxResults}
+            onChange={handleMaxResultsChange}
             min="1"
             max="1000"
-            value={maxResults}
-            onChange={(e) => setMaxResults(parseInt(e.target.value) || 100)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500 focus:border-transparent"
           />
         </div>
 
@@ -226,23 +322,15 @@ export default function ManualScrape() {
             {loading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Starting Scrape...</span>
+                <span>Starting Scraping...</span>
               </>
             ) : (
               <>
                 <Play className="w-5 h-5" />
-                <span>Start Scraping</span>
+                <span>Start Manual Scraping</span>
               </>
             )}
           </button>
-          
-          {!canStart() && (
-            <p className="mt-2 text-xs text-center text-gray-500">
-              {!keywords.trim() && selectedCategories.length === 0
-                ? 'Select at least one category or enter keywords'
-                : 'Select at least one location'}
-            </p>
-          )}
         </div>
       </div>
     </div>
