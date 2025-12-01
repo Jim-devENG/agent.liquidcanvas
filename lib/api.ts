@@ -107,6 +107,16 @@ export interface Job {
   updated_at: string
 }
 
+export interface EnrichmentResult {
+  success: boolean
+  email?: string
+  confidence?: number
+  source?: string
+  domain: string
+  error?: string
+  stack_trace?: string
+}
+
 export interface EmailLog {
   id: string
   prospect_id: string
@@ -537,26 +547,41 @@ export async function getStats(): Promise<Stats | null> {
       return null
     }
     
-    // Safely extract prospects array with multiple fallbacks
+    // CRITICAL: Always ensure allProspectsList is an array, never {} or null
+    // Backend returns: { success: true, data: { prospects: [], total: 0, ... } }
     let allProspectsList: any[] = []
     if (allProspects) {
-      if (Array.isArray(allProspects.prospects)) {
+      // Handle new backend format: { success: true, data: { prospects: [], total: 0, ... } }
+      if (allProspects.data && Array.isArray(allProspects.data.prospects)) {
+        allProspectsList = allProspects.data.prospects
+      }
+      // Handle direct ProspectListResponse format: { prospects: [], total: 0, ... }
+      else if (Array.isArray(allProspects.prospects)) {
         allProspectsList = allProspects.prospects
-      } else if ('data' in allProspects && allProspects.data && Array.isArray((allProspects as any).data.prospects)) {
-        allProspectsList = (allProspects as any).data.prospects
-      } else if (Array.isArray(allProspects)) {
+      }
+      // Handle array directly (shouldn't happen but be safe)
+      else if (Array.isArray(allProspects)) {
         allProspectsList = allProspects
+      }
+      // If we got something unexpected, log it and use empty array
+      else {
+        console.warn('⚠️ getStats: Unexpected allProspects format:', typeof allProspects, allProspects)
+        allProspectsList = []  // ALWAYS return array, never {}
       }
     }
     
+    // CRITICAL: Always ensure prospectsWithEmailList is an array
     let prospectsWithEmailList: any[] = []
     if (prospectsWithEmail) {
-      if (Array.isArray(prospectsWithEmail.prospects)) {
+      if (prospectsWithEmail.data && Array.isArray(prospectsWithEmail.data.prospects)) {
+        prospectsWithEmailList = prospectsWithEmail.data.prospects
+      } else if (Array.isArray(prospectsWithEmail.prospects)) {
         prospectsWithEmailList = prospectsWithEmail.prospects
-      } else if ('data' in prospectsWithEmail && prospectsWithEmail.data && Array.isArray((prospectsWithEmail as any).data.prospects)) {
-        prospectsWithEmailList = (prospectsWithEmail as any).data.prospects
       } else if (Array.isArray(prospectsWithEmail)) {
         prospectsWithEmailList = prospectsWithEmail
+      } else {
+        console.warn('⚠️ getStats: Unexpected prospectsWithEmail format:', typeof prospectsWithEmail, prospectsWithEmail)
+        prospectsWithEmailList = []  // ALWAYS return array, never {}
       }
     }
     
