@@ -659,14 +659,20 @@ export async function getStats(): Promise<Stats | null> {
       console.log('🔍 getStats - jobs response:', jobs)
     }
     
-    // Extract prospects array - API returns { prospects, total, skip, limit }
+    // Extract prospects array - API returns { data: [], page, limit, total, totalPages }
     let allProspectsList: Prospect[] = []
-    if ("prospects" in allProspects && Array.isArray(allProspects.prospects)) {
+    if ("data" in allProspects && Array.isArray(allProspects.data)) {
+      allProspectsList = allProspects.data
+    } else if ("prospects" in allProspects && Array.isArray(allProspects.prospects)) {
+      // Backward compatibility
       allProspectsList = allProspects.prospects
     }
     
     let prospectsWithEmailList: Prospect[] = []
-    if ("prospects" in prospectsWithEmail && Array.isArray(prospectsWithEmail.prospects)) {
+    if ("data" in prospectsWithEmail && Array.isArray(prospectsWithEmail.data)) {
+      prospectsWithEmailList = prospectsWithEmail.data
+    } else if ("prospects" in prospectsWithEmail && Array.isArray(prospectsWithEmail.prospects)) {
+      // Backward compatibility
       prospectsWithEmailList = prospectsWithEmail.prospects
     }
     
