@@ -223,10 +223,11 @@ export default function AutomationControl() {
           </label>
         </div>
 
-        {/* Configuration */}
+        {/* Configuration - Always visible when master is enabled */}
         {status.master_enabled && (
-          <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold text-gray-900">Configuration</h3>
+          <div className="space-y-4 p-4 bg-gray-50 rounded-lg border-2 border-olive-200">
+            <h3 className="font-semibold text-gray-900 mb-2">Configuration</h3>
+            <p className="text-xs text-gray-600 mb-4">Configure locations, categories, and scheduling interval for automatic scraping</p>
 
             {/* Locations */}
             <div>
@@ -294,17 +295,18 @@ export default function AutomationControl() {
               </div>
             </div>
 
-            {/* Interval */}
-            <div>
-              <label className="flex items-center space-x-2 text-sm font-semibold text-gray-700 mb-2">
-                <Clock className="w-4 h-4" />
-                <span>Interval (Required)</span>
+            {/* Interval / Schedule Time */}
+            <div className="bg-white p-3 rounded-lg border border-olive-300">
+              <label className="flex items-center space-x-2 text-sm font-semibold text-gray-900 mb-2">
+                <Clock className="w-5 h-5 text-olive-600" />
+                <span>Schedule Interval (Required)</span>
               </label>
+              <p className="text-xs text-gray-600 mb-3">How often should automatic scraping run?</p>
               <select
                 value={status.interval || '1h'}
                 onChange={(e) => saveConfig(status.locations, status.categories, e.target.value)}
                 disabled={saving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500"
+                className="w-full px-4 py-3 border-2 border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500 bg-white font-medium text-gray-900"
               >
                 {INTERVAL_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -312,6 +314,11 @@ export default function AutomationControl() {
                   </option>
                 ))}
               </select>
+              {status.next_run_at && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Next run: {formatNextRun(status.next_run_at)}
+                </p>
+              )}
             </div>
           </div>
         )}
