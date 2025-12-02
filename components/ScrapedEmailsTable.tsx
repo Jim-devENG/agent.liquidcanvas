@@ -19,7 +19,18 @@ export default function ScrapedEmailsTable() {
     canGoPrev,
   } = usePaginatedFetch<Prospect>({
     fetchFn: async (page, limit) => {
-      return listProspects(page, limit, undefined, undefined, true)
+      // Convert page-based to skip-based pagination
+      const skip = (page - 1) * limit
+      const response = await listProspects(skip, limit, undefined, undefined, true)
+      // Convert skip/limit response to page/totalPages format
+      const totalPages = Math.ceil(response.total / limit) || 1
+      return {
+        data: response.data,
+        page,
+        limit: response.limit,
+        total: response.total,
+        totalPages,
+      }
     },
     initialPage: 1,
     limit: 10,

@@ -807,3 +807,41 @@ export async function setScraperConfig(
   }
   return res.json()
 }
+
+// Scraper History API
+export interface ScraperHistoryItem {
+  id: string
+  triggered_at: string
+  completed_at: string | null
+  success_count: number
+  failed_count: number
+  duration_seconds: number | null
+  status: string
+  error_message: string | null
+}
+
+export async function getScraperHistory(
+  page: number = 1,
+  limit: number = 10
+): Promise<{ data: ScraperHistoryItem[]; page: number; limit: number; total: number; totalPages: number }> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  })
+  
+  const res = await authenticatedFetch(`${API_BASE}/scraper/history?${params}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get scraper history' }))
+    throw new Error(error.detail || 'Failed to get scraper history')
+  }
+  const result = await res.json()
+  
+  // Backend returns data, page, limit, total, totalPages
+  return {
+    data: result.data || [],
+    page: result.page || page,
+    limit: result.limit || limit,
+    total: result.total || 0,
+    totalPages: result.totalPages || result.total_pages || 0,
+  }
+}
