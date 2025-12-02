@@ -134,24 +134,22 @@ async def check_and_run_scraper():
             
             # Start discovery task in background
             try:
-                asyncio.create_task(process_discovery_job(str(job.id)))
-                logger.info(f"✅ Automatic discovery job {job.id} started")
+                # Create task and don't await - let it run in background
+                task = asyncio.create_task(process_discovery_job(str(job.id)))
+                logger.info(f"✅ Automatic discovery job {job.id} started (task_id: {id(task)})")
                 
-                # Wait a bit for job to start
-                await asyncio.sleep(5)
-                
-                # Update history
+                # Mark history as completed immediately (job runs async)
+                # The actual job completion will be tracked separately
                 history.completed_at = datetime.now(timezone.utc)
                 history.status = "completed"
                 history.success_count = 1
-                duration = (history.completed_at - history.triggered_at).total_seconds()
-                history.duration_seconds = duration
+                # Don't set duration yet - job is still running
                 await db.commit()
                 
-                logger.info(f"✅ Automatic scraper run completed (duration: {duration:.1f}s)")
-                
-                # Calculate next run
+                # Calculate next run immediately
                 await calculate_and_set_next_run(db, interval)
+                
+                logger.info(f"✅ Automatic scraper run initiated (job_id: {job.id})")
                 
             except Exception as e:
                 logger.error(f"❌ Automatic scraper run failed: {e}", exc_info=True)

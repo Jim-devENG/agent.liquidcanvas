@@ -216,17 +216,13 @@ async def startup():
     except Exception as e:
         logger.error(f"Failed to check/add discovery_query_id column: {e}", exc_info=True)
     
-    # Start scheduler for periodic tasks (only if explicitly enabled)
+    # Start scheduler for periodic tasks (always start - scraper check runs every minute)
     try:
-        enable_automation = os.getenv("ENABLE_AUTOMATION", "false").lower() == "true"
-        if enable_automation:
-            from app.scheduler import start_scheduler
-            start_scheduler()
-            logger.info("Scheduler started successfully (automation enabled)")
-        else:
-            logger.info("Scheduler not started (ENABLE_AUTOMATION is false)")
+        from app.scheduler import start_scheduler
+        start_scheduler()
+        logger.info("✅ Scheduler started successfully (automatic scraper check enabled)")
     except Exception as e:
-        logger.warning(f"Failed to start scheduler: {e}")
+        logger.error(f"❌ Failed to start scheduler: {e}", exc_info=True)
 
 
 @app.on_event("shutdown")
