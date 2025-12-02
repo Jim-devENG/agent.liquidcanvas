@@ -297,9 +297,20 @@ export async function createDiscoveryJob(
     }
     
     // Fallback: if response doesn't have success field, assume it's the job object directly
-    if (responseObj && 'id' in responseObj && typeof responseObj.id === 'string') {
+    if (responseObj && 'id' in responseObj && typeof responseObj.id === 'string' && 
+        'job_type' in responseObj && typeof responseObj.job_type === 'string' &&
+        'status' in responseObj && typeof responseObj.status === 'string') {
       console.log('✅ Discovery job created (legacy format):', responseObj.id)
-      return responseObj as Job
+      return {
+        id: responseObj.id as string,
+        job_type: responseObj.job_type as string,
+        status: responseObj.status as string,
+        params: 'params' in responseObj ? responseObj.params as Record<string, unknown> : undefined,
+        result: 'result' in responseObj ? responseObj.result as Record<string, unknown> : undefined,
+        error_message: 'error_message' in responseObj ? responseObj.error_message as string | undefined : undefined,
+        created_at: 'created_at' in responseObj && typeof responseObj.created_at === 'string' ? responseObj.created_at : new Date().toISOString(),
+        updated_at: 'updated_at' in responseObj && typeof responseObj.updated_at === 'string' ? responseObj.updated_at : new Date().toISOString(),
+      }
     }
     
     // If we get here, response format is unexpected
@@ -323,7 +334,7 @@ export async function createDiscoveryJob(
       console.error('❌ createDiscoveryJob: Error details:', {
         message: errorMessage,
         error: error,
-        stack: error?.stack
+        stack: error instanceof Error ? error.stack : undefined
       })
     }
     
@@ -482,7 +493,7 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
     const data: unknown = await res.json()
     
     // Type guard for Job array
-    function isJobArray(value: unknown): value is Job[] {
+    const isJobArray = (value: unknown): value is Job[] => {
       return Array.isArray(value) && value.every(
         (item): item is Job =>
           typeof item === 'object' &&
