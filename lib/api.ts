@@ -650,7 +650,8 @@ export async function getStats(): Promise<Stats | null> {
     ])
     
     // Log actual API responses for debugging (only in development)
-    if (typeof process !== 'undefined' && process?.env?.NODE_ENV !== 'production') {
+    // @ts-ignore - process.env is available in Next.js
+    if (typeof process !== 'undefined' && (process as any)?.env?.NODE_ENV !== 'production') {
       console.log('🔍 getStats - allProspects response:', allProspects)
       console.log('🔍 getStats - prospectsWithEmail response:', prospectsWithEmail)
       console.log('🔍 getStats - jobs response:', jobs)
