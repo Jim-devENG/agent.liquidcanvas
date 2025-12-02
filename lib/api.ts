@@ -616,60 +616,30 @@ export async function getStats(): Promise<Stats | null> {
     const allProspectsTotal = allProspects?.total ?? 0
     const prospectsWithEmailTotal = prospectsWithEmail?.total ?? 0
     
-    // Count prospects by status - defensive forEach guard
+    // Count prospects by status
     let prospects_pending = 0
     let prospects_sent = 0
     let prospects_replied = 0
     
-    // Critical defensive guard: Never call forEach on undefined/null
-    // Use safe array check and try-catch for maximum safety
-    if (Array.isArray(allProspectsList) && allProspectsList.length > 0) {
-      try {
-        allProspectsList.forEach((p: any) => {
-          // Additional safety check for each item
-          if (p && typeof p === 'object' && p.outreach_status) {
-            if (p.outreach_status === 'pending') prospects_pending++
-            if (p.outreach_status === 'sent') prospects_sent++
-            if (p.outreach_status === 'replied') prospects_replied++
-          }
-        })
-      } catch (forEachError) {
-        console.error('⚠️ Error in forEach loop (likely from devtools hook or invalid data):', forEachError)
-        // Continue with zero counts rather than failing - app stays running
-      }
-    } else if (allProspectsList !== null && allProspectsList !== undefined) {
-      // Log warning if we expected an array but got something else
-      console.warn('⚠️ getStats: allProspectsList is not a valid array:', typeof allProspectsList, allProspectsList)
-    }
+    allProspectsList.forEach((p) => {
+      if (p.outreach_status === 'pending') prospects_pending++
+      if (p.outreach_status === 'sent') prospects_sent++
+      if (p.outreach_status === 'replied') prospects_replied++
+    })
     
-    // Safely handle jobs array - listJobs returns Job[]
-    let jobsArray: any[] = []
-    if (jobs && Array.isArray(jobs)) {
-      jobsArray = jobs
-    } else if (jobs && typeof jobs === 'object') {
-      // Fallback: if jobs is an object, try to extract array from common properties
-      if ('data' in jobs && Array.isArray((jobs as any).data)) {
-        jobsArray = (jobs as any).data
-      } else if ('items' in jobs && Array.isArray((jobs as any).items)) {
-        jobsArray = (jobs as any).items
-      }
-    }
+    // Handle jobs array - listJobs returns Job[]
+    const jobsArray = Array.isArray(jobs) ? jobs : []
     
-    // Defensive filter operations with safe array checks
+    // Count jobs by status
     let jobs_running = 0
     let jobs_completed = 0
     let jobs_failed = 0
     
-    if (Array.isArray(jobsArray) && jobsArray.length > 0) {
-      try {
-        jobs_running = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'running').length
-        jobs_completed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'completed').length
-        jobs_failed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'failed').length
-      } catch (filterError) {
-        console.error('⚠️ Error in filter operations:', filterError)
-        // Continue with zero counts - app stays running
-      }
-    }
+    jobsArray.forEach((j) => {
+      if (j.status === 'running') jobs_running++
+      if (j.status === 'completed') jobs_completed++
+      if (j.status === 'failed') jobs_failed++
+    })
     
     const stats: Stats = {
       total_prospects: allProspectsTotal,
