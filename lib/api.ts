@@ -659,8 +659,8 @@ export async function getStats(): Promise<Stats | null> {
     if (jobs) {
       if (Array.isArray(jobs)) {
         jobsArray = jobs
-      } else if (jobs.data && Array.isArray(jobs.data)) {
-        jobsArray = jobs.data
+      } else if (typeof jobs === 'object' && 'data' in jobs && Array.isArray((jobs as any).data)) {
+        jobsArray = (jobs as any).data
       }
     }
     
