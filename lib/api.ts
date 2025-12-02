@@ -1,6 +1,8 @@
 /**
  * API client for new backend architecture
  */
+import type { EnrichmentResult } from './types'
+
 // Remove /v1 if present - new backend uses /api directly
 const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
 const API_BASE = envBase.replace('/api/v1', '/api').replace('/v1', '')
