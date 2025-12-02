@@ -1,11 +1,8 @@
 /**
  * API client for new backend architecture
  */
-import type { EnrichmentResult } from '@/lib/types'
-
 // Remove /v1 if present - new backend uses /api directly
-// @ts-ignore - process.env is available in Next.js at build time
-const envBase = (typeof window !== 'undefined' && (window as any).__NEXT_DATA__?.env?.NEXT_PUBLIC_API_BASE_URL) || (typeof process !== 'undefined' && (process as any).env?.NEXT_PUBLIC_API_BASE_URL) || 'http://localhost:8000/api'
+const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
 const API_BASE = envBase.replace('/api/v1', '/api').replace('/v1', '')
 
 // Get auth token from localStorage
@@ -158,12 +155,14 @@ export interface EmailLog {
   sent_at: string
 }
 
-export interface ProspectListResponse {
-  prospects: Prospect[]
+export interface PaginatedResponse<T> {
+  data: T[]
   total: number
   skip: number
   limit: number
 }
+
+export type ProspectListResponse = PaginatedResponse<Prospect>
 
 // Jobs API
 /**
@@ -482,27 +481,17 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 }
 
 // Prospects API
-export interface PaginatedResponse<T> {
-  data: T[]
-  page: number
-  limit: number
-  total: number
-  totalPages: number
-}
-
 export async function listProspects(
-  page: number = 1,
-  limit: number = 10,
+  skip = 0,
+  limit = 50,
   status?: string,
   minScore?: number,
   hasEmail?: boolean
-): Promise<PaginatedResponse<Prospect>> {
-  // Enforce max limit of 10
-  limit = Math.min(limit, 10)
-  
-  const params = new URLSearchParams()
-  params.append('page', page.toString())
-  params.append('limit', limit.toString())
+): Promise<ProspectListResponse> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
   if (status) params.append('status', status)
   if (minScore !== undefined) params.append('min_score', minScore.toString())
   if (hasEmail !== undefined) params.append('has_email', hasEmail.toString())
@@ -514,66 +503,15 @@ export async function listProspects(
     const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
     throw new Error(error.detail || 'Failed to list prospects')
   }
-  const response = await res.json()
-  
-  // Handle standardized format: { success: true, data: { data: [], page, limit, total, totalPages } }
-  if (response && typeof response === 'object') {
-    if (response.success && response.data) {
-      const data = response.data
-      return {
-        data: data.data || data.prospects || [],
-        page: data.page || page,
-        limit: data.limit || limit,
-        total: data.total || 0,
-        totalPages: data.totalPages || 0
-      }
-    } else if ('data' in response && 'page' in response) {
-      // Direct standardized format
-      return response as PaginatedResponse<Prospect>
-    } else if ('prospects' in response && 'total' in response) {
-      // Backward compatibility: convert old format to new
-      const oldResponse = response as ProspectListResponse
-      const totalPages = oldResponse.total > 0 ? Math.ceil(oldResponse.total / limit) : 0
-      return {
-        data: oldResponse.prospects || [],
-        page: page,
-        limit: limit,
-        total: oldResponse.total || 0,
-        totalPages: totalPages
-      }
-    }
-  }
-  
-  // If response doesn't match expected format, return empty structure
-  console.warn('Unexpected response format from /api/prospects:', response)
-  return { data: [], page, limit, total: 0, totalPages: 0 }
-}
+  const result: any = await res.json()
 
-export async function listWebsites(
-  page: number = 1,
-  limit: number = 10
-): Promise<PaginatedResponse<Prospect>> {
-  // Enforce max limit of 10
-  limit = Math.min(limit, 10)
-  
-  const params = new URLSearchParams()
-  params.append('page', page.toString())
-  params.append('limit', limit.toString())
-  
-  const res = await authenticatedFetch(`${API_BASE}/prospects/websites?${params}`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to list websites' }))
-    throw new Error(error.detail || 'Failed to list websites')
+  // Normalize to PaginatedResponse<Prospect>
+  return {
+    data: (result.prospects || result.data || []) as Prospect[],
+    total: (result.total ?? 0) as number,
+    skip,
+    limit,
   }
-  const response = await res.json()
-  
-  // Handle standardized format
-  if (response && typeof response === 'object' && 'data' in response) {
-    return response as PaginatedResponse<Prospect>
-  }
-  
-  console.warn('Unexpected response format from /api/prospects/websites:', response)
-  return { data: [], page, limit, total: 0, totalPages: 0 }
 }
 
 export async function getProspect(prospectId: string): Promise<Prospect> {
@@ -642,66 +580,84 @@ export interface Stats {
 export async function getStats(): Promise<Stats | null> {
   try {
     // Fetch all data in parallel with defensive error handling
-    // Use page=1, limit=10 for pagination, but we only need totals for stats
     const [allProspects, jobs, prospectsWithEmail] = await Promise.all([
-      listProspects(1, 10).catch(() => ({ data: [], page: 1, limit: 10, total: 0, totalPages: 0 })),
+      listProspects(0, 1000).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 })),
       listJobs(0, 100).catch(() => []),
-      listProspects(1, 10, undefined, undefined, true).catch(() => ({ data: [], page: 1, limit: 10, total: 0, totalPages: 0 })),
+      listProspects(0, 1000, undefined, undefined, true).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 })),
     ])
     
     // Log actual API responses for debugging (only in development)
-    // @ts-ignore - process.env is available in Next.js
-    if (typeof process !== 'undefined' && (process as any)?.env?.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production') {
       console.log('🔍 getStats - allProspects response:', allProspects)
       console.log('🔍 getStats - prospectsWithEmail response:', prospectsWithEmail)
       console.log('🔍 getStats - jobs response:', jobs)
     }
     
-    // Extract prospects array - API returns { data: [], page, limit, total, totalPages }
-    let allProspectsList: Prospect[] = []
-    if ("data" in allProspects && Array.isArray(allProspects.data)) {
-      allProspectsList = allProspects.data
-    } else if ("prospects" in allProspects && Array.isArray(allProspects.prospects)) {
-      // Backward compatibility
-      allProspectsList = allProspects.prospects
+    // Defensive guard: Ensure all inputs are defined before processing
+    if (!allProspects && !prospectsWithEmail && !jobs) {
+      console.warn('⚠️ getStats: All API responses are undefined/null')
+      return null
     }
     
-    let prospectsWithEmailList: Prospect[] = []
-    if ("data" in prospectsWithEmail && Array.isArray(prospectsWithEmail.data)) {
-      prospectsWithEmailList = prospectsWithEmail.data
-    } else if ("prospects" in prospectsWithEmail && Array.isArray(prospectsWithEmail.prospects)) {
-      // Backward compatibility
-      prospectsWithEmailList = prospectsWithEmail.prospects
-    }
+    // Extract prospects array from PaginatedResponse<Prospect> format
+    const allProspectsList: Prospect[] = allProspects?.data || []
+    const prospectsWithEmailList: Prospect[] = prospectsWithEmail?.data || []
     
-    // Extract totals
+    // Extract totals from PaginatedResponse<Prospect> format
     const allProspectsTotal = allProspects?.total ?? 0
     const prospectsWithEmailTotal = prospectsWithEmail?.total ?? 0
     
-    // Count prospects by status
+    // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
     let prospects_sent = 0
     let prospects_replied = 0
     
-    allProspectsList.forEach((p) => {
-      if (p.outreach_status === 'pending') prospects_pending++
-      if (p.outreach_status === 'sent') prospects_sent++
-      if (p.outreach_status === 'replied') prospects_replied++
-    })
+    // Critical defensive guard: Never call forEach on undefined/null
+    // Use safe array check and try-catch for maximum safety
+    if (Array.isArray(allProspectsList) && allProspectsList.length > 0) {
+      try {
+        allProspectsList.forEach((p: any) => {
+          // Additional safety check for each item
+          if (p && typeof p === 'object' && p.outreach_status) {
+            if (p.outreach_status === 'pending') prospects_pending++
+            if (p.outreach_status === 'sent') prospects_sent++
+            if (p.outreach_status === 'replied') prospects_replied++
+          }
+        })
+      } catch (forEachError) {
+        console.error('⚠️ Error in forEach loop (likely from devtools hook or invalid data):', forEachError)
+        // Continue with zero counts rather than failing - app stays running
+      }
+    } else if (allProspectsList !== null && allProspectsList !== undefined) {
+      // Log warning if we expected an array but got something else
+      console.warn('⚠️ getStats: allProspectsList is not a valid array:', typeof allProspectsList, allProspectsList)
+    }
     
-    // Handle jobs array - listJobs returns Job[]
-    const jobsArray = Array.isArray(jobs) ? jobs : []
+    // Safely handle jobs array - defensive guard
+    let jobsArray: any[] = []
+    if (jobs) {
+      if (Array.isArray(jobs)) {
+        jobsArray = jobs
+      } else if (jobs.data && Array.isArray(jobs.data)) {
+        jobsArray = jobs.data
+      }
+    }
     
-    // Count jobs by status
+    // Defensive filter operations with safe array checks
     let jobs_running = 0
     let jobs_completed = 0
     let jobs_failed = 0
     
-    jobsArray.forEach((j) => {
-      if (j.status === 'running') jobs_running++
-      if (j.status === 'completed') jobs_completed++
-      if (j.status === 'failed') jobs_failed++
-    })
+    if (Array.isArray(jobsArray) && jobsArray.length > 0) {
+      try {
+        jobs_running = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'running').length
+        jobs_completed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'completed').length
+        jobs_failed = jobsArray.filter((j: any) => j && typeof j === 'object' && j.status === 'failed').length
+      } catch (filterError) {
+        console.error('⚠️ Error in filter operations:', filterError)
+        // Continue with zero counts - app stays running
+      }
+    }
     
     const stats: Stats = {
       total_prospects: allProspectsTotal,
@@ -788,138 +744,4 @@ export async function getAPIKeysStatus(): Promise<Record<string, boolean>> {
     throw new Error(error.detail || 'Failed to get API keys status')
   }
   return res.json()
-}
-
-// ============================================
-// Scraper Control API
-// ============================================
-
-export interface ScraperStatus {
-  master_enabled: boolean
-  auto_enabled: boolean
-  locations: string[]
-  categories: string[]
-  interval: string
-  next_run_at: string | null
-  status: 'idle' | 'running' | 'disabled'
-  can_enable_auto: boolean
-  missing_fields: string[]
-}
-
-export interface ScraperHistoryItem {
-  id: string
-  triggered_at: string
-  completed_at: string | null
-  success_count: number
-  failed_count: number
-  duration_seconds: number | null
-  status: string
-  error_message: string | null
-}
-
-export interface ScraperHistoryResponse {
-  data: ScraperHistoryItem[]
-  page: number
-  limit: number
-  total: number
-  total_pages: number
-}
-
-export async function getScraperStatus(): Promise<ScraperStatus> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/status`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to get scraper status' }))
-    throw new Error(error.detail || 'Failed to get scraper status')
-  }
-  return res.json()
-}
-
-export async function getMasterSwitch(): Promise<{ enabled: boolean; message: string }> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/master`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to get master switch' }))
-    throw new Error(error.detail || 'Failed to get master switch')
-  }
-  return res.json()
-}
-
-export async function setMasterSwitch(enabled: boolean): Promise<{ enabled: boolean; message: string }> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/master`, {
-    method: 'POST',
-    body: JSON.stringify({ enabled }),
-  })
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to update master switch' }))
-    throw new Error(error.detail || 'Failed to update master switch')
-  }
-  return res.json()
-}
-
-export async function getAutoSwitch(): Promise<{ enabled: boolean; message: string; can_enable: boolean; missing_fields: string[] }> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/automatic`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to get auto switch' }))
-    throw new Error(error.detail || 'Failed to get auto switch')
-  }
-  return res.json()
-}
-
-export async function setAutoSwitch(enabled: boolean): Promise<{ enabled: boolean; message: string; can_enable: boolean; missing_fields: string[] }> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/automatic`, {
-    method: 'POST',
-    body: JSON.stringify({ enabled }),
-  })
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to update auto switch' }))
-    throw new Error(error.detail || 'Failed to update auto switch')
-  }
-  return res.json()
-}
-
-export async function setScraperConfig(
-  locations: string[],
-  categories: string[],
-  interval: string
-): Promise<{ locations: string[]; categories: string[]; interval: string; next_run_at: string | null }> {
-  const res = await authenticatedFetch(`${API_BASE}/scraper/config`, {
-    method: 'POST',
-    body: JSON.stringify({ locations, categories, interval }),
-  })
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to save config' }))
-    throw new Error(error.detail || 'Failed to save config')
-  }
-  return res.json()
-}
-
-export async function getScraperHistory(page: number = 1, limit: number = 10): Promise<PaginatedResponse<ScraperHistoryItem>> {
-  // Enforce max limit of 10
-  limit = Math.min(limit, 10)
-  
-  const params = new URLSearchParams()
-  params.append('page', page.toString())
-  params.append('limit', limit.toString())
-  
-  const res = await authenticatedFetch(`${API_BASE}/scraper/history?${params}`)
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: 'Failed to get scraper history' }))
-    throw new Error(error.detail || 'Failed to get scraper history')
-  }
-  const response = await res.json()
-  
-  // Handle standardized format
-  if (response && typeof response === 'object') {
-    if ('data' in response && 'page' in response) {
-      return {
-        data: response.data || [],
-        page: response.page || page,
-        limit: response.limit || limit,
-        total: response.total || 0,
-        totalPages: response.totalPages || response.total_pages || 0
-      }
-    }
-  }
-  
-  console.warn('Unexpected response format from /api/scraper/history:', response)
-  return { data: [], page, limit, total: 0, totalPages: 0 }
 }

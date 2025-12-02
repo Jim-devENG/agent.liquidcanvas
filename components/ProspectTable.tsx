@@ -26,7 +26,7 @@ export default function ProspectTable() {
         undefined,
         hasEmailFilter === 'true' ? true : hasEmailFilter === 'false' ? false : undefined
       )
-      setProspects(data.prospects)
+      setProspects(data.data)
       setTotal(data.total)
     } catch (error) {
       console.error('Error loading prospects:', error)
@@ -37,7 +37,9 @@ export default function ProspectTable() {
 
   useEffect(() => {
     loadProspects()
-    const interval = setInterval(loadProspects, 10000) // Refresh every 10 seconds
+    const interval = setInterval(() => {
+      loadProspects()
+    }, 30000) // Refresh every 30 seconds (debounced to prevent loops)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip, statusFilter, hasEmailFilter])

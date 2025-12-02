@@ -1,27 +1,38 @@
 'use client'
 
-import { ExternalLink, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
-import { listWebsites, type Prospect } from '@/lib/api'
+import { useEffect, useState } from 'react'
+import { ExternalLink, RefreshCw } from 'lucide-react'
+import { listProspects, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
-import { usePaginatedFetch } from '@/hooks/usePaginatedFetch'
 
 export default function WebsitesTable() {
-  const {
-    page,
-    data: prospects,
-    totalPages,
-    loading,
-    refresh,
-    goToNext,
-    goToPrev,
-    canGoNext,
-    canGoPrev,
-  } = usePaginatedFetch<Prospect>({
-    fetchFn: listWebsites,
-    initialPage: 1,
-    limit: 10,
-    autoLoad: true,
-  })
+  const [prospects, setProspects] = useState<Prospect[]>([])
+  const [loading, setLoading] = useState(true)
+  const [skip, setSkip] = useState(0)
+  const [total, setTotal] = useState(0)
+  const limit = 50
+
+  const loadWebsites = async () => {
+    try {
+      setLoading(true)
+      const response = await listProspects(skip, limit)
+      setProspects(response.data)
+      setTotal(response.total)
+    } catch (error) {
+      console.error('Failed to load websites:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadWebsites()
+    const interval = setInterval(() => {
+      loadWebsites()
+    }, 30000) // Refresh every 30 seconds (debounced to prevent loops)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
@@ -32,11 +43,11 @@ export default function WebsitesTable() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-gray-900">Discovered Websites</h2>
         <button
-          onClick={refresh}
+          onClick={loadWebsites}
           className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
         >
           <RefreshCw className="w-4 h-4" />
-          <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+          <span>Refresh</span>
         </button>
       </div>
 
@@ -108,24 +119,22 @@ export default function WebsitesTable() {
           </div>
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-gray-600">
-              Page {page} of {totalPages || 1} ({prospects.length} items)
+              Showing {skip + 1}-{Math.min(skip + limit, total)} of {total}
             </p>
             <div className="flex space-x-2">
               <button
-                onClick={goToPrev}
-                disabled={!canGoPrev}
-                className="flex items-center space-x-1 px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setSkip(Math.max(0, skip - limit))}
+                disabled={skip === 0}
+                className="px-3 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 disabled:opacity-50"
               >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
+                Previous
               </button>
               <button
-                onClick={goToNext}
-                disabled={!canGoNext}
-                className="flex items-center space-x-1 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setSkip(skip + limit)}
+                disabled={skip + limit >= total}
+                className="px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700 disabled:opacity-50"
               >
-                <span>Next</span>
-                <ChevronRight className="w-4 h-4" />
+                Next
               </button>
             </div>
           </div>
