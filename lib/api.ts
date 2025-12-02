@@ -4,7 +4,7 @@
 import type { EnrichmentResult } from '@/lib/types'
 
 // Remove /v1 if present - new backend uses /api directly
-const envBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
+const envBase = (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_API_BASE_URL) || 'http://localhost:8000/api'
 const API_BASE = envBase.replace('/api/v1', '/api').replace('/v1', '')
 
 // Get auth token from localStorage
@@ -648,12 +648,8 @@ export async function getStats(): Promise<Stats | null> {
       listProspects(1, 10, undefined, undefined, true).catch(() => ({ data: [], page: 1, limit: 10, total: 0, totalPages: 0 })),
     ])
     
-    // Extract totals from paginated responses
-    const allProspectsTotal = 'total' in allProspects ? allProspects.total : 0
-    const prospectsWithEmailTotal = 'total' in prospectsWithEmail ? prospectsWithEmail.total : 0
-    
     // Log actual API responses for debugging (only in development)
-    if (process.env.NODE_ENV !== 'production') {
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production') {
       console.log('🔍 getStats - allProspects response:', allProspects)
       console.log('🔍 getStats - prospectsWithEmail response:', prospectsWithEmail)
       console.log('🔍 getStats - jobs response:', jobs)
