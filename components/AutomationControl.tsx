@@ -31,26 +31,15 @@ const INTERVAL_OPTIONS = [
   { value: 'weekly', label: 'Weekly' },
 ]
 
+import {
+  getScraperStatus,
+  setMasterSwitch,
+  setAutoSwitch,
+  setScraperConfig,
+  type ScraperStatus,
+} from '@/lib/api'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api'
-
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('auth_token')
-}
-
-async function authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getAuthToken()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  }
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  
-  return fetch(url, { ...options, headers })
-}
 
 interface ScraperStatus {
   master_enabled: boolean
@@ -74,11 +63,7 @@ export default function AutomationControl() {
   const loadStatus = async () => {
     try {
       setLoading(true)
-      const res = await authenticatedFetch(`${API_BASE}/scraper/status`)
-      if (!res.ok) {
-        throw new Error('Failed to load scraper status')
-      }
-      const data = await res.json()
+      const data = await getScraperStatus()
       setStatus(data)
     } catch (err: any) {
       console.error('Error loading scraper status:', err)
@@ -98,14 +83,7 @@ export default function AutomationControl() {
     try {
       setSaving(true)
       setError(null)
-      const res = await authenticatedFetch(`${API_BASE}/scraper/master`, {
-        method: 'POST',
-        body: JSON.stringify({ enabled }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Failed to update master switch' }))
-        throw new Error(err.detail || 'Failed to update master switch')
-      }
+      await setMasterSwitch(enabled)
       await loadStatus()
       setSuccess('Master switch updated')
       setTimeout(() => setSuccess(null), 3000)
@@ -127,14 +105,7 @@ export default function AutomationControl() {
     try {
       setSaving(true)
       setError(null)
-      const res = await authenticatedFetch(`${API_BASE}/scraper/automatic`, {
-        method: 'POST',
-        body: JSON.stringify({ enabled }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Failed to update auto switch' }))
-        throw new Error(err.detail || 'Failed to update auto switch')
-      }
+      await setAutoSwitch(enabled)
       await loadStatus()
       setSuccess('Auto scraper updated')
       setTimeout(() => setSuccess(null), 3000)
@@ -149,14 +120,7 @@ export default function AutomationControl() {
     try {
       setSaving(true)
       setError(null)
-      const res = await authenticatedFetch(`${API_BASE}/scraper/config`, {
-        method: 'POST',
-        body: JSON.stringify({ locations, categories, interval }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Failed to save config' }))
-        throw new Error(err.detail || 'Failed to save config')
-      }
+      await setScraperConfig(locations, categories, interval)
       await loadStatus()
       setSuccess('Configuration saved')
       setTimeout(() => setSuccess(null), 3000)

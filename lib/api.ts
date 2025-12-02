@@ -419,16 +419,24 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 
 // Prospects API
 export async function listProspects(
-  skip = 0,
+  skip?: number,
   limit = 50,
   status?: string,
   minScore?: number,
-  hasEmail?: boolean
-): Promise<ProspectListResponse> {
+  hasEmail?: boolean,
+  page?: number  // New page-based pagination
+): Promise<ProspectListResponse & { page?: number; totalPages?: number }> {
   const params = new URLSearchParams({
-    skip: skip.toString(),
     limit: limit.toString(),
   })
+  
+  // Support both page-based and skip-based pagination
+  if (page !== undefined) {
+    params.append('page', page.toString())
+  } else if (skip !== undefined) {
+    params.append('skip', skip.toString())
+  }
+  
   if (status) params.append('status', status)
   if (minScore !== undefined) params.append('min_score', minScore.toString())
   if (hasEmail !== undefined) params.append('has_email', hasEmail.toString())
@@ -442,7 +450,7 @@ export async function listProspects(
   }
   const response = await res.json()
   
-  // Handle new response format: {success: bool, data: {prospects, total, skip, limit}, error: null | string}
+  // Handle new response format: {success: bool, data: {prospects, total, page, totalPages, skip, limit}, error: null | string}
   if (response.success && response.data) {
     return response.data
   }
@@ -454,7 +462,7 @@ export async function listProspects(
   
   // If response doesn't match expected format, return empty structure
   console.warn('Unexpected response format from /api/prospects:', response)
-  return { prospects: [], total: 0, skip: 0, limit: 0 }
+  return { prospects: [], total: 0, page: 1, totalPages: 0, skip: 0, limit: 0 }
 }
 
 export async function getProspect(prospectId: string): Promise<Prospect> {
@@ -664,6 +672,117 @@ export async function getAPIKeysStatus(): Promise<Record<string, boolean>> {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to get API keys status' }))
     throw new Error(error.detail || 'Failed to get API keys status')
+  }
+  return res.json()
+}
+
+// ============================================
+// Scraper Control API
+// ============================================
+
+export interface ScraperStatus {
+  master_enabled: boolean
+  auto_enabled: boolean
+  locations: string[]
+  categories: string[]
+  interval: string
+  next_run_at: string | null
+  status: 'idle' | 'running' | 'disabled'
+  can_enable_auto: boolean
+  missing_fields: string[]
+}
+
+export interface ScraperHistoryItem {
+  id: string
+  triggered_at: string
+  completed_at: string | null
+  success_count: number
+  failed_count: number
+  duration_seconds: number | null
+  status: string
+  error_message: string | null
+}
+
+export interface ScraperHistoryResponse {
+  data: ScraperHistoryItem[]
+  page: number
+  limit: number
+  total: number
+  total_pages: number
+}
+
+export async function getScraperStatus(): Promise<ScraperStatus> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/status`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get scraper status' }))
+    throw new Error(error.detail || 'Failed to get scraper status')
+  }
+  return res.json()
+}
+
+export async function getMasterSwitch(): Promise<{ enabled: boolean; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/master`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get master switch' }))
+    throw new Error(error.detail || 'Failed to get master switch')
+  }
+  return res.json()
+}
+
+export async function setMasterSwitch(enabled: boolean): Promise<{ enabled: boolean; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/master`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to update master switch' }))
+    throw new Error(error.detail || 'Failed to update master switch')
+  }
+  return res.json()
+}
+
+export async function getAutoSwitch(): Promise<{ enabled: boolean; message: string; can_enable: boolean; missing_fields: string[] }> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/automatic`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get auto switch' }))
+    throw new Error(error.detail || 'Failed to get auto switch')
+  }
+  return res.json()
+}
+
+export async function setAutoSwitch(enabled: boolean): Promise<{ enabled: boolean; message: string; can_enable: boolean; missing_fields: string[] }> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/automatic`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to update auto switch' }))
+    throw new Error(error.detail || 'Failed to update auto switch')
+  }
+  return res.json()
+}
+
+export async function setScraperConfig(
+  locations: string[],
+  categories: string[],
+  interval: string
+): Promise<{ locations: string[]; categories: string[]; interval: string; next_run_at: string | null }> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/config`, {
+    method: 'POST',
+    body: JSON.stringify({ locations, categories, interval }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save config' }))
+    throw new Error(error.detail || 'Failed to save config')
+  }
+  return res.json()
+}
+
+export async function getScraperHistory(page: number = 1, limit: number = 10): Promise<ScraperHistoryResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/scraper/history?page=${page}&limit=${limit}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get scraper history' }))
+    throw new Error(error.detail || 'Failed to get scraper history')
   }
   return res.json()
 }

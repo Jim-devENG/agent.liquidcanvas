@@ -539,16 +539,24 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 
 // Prospects API
 export async function listProspects(
-  skip = 0,
+  skip?: number,
   limit = 50,
   status?: string,
   minScore?: number,
-  hasEmail?: boolean
-): Promise<ProspectListResponse> {
+  hasEmail?: boolean,
+  page?: number  // New page-based pagination
+): Promise<ProspectListResponse & { page?: number; totalPages?: number }> {
   const params = new URLSearchParams({
-    skip: skip.toString(),
     limit: limit.toString(),
   })
+  
+  // Support both page-based and skip-based pagination
+  if (page !== undefined) {
+    params.append('page', page.toString())
+  } else if (skip !== undefined) {
+    params.append('skip', skip.toString())
+  }
+  
   if (status) params.append('status', status)
   if (minScore !== undefined) params.append('min_score', minScore.toString())
   if (hasEmail !== undefined) params.append('has_email', hasEmail.toString())
@@ -562,7 +570,7 @@ export async function listProspects(
   }
   const response = await res.json()
   
-  // Handle new response format: {success: bool, data: {prospects, total, skip, limit}, error: null | string}
+  // Handle new response format: {success: bool, data: {prospects, total, page, totalPages, skip, limit}, error: null | string}
   if (response.success && response.data) {
     return response.data
   }
@@ -574,7 +582,7 @@ export async function listProspects(
   
   // If response doesn't match expected format, return empty structure
   console.warn('Unexpected response format from /api/prospects:', response)
-  return { prospects: [], total: 0, skip: 0, limit: 0 }
+  return { prospects: [], total: 0, page: 1, totalPages: 0, skip: 0, limit: 0 }
 }
 
 export async function getProspect(prospectId: string): Promise<Prospect> {
