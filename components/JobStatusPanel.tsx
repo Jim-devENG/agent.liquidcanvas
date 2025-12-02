@@ -162,7 +162,7 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
               <span>Query Details ({queries.length} shown)</span>
             </div>
             <div className="space-y-1 max-h-40 overflow-y-auto">
-              {queries.slice(0, 10).map((q: any, idx: number) => (
+              {Array.isArray(queries) ? queries.slice(0, 10).map((q: any, idx: number) => (
                 <div key={idx} className="text-xs bg-white rounded p-2 border border-gray-200">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-gray-800">&quot;{q.query}&quot;</span>
@@ -183,7 +183,7 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
                     <div className="mt-1 text-red-600 text-xs">Error: {q.error}</div>
                   )}
                 </div>
-              ))}
+              )) : null}
             </div>
           </div>
         )}
@@ -215,7 +215,7 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
         <p className="text-gray-500 text-sm">No jobs found</p>
       ) : (
         <div className="space-y-3">
-          {displayJobs.map((job) => {
+          {Array.isArray(displayJobs) ? displayJobs.map((job) => {
             const isExpanded = expandedJobs.has(job.id)
             return (
               <div
@@ -272,7 +272,7 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
                 )}
               </div>
             )
-          })}
+          }) : null}
         </div>
       )}
     </div>

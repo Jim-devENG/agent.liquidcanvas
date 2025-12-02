@@ -127,7 +127,7 @@ export default function ProspectTable() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {prospects.map((prospect) => (
+              {Array.isArray(prospects) ? prospects.map((prospect) => (
                 <tr key={prospect.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm">
                     <div className="font-medium text-gray-900">{prospect.domain}</div>
@@ -177,7 +177,7 @@ export default function ProspectTable() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )) : null}
             </tbody>
           </table>
         </div>

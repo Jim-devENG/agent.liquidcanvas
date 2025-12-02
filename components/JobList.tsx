@@ -96,7 +96,7 @@ export default function JobList({ jobs, onRefresh }: JobListProps) {
         </div>
       </div>
       <div className="divide-y divide-gray-200">
-        {jobs.map((job) => (
+        {Array.isArray(jobs) ? jobs.map((job) => (
           <div key={job.id} className="p-4 hover:bg-gray-50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -151,7 +151,7 @@ export default function JobList({ jobs, onRefresh }: JobListProps) {
               </div>
             )}
           </div>
-        ))}
+        )) : null}
       </div>
     </div>
   )

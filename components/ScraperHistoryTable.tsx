@@ -69,7 +69,7 @@ export default function ScraperHistoryTable() {
                 </tr>
               </thead>
               <tbody>
-                {historyItems.map((item) => (
+                {Array.isArray(historyItems) ? historyItems.map((item) => (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4 text-sm text-gray-600">
                       {formatDate(item.triggered_at)}
@@ -109,7 +109,7 @@ export default function ScraperHistoryTable() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )) : null}
               </tbody>
             </table>
           </div>

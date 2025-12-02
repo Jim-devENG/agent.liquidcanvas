@@ -73,7 +73,7 @@ export default function WebsitesTable() {
                 </tr>
               </thead>
               <tbody>
-                {prospects.map((prospect) => (
+                {Array.isArray(prospects) ? prospects.map((prospect) => (
                   <tr key={prospect.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4">
                       <div className="flex items-center space-x-2">
@@ -113,7 +113,7 @@ export default function WebsitesTable() {
                       {formatDate(prospect.created_at)}
                     </td>
                   </tr>
-                ))}
+                )) : null}
               </tbody>
             </table>
           </div>
