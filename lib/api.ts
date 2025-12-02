@@ -676,8 +676,38 @@ export async function getStats(): Promise<Stats | null> {
     }
     
     // Extract prospects array from PaginatedResponse<Prospect> format
-    const allProspectsList: Prospect[] = allProspects?.data || []
-    const prospectsWithEmailList: Prospect[] = prospectsWithEmail?.data || []
+    // Handle both direct array and nested object formats safely
+    let allProspectsList: Prospect[] = []
+    if (allProspects && allProspects.data) {
+      const dataValue = allProspects.data
+      if (Array.isArray(dataValue)) {
+        allProspectsList = dataValue
+      } else if (typeof dataValue === 'object' && dataValue !== null) {
+        // Handle nested object formats
+        const nestedObj = dataValue as Record<string, unknown>
+        if ('data' in nestedObj && Array.isArray(nestedObj.data)) {
+          allProspectsList = nestedObj.data as Prospect[]
+        } else if ('prospects' in nestedObj && Array.isArray(nestedObj.prospects)) {
+          allProspectsList = nestedObj.prospects as Prospect[]
+        }
+      }
+    }
+    
+    let prospectsWithEmailList: Prospect[] = []
+    if (prospectsWithEmail && prospectsWithEmail.data) {
+      const dataValue = prospectsWithEmail.data
+      if (Array.isArray(dataValue)) {
+        prospectsWithEmailList = dataValue
+      } else if (typeof dataValue === 'object' && dataValue !== null) {
+        // Handle nested object formats
+        const nestedObj = dataValue as Record<string, unknown>
+        if ('data' in nestedObj && Array.isArray(nestedObj.data)) {
+          prospectsWithEmailList = nestedObj.data as Prospect[]
+        } else if ('prospects' in nestedObj && Array.isArray(nestedObj.prospects)) {
+          prospectsWithEmailList = nestedObj.prospects as Prospect[]
+        }
+      }
+    }
     
     // Extract totals from PaginatedResponse<Prospect> format
     const allProspectsTotal = allProspects?.total ?? 0

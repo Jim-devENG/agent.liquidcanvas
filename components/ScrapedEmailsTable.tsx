@@ -38,7 +38,8 @@ export default function ScrapedEmailsTable() {
   })
 
   // Convert prospects to EnrichmentResult format
-  const rows: EnrichmentResult[] = prospects.map((p) => ({
+  // Defensive check: ensure prospects is an array before mapping
+  const rows: EnrichmentResult[] = Array.isArray(prospects) ? prospects.map((p) => ({
     email: p.contact_email || null,
     name: null, // Prospects don't have name field
     company: null,
@@ -47,7 +48,7 @@ export default function ScrapedEmailsTable() {
     success: !!p.contact_email,
     source: p.hunter_payload ? (typeof p.hunter_payload === 'object' && 'source' in p.hunter_payload ? String(p.hunter_payload.source) : 'hunter_io') : null,
     error: null,
-  }))
+  })) : []
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">

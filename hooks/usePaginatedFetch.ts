@@ -55,11 +55,35 @@ export function usePaginatedFetch<T = any>(
       const response = await fetchFn(page, limit)
       
       // Handle both standardized format and backward compatibility
-      const items = response.data || (response as any).prospects || (response as any).items || []
-      const totalPages = response.totalPages || (response as any).total_pages || 0
+      // Safely extract array from response, handling nested formats
+      let items: T[] = []
+      if (Array.isArray(response.data)) {
+        items = response.data
+      } else if (response.data && typeof response.data === 'object' && response.data !== null) {
+        // Handle nested data.data or data.prospects formats
+        const dataObj = response.data as Record<string, unknown>
+        if ('data' in dataObj && Array.isArray(dataObj.data)) {
+          items = dataObj.data as T[]
+        } else if ('prospects' in dataObj && Array.isArray(dataObj.prospects)) {
+          items = dataObj.prospects as T[]
+        } else if ('items' in dataObj && Array.isArray(dataObj.items)) {
+          items = dataObj.items as T[]
+        }
+      } else {
+        // Fallback to other response formats
+        const responseAny = response as Record<string, unknown>
+        if (Array.isArray(responseAny.prospects)) {
+          items = responseAny.prospects as T[]
+        } else if (Array.isArray(responseAny.items)) {
+          items = responseAny.items as T[]
+        }
+      }
+      
+      const totalPages = response.totalPages || (response as Record<string, unknown>).total_pages as number || 0
       const total = response.total || 0
       
-      setData(items)
+      // Ensure items is always an array
+      setData(Array.isArray(items) ? items : [])
       setTotalPages(totalPages)
       setTotal(total)
     } catch (err: any) {
