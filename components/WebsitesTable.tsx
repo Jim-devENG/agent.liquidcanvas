@@ -71,7 +71,7 @@ export default function WebsitesTable() {
     setEnrichSuccess(null)
     
     try {
-      const result = await enrichProspectById(prospectId)
+      const result = await enrichProspectById(prospectId, domain)
       if (result.email) {
         setEnrichSuccess(`Email found for ${domain}: ${result.email}`)
       } else {
