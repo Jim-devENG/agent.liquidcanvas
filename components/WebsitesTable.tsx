@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ExternalLink, RefreshCw, AlertCircle, Mail, Loader2, CheckCircle } from 'lucide-react'
+import { ExternalLink, RefreshCw, AlertCircle, Mail, Loader2, CheckCircle, X, CheckSquare, Square } from 'lucide-react'
 import { listProspects, getLatestDiscoveryJob, enrichProspectById, createEnrichmentJob, type Prospect, type Job } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -10,11 +10,13 @@ export default function WebsitesTable() {
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
   const [total, setTotal] = useState(0)
+  const [totalWithoutEmail, setTotalWithoutEmail] = useState(0)
   const [lastJobInfo, setLastJobInfo] = useState<{ saved: number; found: number } | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set())
   const [bulkEnriching, setBulkEnriching] = useState(false)
   const [enrichSuccess, setEnrichSuccess] = useState<string | null>(null)
+  const [loadingAllWithoutEmail, setLoadingAllWithoutEmail] = useState(false)
   const limit = 10
 
   const loadWebsites = async () => {
@@ -23,6 +25,14 @@ export default function WebsitesTable() {
       const response = await listProspects(skip, limit)
       setProspects(response.data)
       setTotal(response.total)
+      
+      // Fetch total count of prospects without email
+      try {
+        const noEmailResponse = await listProspects(0, 1, undefined, undefined, false)
+        setTotalWithoutEmail(noEmailResponse.total)
+      } catch (err) {
+        console.warn('Failed to fetch total without email count:', err)
+      }
       
       // Fetch latest discovery job info
       const latestJob = await getLatestDiscoveryJob()
@@ -61,7 +71,7 @@ export default function WebsitesTable() {
     setEnrichSuccess(null)
     
     try {
-      const result = await enrichProspectById(prospectId, domain)
+      const result = await enrichProspectById(prospectId)
       if (result.email) {
         setEnrichSuccess(`Email found for ${domain}: ${result.email}`)
       } else {
@@ -82,17 +92,80 @@ export default function WebsitesTable() {
     }
   }
 
-  const handleSelectAllNoEmail = () => {
-    const noEmailIds = prospects
-      .filter(p => !p.contact_email || p.contact_email.trim() === '')
-      .map(p => p.id)
+  const handleSelectAllNoEmail = (selectAllPages: boolean = false) => {
+    if (selectAllPages) {
+      // Select all prospects without email across all pages
+      setLoadingAllWithoutEmail(true)
+      fetchAllWithoutEmail()
+        .then(allIds => {
+          setSelectedIds(new Set(allIds))
+          setLoadingAllWithoutEmail(false)
+        })
+        .catch(err => {
+          console.error('Failed to fetch all prospects without email:', err)
+          alert('Failed to load all prospects without email. Only selecting from current page.')
+          // Fallback to current page
+          const noEmailIds = prospects
+            .filter(p => !p.contact_email || p.contact_email.trim() === '')
+            .map(p => p.id)
+          setSelectedIds(new Set(noEmailIds))
+          setLoadingAllWithoutEmail(false)
+        })
+    } else {
+      // Select only from current page
+      const noEmailIds = prospects
+        .filter(p => !p.contact_email || p.contact_email.trim() === '')
+        .map(p => p.id)
+      
+      if (noEmailIds.length === 0) {
+        return
+      }
+      
+      // Toggle: if all are selected, deselect; otherwise select all
+      const allSelected = noEmailIds.every(id => selectedIds.has(id))
+      if (allSelected) {
+        // Deselect all on current page
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          noEmailIds.forEach(id => next.delete(id))
+          return next
+        })
+      } else {
+        // Select all on current page
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          noEmailIds.forEach(id => next.add(id))
+          return next
+        })
+      }
+    }
+  }
+
+  const fetchAllWithoutEmail = async (): Promise<string[]> => {
+    const allIds: string[] = []
+    let currentSkip = 0
+    const batchSize = 100
     
-    if (noEmailIds.length === 0) {
-      alert('No websites without emails found on this page')
-      return
+    while (true) {
+      const response = await listProspects(currentSkip, batchSize, undefined, undefined, false)
+      const batchIds = response.data
+        .filter(p => !p.contact_email || p.contact_email.trim() === '')
+        .map(p => p.id)
+      
+      allIds.push(...batchIds)
+      
+      if (currentSkip + batchSize >= response.total || response.data.length === 0) {
+        break
+      }
+      
+      currentSkip += batchSize
     }
     
-    setSelectedIds(new Set(noEmailIds))
+    return allIds
+  }
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set())
   }
 
   const handleBulkEnrich = async () => {
@@ -131,7 +204,9 @@ export default function WebsitesTable() {
     })
   }
 
-  const prospectsWithoutEmail = prospects.filter(p => !p.contact_email || p.contact_email.trim() === '').length
+  const prospectsWithoutEmailOnPage = prospects.filter(p => !p.contact_email || p.contact_email.trim() === '').length
+  const selectedOnPage = prospects.filter(p => selectedIds.has(p.id) && (!p.contact_email || p.contact_email.trim() === '')).length
+  const allOnPageSelected = prospectsWithoutEmailOnPage > 0 && selectedOnPage === prospectsWithoutEmailOnPage
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
@@ -163,47 +238,106 @@ export default function WebsitesTable() {
 
       {/* Bulk Enrich Actions */}
       {prospects.length > 0 && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <label className="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={prospectsWithoutEmail > 0 && selectedIds.size === prospectsWithoutEmail}
-                onChange={handleSelectAllNoEmail}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-blue-800">
-                Select All Without Email ({prospectsWithoutEmail})
-              </span>
-            </label>
+        <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => handleSelectAllNoEmail(false)}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg font-medium transition-all ${
+                    allOnPageSelected
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
+                      : 'bg-white text-blue-700 border-2 border-blue-300 hover:bg-blue-50'
+                  }`}
+                  disabled={prospectsWithoutEmailOnPage === 0}
+                >
+                  {allOnPageSelected ? (
+                    <CheckSquare className="w-4 h-4" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  <span className="text-sm font-semibold">
+                    Select Page ({prospectsWithoutEmailOnPage} without email)
+                  </span>
+                </button>
+                
+                {totalWithoutEmail > prospectsWithoutEmailOnPage && (
+                  <button
+                    onClick={() => handleSelectAllNoEmail(true)}
+                    disabled={loadingAllWithoutEmail}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg font-medium transition-all ${
+                      loadingAllWithoutEmail
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
+                    }`}
+                  >
+                    {loadingAllWithoutEmail ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm font-semibold">Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckSquare className="w-4 h-4" />
+                        <span className="text-sm font-semibold">
+                          Select All Pages ({totalWithoutEmail} total)
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              
+              {selectedIds.size > 0 && (
+                <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-100 rounded-lg border border-blue-300">
+                  <span className="text-sm font-bold text-blue-900">
+                    {selectedIds.size} selected
+                  </span>
+                  <button
+                    onClick={handleClearSelection}
+                    className="text-blue-700 hover:text-blue-900 transition-colors"
+                    title="Clear selection"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+            
             {selectedIds.size > 0 && (
-              <span className="text-sm text-blue-700">
-                {selectedIds.size} selected
-              </span>
+              <button
+                onClick={handleBulkEnrich}
+                disabled={bulkEnriching}
+                className={`flex items-center space-x-2 px-5 py-2.5 rounded-lg font-semibold transition-all shadow-lg ${
+                  !bulkEnriching
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {bulkEnriching ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Starting Enrichment...</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-5 h-5" />
+                    <span>Enrich {selectedIds.size} Website{selectedIds.size === 1 ? '' : 's'}</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
+          
           {selectedIds.size > 0 && (
-            <button
-              onClick={handleBulkEnrich}
-              disabled={bulkEnriching}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                !bulkEnriching
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              {bulkEnriching ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Starting...</span>
-                </>
-              ) : (
-                <>
-                  <Mail className="w-4 h-4" />
-                  <span>Enrich Selected ({selectedIds.size})</span>
-                </>
-              )}
-            </button>
+            <div className="mt-2 pt-2 border-t border-blue-200">
+            <p className="text-xs text-blue-700">
+              {selectedIds.size === 1 
+                ? '1 website selected for enrichment'
+                : `${selectedIds.size} websites selected for enrichment. This will create a background job.`
+              }
+            </p>
+          </div>
           )}
         </div>
       )}
@@ -231,10 +365,11 @@ export default function WebsitesTable() {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 w-12">
                     <input
                       type="checkbox"
-                      checked={prospectsWithoutEmail > 0 && selectedIds.size === prospectsWithoutEmail}
-                      onChange={handleSelectAllNoEmail}
+                      checked={allOnPageSelected}
+                      onChange={() => handleSelectAllNoEmail(false)}
                       className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                      title="Select all without email"
+                      title="Select all without email on this page"
+                      disabled={prospectsWithoutEmailOnPage === 0}
                     />
                   </th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Domain</th>
