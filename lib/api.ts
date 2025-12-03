@@ -498,6 +498,29 @@ export async function cancelJob(jobId: string): Promise<{ success: boolean; mess
   }
 }
 
+export async function getLatestDiscoveryJob(): Promise<Job | null> {
+  try {
+    const jobs = await listJobs(0, 100)
+    // Find the latest completed discovery job
+    const discoveryJobs = jobs.filter(
+      (job) => job.job_type === 'discover' && job.status === 'completed'
+    )
+    if (discoveryJobs.length === 0) {
+      return null
+    }
+    // Sort by created_at (most recent first) and return the latest
+    discoveryJobs.sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+      return bTime - aTime
+    })
+    return discoveryJobs[0] || null
+  } catch (error) {
+    console.error('Failed to get latest discovery job:', error)
+    return null
+  }
+}
+
 export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
   try {
     const res = await authenticatedFetch(`${API_BASE}/jobs?skip=${skip}&limit=${limit}`)
@@ -536,15 +559,15 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
     }
     
     // Try other common response formats
-    if (data && typeof data === 'object') {
+      if (data && typeof data === 'object') {
       const jobs = (data as Record<string, unknown>).jobs || (data as Record<string, unknown>).items
       if (isJobArray(jobs)) {
-        return jobs
+          return jobs
+        }
       }
-    }
     
     console.warn('⚠️ listJobs: Response is not a valid Job array. Got:', typeof data, data)
-    return [] // Return empty array instead of crashing
+      return [] // Return empty array instead of crashing
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     console.error('❌ Error in listJobs:', errorMessage)

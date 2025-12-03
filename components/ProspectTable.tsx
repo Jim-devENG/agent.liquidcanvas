@@ -9,7 +9,7 @@ export default function ProspectTable() {
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [total, setTotal] = useState(0)
   const [skip, setSkip] = useState(0)
-  const [limit] = useState(50)
+  const [limit] = useState(10)
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [hasEmailFilter, setHasEmailFilter] = useState<string>('')

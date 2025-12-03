@@ -9,7 +9,7 @@ export default function EmailsTable() {
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
   const [total, setTotal] = useState(0)
-  const limit = 50
+  const limit = 10
 
   const loadSentEmails = async () => {
     try {
