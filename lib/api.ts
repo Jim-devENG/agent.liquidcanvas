@@ -444,6 +444,15 @@ export async function enrichEmail(domain: string, name?: string): Promise<Enrich
     
     if (!res.ok) {
       const error = await res.json().catch(() => ({ detail: 'Failed to enrich email' }))
+      
+      // Handle rate limit errors specifically (429)
+      if (res.status === 429) {
+        const rateLimitError = new Error('Rate limit exceeded: Hunter.io API quota reached. Please try again later or upgrade your plan.')
+        rateLimitError.name = 'RateLimitError'
+        console.warn('⚠️ [ENRICHMENT] Hunter.io rate limit reached (429)')
+        throw rateLimitError
+      }
+      
       throw new Error(error.detail || error.error || 'Failed to enrich email')
     }
     
@@ -452,6 +461,12 @@ export async function enrichEmail(domain: string, name?: string): Promise<Enrich
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     console.error('❌ Error enriching email:', errorMessage)
+    
+    // Preserve rate limit error messages
+    if (error instanceof Error && error.name === 'RateLimitError') {
+      throw error
+    }
+    
     throw new Error(`Enrichment failed: ${errorMessage}`)
   }
 }
