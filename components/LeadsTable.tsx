@@ -14,7 +14,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
   const [total, setTotal] = useState(0)
-  const limit = 50
+  const limit = 10
 
   const [activeProspect, setActiveProspect] = useState<Prospect | null>(null)
   const [draftSubject, setDraftSubject] = useState('')
