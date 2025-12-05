@@ -123,15 +123,51 @@ class HunterIOClient:
             status_code = e.response.status_code
             logger.error(f"Hunter.io API HTTP error for {domain}: {status_code} - {e.response.text}")
             
-            # Detect 429 rate limit - DO NOT treat as "no email found"
+            # Detect 429 rate limit - parse JSON body for error details and raise RateLimitError
             if status_code == 429:
                 logger.warning(f"⚠️  [HUNTER] Rate limit (429) detected for {domain}")
-                return {
-                    "success": False,
-                    "status": "rate_limited",
-                    "error": f"HTTP {status_code}: {e.response.text}",
-                    "domain": domain
-                }
+                try:
+                    error_body = e.response.json()
+                    errors = error_body.get("errors", [])
+                    error_id = None
+                    details = None
+                    retry_after = None
+                    
+                    if errors and isinstance(errors, list) and len(errors) > 0:
+                        first_error = errors[0] if isinstance(errors[0], dict) else {}
+                        error_id = first_error.get("id", "")
+                        details = first_error.get("details", "")
+                    
+                    # Check for restricted_account error
+                    if error_id == "restricted_account" or (details and "restricted" in details.lower()):
+                        logger.error(f"🚫 [HUNTER] Account restricted for {domain}: {details}")
+                        raise RateLimitError(
+                            provider="hunter",
+                            message=f"Hunter.io account restricted: {details or 'Account access restricted'}",
+                            retry_after=3600,  # Default 1 hour
+                            error_id="restricted_account",
+                            details=details
+                        )
+                    else:
+                        # Regular rate limit
+                        raise RateLimitError(
+                            provider="hunter",
+                            message=f"Hunter.io rate limit exceeded: {details or 'Too many requests'}",
+                            retry_after=60,  # Default 1 minute for regular rate limits
+                            error_id=error_id or "too_many_requests",
+                            details=details
+                        )
+                except json.JSONDecodeError:
+                    # Can't parse JSON, raise generic rate limit error
+                    raise RateLimitError(
+                        provider="hunter",
+                        message="Hunter.io rate limit exceeded",
+                        retry_after=60,
+                        error_id="too_many_requests"
+                    )
+                except RateLimitError:
+                    # Re-raise our custom exception
+                    raise
             
             return {
                 "success": False,
