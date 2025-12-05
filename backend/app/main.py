@@ -128,11 +128,12 @@ async def health():
 @app.on_event("startup")
 async def startup():
     """Startup event - run migrations and start scheduler"""
-    # Run database migrations on startup (for free tier - no pre-deploy command)
-    # Use asyncio.create_task to avoid blocking startup if DB is unavailable
-    async def run_migrations_async():
+    # All database operations run in background to avoid blocking server startup
+    import asyncio
+    
+    async def run_database_setup():
+        """Run all database setup operations in background"""
         try:
-            import asyncio
             from alembic.config import Config
             from alembic import command
             
@@ -165,62 +166,62 @@ async def startup():
                 logger.info("✅ Created database tables directly (fallback)")
             except Exception as create_error:
                 logger.error(f"Failed to create tables: {create_error}")
-    
-    # Run migrations in background to avoid blocking startup
-    import asyncio
-    asyncio.create_task(run_migrations_async())
-    
-    # EMERGENCY FIX: Check and add discovery_query_id column if missing
-    try:
-        from sqlalchemy import text
-        async with engine.begin() as conn:
-            # Check if column exists
-            result = await conn.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'discovery_query_id'
-                """)
-            )
-            column_exists = result.fetchone() is not None
-            
-            if not column_exists:
-                logger.warning("⚠️  Missing discovery_query_id column - adding it now...")
-                # Add column
-                await conn.execute(
-                    text("ALTER TABLE prospects ADD COLUMN discovery_query_id UUID")
+        
+        # EMERGENCY FIX: Check and add discovery_query_id column if missing
+        try:
+            from sqlalchemy import text
+            async with engine.begin() as conn:
+                # Check if column exists
+                result = await conn.execute(
+                    text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'prospects' 
+                        AND column_name = 'discovery_query_id'
+                    """)
                 )
-                # Create index
-                await conn.execute(
-                    text("CREATE INDEX IF NOT EXISTS ix_prospects_discovery_query_id ON prospects(discovery_query_id)")
-                )
-                # Check if discovery_queries table exists and add FK
-                table_check = await conn.execute(
-                    text("SELECT 1 FROM information_schema.tables WHERE table_name = 'discovery_queries'")
-                )
-                if table_check.fetchone():
-                    fk_check = await conn.execute(
-                        text("""
-                            SELECT 1 FROM information_schema.table_constraints 
-                            WHERE constraint_name = 'fk_prospects_discovery_query_id'
-                        """)
+                column_exists = result.fetchone() is not None
+                
+                if not column_exists:
+                    logger.warning("⚠️  Missing discovery_query_id column - adding it now...")
+                    # Add column
+                    await conn.execute(
+                        text("ALTER TABLE prospects ADD COLUMN discovery_query_id UUID")
                     )
-                    if not fk_check.fetchone():
-                        await conn.execute(
+                    # Create index
+                    await conn.execute(
+                        text("CREATE INDEX IF NOT EXISTS ix_prospects_discovery_query_id ON prospects(discovery_query_id)")
+                    )
+                    # Check if discovery_queries table exists and add FK
+                    table_check = await conn.execute(
+                        text("SELECT 1 FROM information_schema.tables WHERE table_name = 'discovery_queries'")
+                    )
+                    if table_check.fetchone():
+                        fk_check = await conn.execute(
                             text("""
-                                ALTER TABLE prospects
-                                ADD CONSTRAINT fk_prospects_discovery_query_id
-                                FOREIGN KEY (discovery_query_id)
-                                REFERENCES discovery_queries(id)
-                                ON DELETE SET NULL
+                                SELECT 1 FROM information_schema.table_constraints 
+                                WHERE constraint_name = 'fk_prospects_discovery_query_id'
                             """)
                         )
-                logger.info("✅ Added discovery_query_id column, index, and foreign key")
-            else:
-                logger.info("✅ discovery_query_id column already exists")
-    except Exception as e:
-        logger.error(f"Failed to check/add discovery_query_id column: {e}", exc_info=True)
+                        if not fk_check.fetchone():
+                            await conn.execute(
+                                text("""
+                                    ALTER TABLE prospects
+                                    ADD CONSTRAINT fk_prospects_discovery_query_id
+                                    FOREIGN KEY (discovery_query_id)
+                                    REFERENCES discovery_queries(id)
+                                    ON DELETE SET NULL
+                                """)
+                            )
+                    logger.info("✅ Added discovery_query_id column, index, and foreign key")
+                else:
+                    logger.info("✅ discovery_query_id column already exists")
+        except Exception as e:
+            logger.error(f"Failed to check/add discovery_query_id column: {e}", exc_info=True)
+    
+    # Run database setup in background (non-blocking)
+    asyncio.create_task(run_database_setup())
+    logger.info("✅ Database setup started in background (server will start even if DB is unavailable)")
     
     # Start scheduler for periodic tasks (always start - scraper check runs every minute)
     try:
