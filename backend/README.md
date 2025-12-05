@@ -59,7 +59,35 @@ backend/
 │   └── db/                  # Database configuration
 ├── alembic/                 # Database migrations
 ├── tests/                   # Test files
+├── scripts/                 # Utility scripts
 ├── requirements.txt
 └── README.md
 ```
+
+## Verifying Hunter.io API Key
+
+Run:
+
+```bash
+make test-hunter
+```
+
+Or directly:
+
+```bash
+python3 scripts/test_hunter_api.py
+```
+
+This tests:
+- Whether the API key is loaded correctly from `HUNTER_IO_API_KEY` environment variable
+- Whether Hunter accepts it (account endpoint)
+- Whether the account is restricted
+- Whether domain search functionality works
+- Whether network/DNS issues affect API connectivity
+
+The script will:
+- ✅ Show success if the key is active and both endpoints work
+- ❌ Show error if the account is restricted or key is invalid
+- ⚠️ Show warning if rate limited (but key is valid)
+- Exit with code 0 (success), 1 (error), or 2 (missing key)
 
