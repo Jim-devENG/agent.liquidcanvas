@@ -24,7 +24,7 @@ import time
 import re
 import httpx
 from typing import Optional, Dict, Any, List
-from app.clients.hunter import HunterIOClient
+from app.clients.snov import SnovIOClient
 from app.utils.domain import normalize_domain, validate_domain
 from app.utils.email_validation import is_plausible_email
 from app.services.provider_state import get_provider_state
@@ -313,20 +313,20 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
     logger.info(f"📥 [ENRICHMENT] Input - domain: {domain} → normalized: {normalized_domain}, name: {name}")
     
     try:
-        # Initialize Hunter client
+        # Initialize Snov client
         try:
-            hunter_client = HunterIOClient()
-            logger.info(f"✅ [ENRICHMENT] Hunter.io client initialized")
+            snov_client = SnovIOClient()
+            logger.info(f"✅ [ENRICHMENT] Snov.io client initialized")
         except ValueError as e:
-            error_msg = f"Hunter.io not configured: {e}"
+            error_msg = f"Snov.io not configured: {e}"
             logger.error(f"❌ [ENRICHMENT] {error_msg}")
             raise ValueError(error_msg) from e
         
-        # Call Hunter.io API - use ONLY domain-search endpoint
+        # Call Snov.io API - use ONLY domain-search endpoint
         try:
-            hunter_result = await hunter_client.domain_search(normalized_domain)
+            snov_result = await snov_client.domain_search(normalized_domain)
             api_time = (time.time() - start_time) * 1000
-            logger.info(f"⏱️  [ENRICHMENT] Hunter.io domain-search API call completed in {api_time:.0f}ms")
+            logger.info(f"⏱️  [ENRICHMENT] Snov.io domain-search API call completed in {api_time:.0f}ms")
         except Exception as api_err:
             api_time = (time.time() - start_time) * 1000
             error_msg = f"Hunter.io API call failed after {api_time:.0f}ms: {str(api_err)}"
@@ -334,13 +334,13 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             raise Exception(error_msg) from api_err
         
         # Process response - handle rate limits specially
-        if not hunter_result.get("success"):
-            error_msg = hunter_result.get('error', 'Unknown error')
-            status = hunter_result.get('status')
+        if not snov_result.get("success"):
+            error_msg = snov_result.get('error', 'Unknown error')
+            status = snov_result.get('status')
             
             # Handle rate limit - return special status, DO NOT return None
             if status == "rate_limited":
-                logger.warning(f"⚠️  [ENRICHMENT] Hunter.io rate limited for {normalized_domain}")
+                logger.warning(f"⚠️  [ENRICHMENT] Snov.io rate limited for {normalized_domain}")
                 # Try local scraping fallback - try multiple contact pages
                 try:
                     local_email = await _scrape_email_from_domain(normalized_domain, page_url)
@@ -386,7 +386,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                     }
             
             # For other errors, try local scraping fallback
-            logger.warning(f"⚠️  [ENRICHMENT] Hunter.io returned error: {error_msg}, trying local scraping fallback")
+            logger.warning(f"⚠️  [ENRICHMENT] Snov.io returned error: {error_msg}, trying local scraping fallback")
             try:
                 local_email = await _scrape_email_from_domain(normalized_domain, page_url)
                 if local_email:
@@ -419,9 +419,9 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 "status": "pending_retry",
             }
         
-        emails = hunter_result.get("emails", [])
+        emails = snov_result.get("emails", [])
         if not emails or len(emails) == 0:
-            logger.info(f"⚠️  [ENRICHMENT] No emails found for {normalized_domain} via Hunter.io, trying fallback methods")
+            logger.info(f"⚠️  [ENRICHMENT] No emails found for {normalized_domain} via Snov.io, trying fallback methods")
             
             # Fallback 1: Try local HTML scraping
             try:
@@ -450,7 +450,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 # Try to verify patterns (only first few to avoid too many API calls)
                 for pattern_email in generated_patterns[:5]:  # Limit to 5 to avoid rate limits
                     try:
-                        verify_result = await hunter_client.email_verifier(pattern_email)
+                        verify_result = await snov_client.email_verifier(pattern_email)
                         if verify_result.get("success") and verify_result.get("result") == "deliverable":
                             score = verify_result.get("score", 0)
                             logger.info(f"✅ [ENRICHMENT] Verified pattern email {pattern_email} (score: {score})")
@@ -481,7 +481,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 "domain": normalized_domain,
                 "success": False,
                 "source": None,
-                "error": "No emails found via Hunter.io, local scraping, or pattern generation",
+                "error": "No emails found via Snov.io, local scraping, or pattern generation",
                 "status": "pending_retry",
             }
         
@@ -506,7 +506,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             })
         
         if not parsed_emails:
-            logger.warning(f"⚠️  [ENRICHMENT] No valid emails parsed from Hunter.io response for {normalized_domain}, trying fallback methods")
+            logger.warning(f"⚠️  [ENRICHMENT] No valid emails parsed from Snov.io response for {normalized_domain}, trying fallback methods")
             # Try local scraping as fallback before giving up
             try:
                 local_email = await _scrape_email_from_domain(normalized_domain, page_url)
@@ -531,7 +531,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 generated_patterns = _generate_email_patterns(normalized_domain, name)
                 for pattern_email in generated_patterns[:3]:  # Limit to 3
                     try:
-                        verify_result = await hunter_client.email_verifier(pattern_email)
+                        verify_result = await snov_client.email_verifier(pattern_email)
                         if verify_result.get("success") and verify_result.get("result") == "deliverable":
                             score = verify_result.get("score", 0)
                             logger.info(f"✅ [ENRICHMENT] Verified pattern email {pattern_email} (score: {score})")
@@ -561,7 +561,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 "domain": normalized_domain,
                 "success": False,
                 "source": None,
-                "error": "No valid email value in Hunter.io response and all fallbacks failed",
+                "error": "No valid email value in Snov.io response and all fallbacks failed",
                 "status": "pending_retry",
             }
         
@@ -585,7 +585,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
         verification_score = 0
         if best_confidence < 80:
             try:
-                verify_result = await hunter_client.email_verifier(email_value)
+                verify_result = await snov_client.email_verifier(email_value)
                 if verify_result.get("success") and verify_result.get("result") == "deliverable":
                     verified = True
                     verification_score = verify_result.get("score", 0)
@@ -605,7 +605,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             "verification_score": verification_score,
             "domain": normalized_domain,
             "success": True,
-            "source": "hunter_io",
+            "source": "snov_io",
             "error": None,
         }
         
@@ -617,7 +617,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             full_name,
             best_confidence,
             verified,
-            "hunter_io",
+            "snov_io",
         )
         
         return result

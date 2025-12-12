@@ -1,5 +1,5 @@
 """
-Enrichment task - finds emails for prospects using Hunter.io
+Enrichment task - finds emails for prospects using Snov.io
 Runs directly in backend (no external worker needed for free tier)
 """
 import asyncio
@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.db.database import AsyncSessionLocal
 from app.models.prospect import Prospect
 from app.models.job import Job
-from app.clients.hunter import HunterIOClient
+from app.clients.snov import SnovIOClient
 from app.utils.email_validation import is_plausible_email, format_job_error
 from app.services.exceptions import RateLimitError
 from datetime import datetime, timezone
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
     """
-    Process enrichment job to find / improve emails for prospects using Hunter.io.
+    Process enrichment job to find / improve emails for prospects using Snov.io.
 
     Behaviour:
     - Never skips a prospect just because it already has an email.
@@ -104,14 +104,14 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                     "message": "No prospects to enrich"
                 }
             
-            # Initialize Hunter client
+            # Initialize Snov client
             try:
-                hunter_client = HunterIOClient()
+                snov_client = SnovIOClient()
             except ValueError as e:
                 job.status = "failed"
-                job.error_message = f"Hunter.io not configured: {e}"
+                job.error_message = f"Snov.io not configured: {e}"
                 await db.commit()
-                logger.error(f"❌ Hunter.io client initialization failed: {e}")
+                logger.error(f"❌ Snov.io client initialization failed: {e}")
                 return {"error": str(e)}
             
             enriched_count = 0
@@ -131,14 +131,14 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                     logger.info(f"🔍 [ENRICHMENT] [{idx}/{len(prospects)}] Starting enrichment for {domain} (id: {prospect_id})")
                     logger.info(f"📥 [ENRICHMENT] Input - domain: {domain}, prospect_id: {prospect_id}")
                     
-                    # Call enrichment service (which handles Hunter.io + local scraping)
+                    # Call enrichment service (which handles Snov.io + local scraping)
                     try:
                         from app.services.enrichment import enrich_prospect_email
                         enrich_result = await enrich_prospect_email(domain, None, prospect.page_url)
                         
-                        # Convert enrichment result to hunter_result format for compatibility
+                        # Convert enrichment result to snov_result format for compatibility
                         if enrich_result and enrich_result.get("email"):
-                            hunter_result = {
+                            snov_result = {
                                 "success": True,
                                 "emails": [{
                                     "value": enrich_result["email"],
@@ -149,27 +149,27 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                                 }]
                             }
                         else:
-                            hunter_result = {"success": False, "emails": []}
-                        hunter_time = (time.time() - prospect_start_time) * 1000
-                        logger.info(f"⏱️  [ENRICHMENT] Hunter.io API call completed in {hunter_time:.0f}ms")
+                            snov_result = {"success": False, "emails": []}
+                        snov_time = (time.time() - prospect_start_time) * 1000
+                        logger.info(f"⏱️  [ENRICHMENT] Snov.io API call completed in {snov_time:.0f}ms")
                     except RateLimitError as rate_err:
                         # Handle rate limit errors - log and continue with local scraping
-                        hunter_time = (time.time() - prospect_start_time) * 1000
-                        logger.warning(f"⚠️  [ENRICHMENT] Rate limit error after {hunter_time:.0f}ms: {rate_err.message}")
+                        snov_time = (time.time() - prospect_start_time) * 1000
+                        logger.warning(f"⚠️  [ENRICHMENT] Rate limit error after {snov_time:.0f}ms: {rate_err.message}")
                         if rate_err.error_id == "restricted_account":
-                            logger.error(f"🚫 [ENRICHMENT] Hunter.io account restricted. Please check Hunter account.")
-                        hunter_result = {"success": False, "error": rate_err.message, "domain": domain, "status": rate_err.error_id}
-                    except Exception as hunter_err:
-                        hunter_time = (time.time() - prospect_start_time) * 1000
-                        logger.error(f"❌ [ENRICHMENT] Enrichment failed after {hunter_time:.0f}ms: {hunter_err}", exc_info=True)
-                        hunter_result = {"success": False, "error": str(hunter_err), "domain": domain}
+                            logger.error(f"🚫 [ENRICHMENT] Snov.io account restricted. Please check Snov account.")
+                        snov_result = {"success": False, "error": rate_err.message, "domain": domain, "status": rate_err.error_id}
+                    except Exception as snov_err:
+                        snov_time = (time.time() - prospect_start_time) * 1000
+                        logger.error(f"❌ [ENRICHMENT] Enrichment failed after {snov_time:.0f}ms: {snov_err}", exc_info=True)
+                        snov_result = {"success": False, "error": str(snov_err), "domain": domain}
                     
-                    # Helper: compute previous best confidence from stored hunter_payload
+                    # Helper: compute previous best confidence from stored snov_payload
                     previous_confidence: Optional[float] = None
                     previous_email: Optional[str] = None
-                    if prospect.hunter_payload and isinstance(prospect.hunter_payload, dict):
+                    if prospect.snov_payload and isinstance(prospect.snov_payload, dict):
                         try:
-                            prev_emails = prospect.hunter_payload.get("emails", [])
+                            prev_emails = prospect.snov_payload.get("emails", [])
                             # Prefer confidence for the currently stored email if present
                             if prev_emails and isinstance(prev_emails, list):
                                 for e_data in prev_emails:
@@ -190,18 +190,18 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                                             previous_email = e_data.get("value")
                         except Exception as prev_err:
                             logger.warning(
-                                f"⚠️  [ENRICHMENT] Failed to parse previous Hunter payload for {domain}: {prev_err}",
+                                f"⚠️  [ENRICHMENT] Failed to parse previous Snov payload for {domain}: {prev_err}",
                                 exc_info=True,
                             )
 
                     new_email: Optional[str] = None
                     new_confidence: Optional[float] = None
-                    provider_source = "hunter_io"
+                    provider_source = "snov_io"
                     fallback_used = False
 
-                    # Process Hunter.io response
-                    if hunter_result.get("success") and hunter_result.get("emails"):
-                        emails = hunter_result["emails"]
+                    # Process Snov.io response
+                    if snov_result.get("success") and snov_result.get("emails"):
+                        emails = snov_result["emails"]
                         if emails and len(emails) > 0:
                             # Get best email (highest confidence) - filter out garbage
                             best_email = None
@@ -214,7 +214,7 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                                     continue
                                 # Filter out garbage emails
                                 if not is_plausible_email(email_value):
-                                    logger.info(f"🚫 [ENRICHMENT] Discarding implausible email candidate from Hunter.io: {email_value}")
+                                    logger.info(f"🚫 [ENRICHMENT] Discarding implausible email candidate from Snov.io: {email_value}")
                                     continue
                                 confidence = float(email_data.get("confidence_score", 0) or 0)
                                 if confidence > best_confidence:
@@ -233,9 +233,9 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                                 f"⚠️  [ENRICHMENT] [{idx}/{len(prospects)}] No emails in response for {domain}"
                             )
                     else:
-                        error_msg = hunter_result.get('error', 'Unknown error')
+                        error_msg = snov_result.get('error', 'Unknown error')
                         logger.warning(
-                            f"❌ [ENRICHMENT] [{idx}/{len(prospects)}] Hunter.io failed for {domain}: {error_msg}"
+                            f"❌ [ENRICHMENT] [{idx}/{len(prospects)}] Snov.io failed for {domain}: {error_msg}"
                         )
 
                     # If provider returned nothing usable, fall back to a low‑confidence guess
@@ -264,7 +264,7 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                         if not (prospect.contact_email and str(prospect.contact_email).strip()):
                             should_update = True
                             reason = "no_previous_email"
-                        elif prospect.contact_method != "hunter_io" and provider_source == "hunter_io":
+                        elif prospect.contact_method != "snov_io" and provider_source == "snov_io":
                             # Provider match beats guessed / unknown sources
                             should_update = True
                             reason = f"provider_preferred_over_{prospect.contact_method or 'unknown'}"
@@ -287,7 +287,7 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                             )
                             prospect.contact_email = new_email
                             prospect.contact_method = provider_source
-                            prospect.hunter_payload = hunter_result
+                            prospect.snov_payload = snov_result
                             enriched_count += 1
                         else:
                             logger.info(
@@ -296,7 +296,7 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                                 f"candidate {new_email} (conf={new_conf_val}), source={provider_source}"
                             )
                             # Still store latest payload for debugging / future improvements
-                            prospect.hunter_payload = hunter_result
+                            prospect.snov_payload = snov_result
                     else:
                         # Nothing usable, just persist payload for diagnostics
                         logger.info(
@@ -307,7 +307,7 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                     await db.commit()
                     await db.refresh(prospect)
                     
-                    # Rate limiting (1 request per second to respect Hunter.io limits)
+                    # Rate limiting (1 request per second to respect Snov.io limits)
                     await asyncio.sleep(1)
                     
                 except Exception as e:

@@ -27,7 +27,7 @@ class Prospect(Base):
     draft_subject = Column(Text)  # Draft email subject
     draft_body = Column(Text)  # Draft email body
     dataforseo_payload = Column(JSON)  # Raw DataForSEO response
-    hunter_payload = Column(JSON)  # Raw Hunter.io response
+    snov_payload = Column(JSON)  # Raw Snov.io response
     discovery_query_id = Column(UUID(as_uuid=True), ForeignKey("discovery_queries.id"), nullable=True, index=True)  # Link to discovery query
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

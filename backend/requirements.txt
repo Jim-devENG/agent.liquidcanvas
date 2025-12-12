@@ -14,3 +14,4 @@ redis==5.0.1
 rq==1.15.1
 python-dotenv==1.0.0
 apscheduler==3.10.4
+supabase==2.3.0

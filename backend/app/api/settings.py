@@ -44,7 +44,8 @@ class SettingsResponse(BaseModel):
 
 # API Key environment variable mappings
 API_KEY_MAPPINGS = {
-    "hunter_io": "HUNTER_IO_API_KEY",
+    "snov_user_id": "SNOV_USER_ID",
+    "snov_secret": "SNOV_SECRET",
     "dataforseo_login": "DATAFORSEO_LOGIN",
     "dataforseo_password": "DATAFORSEO_PASSWORD",
     "gemini": "GEMINI_API_KEY",
@@ -91,7 +92,7 @@ async def update_api_key(key_name: str, update: APIKeyUpdate):
 @router.get("/services/status", response_model=SettingsResponse)
 async def get_services_status():
     """
-    Get status of all services (Hunter.io, DataForSEO, Gemini, Gmail)
+    Get status of all services (Snov.io, DataForSEO, Gemini, Gmail)
     """
     services = {}
     api_keys_status = {}
@@ -102,15 +103,16 @@ async def get_services_status():
         is_configured = bool(value and value.strip())
         api_keys_status[key_name] = is_configured
     
-    # Check Hunter.io
-    hunter_key = os.getenv("HUNTER_IO_API_KEY")
-    hunter_configured = bool(hunter_key and hunter_key.strip())
-    services["Hunter.io"] = ServiceStatus(
-        name="Hunter.io",
-        enabled=hunter_configured,
-        configured=hunter_configured,
-        status="not_configured" if not hunter_configured else "unknown",
-        message="Not configured" if not hunter_configured else "Configured (not tested)",
+    # Check Snov.io
+    snov_user_id = os.getenv("SNOV_USER_ID")
+    snov_secret = os.getenv("SNOV_SECRET")
+    snov_configured = bool(snov_user_id and snov_secret and snov_user_id.strip() and snov_secret.strip())
+    services["Snov.io"] = ServiceStatus(
+        name="Snov.io",
+        enabled=snov_configured,
+        configured=snov_configured,
+        status="not_configured" if not snov_configured else "unknown",
+        message="Not configured" if not snov_configured else "Configured (not tested)",
     )
     
     # Check DataForSEO
@@ -163,27 +165,28 @@ async def test_service(service_name: str):
     """
     Test a service connection
     
-    Service names: "Hunter.io", "DataForSEO", "Google Gemini", "Gmail API"
+    Service names: "Snov.io", "DataForSEO", "Google Gemini", "Gmail API"
     """
     try:
         service_lower = service_name.lower().replace(" ", "").replace(".", "")
         
-        if "hunter" in service_lower:
-            from app.clients.hunter import HunterIOClient
-            api_key = os.getenv("HUNTER_IO_API_KEY")
-            if not api_key:
+        if "snov" in service_lower:
+            from app.clients.snov import SnovIOClient
+            user_id = os.getenv("SNOV_USER_ID")
+            secret = os.getenv("SNOV_SECRET")
+            if not user_id or not secret:
                 return {
                     "success": False,
                     "status": "not_configured",
-                    "message": "Hunter.io API key not configured"
+                    "message": "Snov.io credentials not configured"
                 }
-            client = HunterIOClient(api_key)
+            client = SnovIOClient(user_id, secret)
             # Test with a known domain
             result = await client.domain_search("liquidcanvas.art")
             return {
                 "success": True,
                 "status": "connected",
-                "message": f"Hunter.io is working. Found {len(result.get('emails', []))} emails for test domain.",
+                "message": f"Snov.io is working. Found {len(result.get('emails', []))} emails for test domain.",
                 "test_result": result
             }
         

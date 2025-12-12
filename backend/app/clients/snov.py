@@ -1,0 +1,337 @@
+"""
+Snov.io API client for email enrichment
+"""
+import httpx
+from typing import Dict, List, Optional, Any
+import os
+from dotenv import load_dotenv
+import logging
+import json
+import base64
+
+from app.services.exceptions import RateLimitError
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+class SnovIOClient:
+    """Client for Snov.io API"""
+    
+    BASE_URL = "https://api.snov.io/v1"
+    
+    def __init__(self, user_id: Optional[str] = None, secret: Optional[str] = None):
+        """
+        Initialize Snov.io client
+        
+        Args:
+            user_id: Snov.io User ID (if None, uses SNOV_USER_ID from env)
+            secret: Snov.io Secret (if None, uses SNOV_SECRET from env)
+        """
+        self.user_id = user_id or os.getenv("SNOV_USER_ID")
+        self.secret = secret or os.getenv("SNOV_SECRET")
+        
+        if not self.user_id or not self.secret:
+            raise ValueError("Snov.io credentials not configured. Set SNOV_USER_ID and SNOV_SECRET")
+    
+    def is_configured(self) -> bool:
+        """Check if client is properly configured"""
+        return bool(self.user_id and self.secret and self.user_id.strip() and self.secret.strip())
+    
+    async def _get_access_token(self) -> str:
+        """
+        Get access token using OAuth2 client credentials flow
+        
+        Returns:
+            Access token string
+        """
+        url = f"{self.BASE_URL}/oauth/access_token"
+        
+        # Snov.io uses basic auth with user_id:secret
+        credentials = f"{self.user_id}:{self.secret}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        data = {
+            "grant_type": "client_credentials"
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, data=data)
+                response.raise_for_status()
+                result = response.json()
+                
+                access_token = result.get("access_token")
+                if not access_token:
+                    raise ValueError("No access token in response")
+                
+                return access_token
+        except Exception as e:
+            logger.error(f"Snov.io token request failed: {str(e)}")
+            raise Exception(f"Failed to get Snov.io access token: {str(e)}")
+    
+    async def domain_search(
+        self,
+        domain: str,
+        limit: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Search for emails associated with a domain
+        
+        Args:
+            domain: Domain name (e.g., "example.com")
+            limit: Maximum number of results (default: 10)
+        
+        Returns:
+            Dictionary with email results in format compatible with Hunter.io response
+        """
+        try:
+            # Get access token
+            access_token = await self._get_access_token()
+            
+            url = f"{self.BASE_URL}/get-domain-emails-with-info"
+            
+            params = {
+                "domain": domain,
+                "access_token": access_token,
+                "type": "all",  # all, personal, generic
+                "limit": min(limit, 100)  # Snov.io max is 100
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"Calling Snov.io API for domain: {domain} (limit={params['limit']})")
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                result = response.json()
+                
+                # Handle Snov.io response format
+                if result.get("success"):
+                    emails_data = result.get("emails", [])
+                    logger.info(f"Snov.io found {len(emails_data)} email(s) for {domain}")
+                    
+                    # Convert Snov.io format to Hunter.io-compatible format
+                    formatted_emails = []
+                    for email_data in emails_data:
+                        if not isinstance(email_data, dict):
+                            continue
+                        
+                        email_value = email_data.get("email") or email_data.get("emailAddress")
+                        if not email_value:
+                            continue
+                        
+                        # Snov.io provides confidence as a score (0-100)
+                        confidence_score = float(email_data.get("confidence", 0) or 0)
+                        
+                        # Determine email type
+                        email_type = "personal" if email_data.get("type") == "personal" else "generic"
+                        
+                        formatted_emails.append({
+                            "value": email_value,
+                            "type": email_type,
+                            "confidence_score": confidence_score
+                        })
+                    
+                    return {
+                        "success": True,
+                        "domain": domain,
+                        "emails": formatted_emails,
+                        "total": len(formatted_emails),
+                        "raw_response": result
+                    }
+                else:
+                    error_msg = result.get("error", {}).get("message", "No emails found")
+                    logger.info(f"Snov.io returned no emails for {domain}: {error_msg}")
+                    return {
+                        "success": True,  # Still success, just no emails
+                        "domain": domain,
+                        "emails": [],
+                        "total": 0,
+                        "message": error_msg
+                    }
+        
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            logger.error(f"Snov.io API HTTP error for {domain}: {status_code} - {e.response.text}")
+            
+            # Detect 429 rate limit
+            if status_code == 429:
+                logger.warning(f"⚠️  [SNOV] Rate limit (429) detected for {domain}")
+                try:
+                    error_body = e.response.json()
+                    error_msg = error_body.get("error", {}).get("message", "Rate limit exceeded")
+                except:
+                    error_msg = "Rate limit exceeded"
+                
+                raise RateLimitError(
+                    provider="snov",
+                    message=f"Snov.io rate limit exceeded: {error_msg}",
+                    retry_after=60,
+                    error_id="too_many_requests",
+                    details=error_msg
+                )
+            
+            return {
+                "success": False,
+                "error": f"HTTP {status_code}: {e.response.text}",
+                "domain": domain
+            }
+        except RateLimitError:
+            raise
+        except Exception as e:
+            logger.error(f"Snov.io API call failed for {domain}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "domain": domain
+            }
+    
+    async def email_verifier(
+        self,
+        email: str
+    ) -> Dict[str, Any]:
+        """
+        Verify an email address
+        
+        Args:
+            email: Email address to verify
+        
+        Returns:
+            Dictionary with verification result
+        """
+        try:
+            access_token = await self._get_access_token()
+            
+            url = f"{self.BASE_URL}/verify-email"
+            
+            params = {
+                "email": email,
+                "access_token": access_token
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                result = response.json()
+                
+                # Snov.io verification response format
+                if result.get("success"):
+                    data = result.get("result", {})
+                    # Map Snov.io status to Hunter.io-compatible format
+                    snov_status = data.get("status", "unknown")
+                    status_map = {
+                        "valid": "deliverable",
+                        "invalid": "undeliverable",
+                        "unknown": "unknown",
+                        "risky": "risky"
+                    }
+                    
+                    return {
+                        "success": True,
+                        "email": email,
+                        "result": status_map.get(snov_status, "unknown"),
+                        "score": float(data.get("score", 0) or 0),
+                        "sources": [],
+                        "raw_response": result
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": result.get("error", {}).get("message", "No verification data returned"),
+                        "email": email
+                    }
+        
+        except Exception as e:
+            logger.error(f"Snov.io email verification failed for {email}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "email": email
+            }
+    
+    async def email_finder(
+        self,
+        domain: str,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Find email for a specific person
+        
+        Args:
+            domain: Domain name (e.g., "example.com")
+            first_name: First name (optional)
+            last_name: Last name (optional)
+        
+        Returns:
+            Dictionary with email result
+        """
+        try:
+            access_token = await self._get_access_token()
+            
+            url = f"{self.BASE_URL}/get-emails-from-names"
+            
+            params = {
+                "domain": domain,
+                "access_token": access_token
+            }
+            
+            if first_name:
+                params["firstName"] = first_name
+            if last_name:
+                params["lastName"] = last_name
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"Calling Snov.io email-finder for {domain} (name: {first_name} {last_name})")
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                result = response.json()
+                
+                if result.get("success") and result.get("emails"):
+                    emails = result["emails"]
+                    if isinstance(emails, list) and len(emails) > 0:
+                        best_email = emails[0]  # Snov.io returns best match first
+                        return {
+                            "success": True,
+                            "email": best_email.get("email"),
+                            "score": float(best_email.get("confidence", 0) or 0),
+                            "sources": [],
+                            "first_name": best_email.get("firstName"),
+                            "last_name": best_email.get("lastName"),
+                            "company": None,
+                            "position": None,
+                            "raw_response": result
+                        }
+                
+                return {
+                    "success": False,
+                    "error": "No email found",
+                    "domain": domain
+                }
+        
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code
+            if status_code == 429:
+                return {
+                    "success": False,
+                    "status": "rate_limited",
+                    "error": f"HTTP {status_code}: Rate limit exceeded"
+                }
+            return {
+                "success": False,
+                "error": f"HTTP {status_code}: {e.response.text}",
+                "domain": domain
+            }
+        except Exception as e:
+            logger.error(f"Snov.io email-finder failed for {domain}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "domain": domain
+            }
+

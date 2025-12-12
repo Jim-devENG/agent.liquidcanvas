@@ -372,7 +372,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             
                             enrich_result = None
                             contact_email = None
-                            hunter_payload = None
+                            snov_payload = None
                             
                             try:
                                 logger.info(f"🔍 [DISCOVERY] Enriching {domain} before saving...")
@@ -387,7 +387,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                         logger.warning(f"⚠️  [DISCOVERY] {domain} marked for retry (status: {enrich_status})")
                                         # Still save prospect, but mark email as pending
                                         contact_email = None  # Will be set later via retry
-                                        hunter_payload = {
+                                        snov_payload = {
                                             "status": enrich_status,
                                             "error": enrich_result.get("error"),
                                             "retry_needed": True
@@ -396,17 +396,17 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                         # Email found successfully
                                         contact_email = enrich_result["email"]
                                         # Store enrichment metadata
-                                        hunter_payload = {
+                                        snov_payload = {
                                             "email": contact_email,
                                             "confidence": enrich_result.get("confidence", 0),
-                                            "source": enrich_result.get("source", "hunter_io")
+                                            "source": enrich_result.get("source", "snov_io")
                                         }
                                         logger.info(f"✅ [DISCOVERY] Enriched {domain}: {contact_email}")
                                     else:
                                         # No email but not rate limited - mark for retry
                                         logger.warning(f"⚠️  [DISCOVERY] No email found for {domain}, marking for retry")
                                         contact_email = None
-                                        hunter_payload = {
+                                        snov_payload = {
                                             "status": "pending_retry",
                                             "error": enrich_result.get("error", "No email found"),
                                             "retry_needed": True
@@ -433,7 +433,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                 }
                             
                             # NEW RULE: Save prospect even without email, mark for retry if needed
-                            # DO NOT skip domains because of Hunter errors
+                            # DO NOT skip domains because of Snov errors
                             # ALWAYS save prospects - even without email, they can be enriched later
                             if not contact_email:
                                 # Always save prospects, even without email
@@ -452,10 +452,10 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                 page_url=normalized_url,
                                 page_title=title,
                                 contact_email=contact_email,  # May be None if retry needed
-                                contact_method="hunter_io" if contact_email else "pending_retry",
+                                contact_method="snov_io" if contact_email else "pending_retry",
                                 outreach_status="pending",
                                 discovery_query_id=discovery_query.id,
-                                hunter_payload=hunter_payload,
+                                snov_payload=snov_payload,
                                 dataforseo_payload={
                                     "description": description,
                                     "location": loc,
