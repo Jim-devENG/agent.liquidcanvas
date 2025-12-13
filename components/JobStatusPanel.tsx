@@ -13,6 +13,7 @@ interface JobStatusPanelProps {
 export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: JobStatusPanelProps) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
   const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
+  const [showCancelConfirm, setShowCancelConfirm] = useState<string | null>(null)
 
   const toggleJob = (jobId: string) => {
     const newExpanded = new Set(expandedJobs)
@@ -25,10 +26,12 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
   }
 
   const handleCancelJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to cancel this job?')) {
-      return
-    }
-    
+    // Show custom confirmation dialog instead of using confirm()
+    setShowCancelConfirm(jobId)
+  }
+
+  const confirmCancelJob = async (jobId: string) => {
+    setShowCancelConfirm(null)
     setCancellingJobs(prev => new Set(prev).add(jobId))
     try {
       console.log(`🛑 Attempting to cancel job: ${jobId}`)
@@ -54,7 +57,8 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
       }
     } catch (error: any) {
       console.error('❌ Error cancelling job:', error)
-      alert(`Failed to cancel job: ${error.message || 'Unknown error'}`)
+      // Use a custom alert or just log the error
+      console.error(`Failed to cancel job: ${error.message || 'Unknown error'}`)
       setCancellingJobs(prev => {
         const newSet = new Set(prev)
         newSet.delete(jobId)
@@ -294,7 +298,8 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
           })}
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
