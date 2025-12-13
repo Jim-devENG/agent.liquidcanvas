@@ -206,8 +206,14 @@ def _generate_email_patterns(domain: str, person_name: Optional[str] = None) -> 
     
     patterns = []
     
-    # Common contact email patterns
-    common_prefixes = ['info', 'contact', 'support', 'hello', 'sales', 'help', 'admin', 'team']
+    # Common contact email patterns (expanded list for better coverage)
+    common_prefixes = [
+        'info', 'contact', 'support', 'hello', 'sales', 'help', 'admin', 'team',
+        'hi', 'inquiry', 'enquiry', 'general', 'office', 'main', 'mail',
+        'email', 'reach', 'connect', 'getintouch', 'get-in-touch', 'reachout',
+        'business', 'service', 'services', 'customerservice', 'customer-service',
+        'marketing', 'press', 'media', 'pr', 'publicrelations', 'public-relations'
+    ]
     for prefix in common_prefixes:
         patterns.append(f"{prefix}@{domain}")
     
