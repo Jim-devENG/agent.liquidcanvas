@@ -34,6 +34,8 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
+  const [previousJobStatuses, setPreviousJobStatuses] = useState<Map<string, string>>(new Map())
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [activeTab, setActiveTab] = useState<
     'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
   >('overview')
@@ -47,12 +49,34 @@ export default function Dashboard() {
     }
 
     loadData()
-    // Refresh every 30 seconds (debounced to prevent loops) - increased from 10s
-    const interval = setInterval(() => {
-      loadData()
-    }, 30000)
-    return () => clearInterval(interval)
-  }, [router])
+    
+    // Dynamic polling: faster when jobs are running, slower when idle
+    const checkJobsAndPoll = () => {
+      const hasRunningJobs = jobs.some(job => job.status === 'running' || job.status === 'pending')
+      const pollInterval = hasRunningJobs ? 5000 : 30000 // 5s when running, 30s when idle
+      
+      return setInterval(() => {
+        loadData()
+      }, pollInterval)
+    }
+    
+    let interval = checkJobsAndPoll()
+    
+    // Re-check and adjust interval when jobs change
+    const jobsCheckInterval = setInterval(() => {
+      const hasRunningJobs = jobs.some(job => job.status === 'running' || job.status === 'pending')
+      const currentInterval = hasRunningJobs ? 5000 : 30000
+      clearInterval(interval)
+      interval = setInterval(() => {
+        loadData()
+      }, currentInterval)
+    }, 10000) // Check every 10 seconds
+    
+    return () => {
+      clearInterval(interval)
+      clearInterval(jobsCheckInterval)
+    }
+  }, [router, jobs])
 
   const loadData = async () => {
     try {
@@ -66,6 +90,31 @@ export default function Dashboard() {
           return []
         }),
       ])
+      
+      // Check for job status changes (especially completion)
+      if (jobsData && jobsData.length > 0) {
+        const currentStatuses = new Map(jobsData.map(job => [job.id, job.status]))
+        let jobCompleted = false
+        
+        previousJobStatuses.forEach((oldStatus, jobId) => {
+          const newStatus = currentStatuses.get(jobId)
+          if (oldStatus === 'running' && newStatus === 'completed') {
+            jobCompleted = true
+            console.log(`✅ Job ${jobId} completed! Triggering refresh...`)
+          }
+        })
+        
+        if (jobCompleted) {
+          // Trigger refresh of all table components
+          setRefreshTrigger(prev => prev + 1)
+          // Dispatch custom event for table components to listen to
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('jobsCompleted'))
+          }
+        }
+        
+        setPreviousJobStatuses(currentStatuses)
+      }
       
       if (statsData) setStats(statsData)
       if (jobsData) setJobs(jobsData)
@@ -200,19 +249,19 @@ export default function Dashboard() {
 
         {activeTab === 'websites' && (
           <div className="max-w-7xl mx-auto">
-            <WebsitesTable />
+            <WebsitesTable key={refreshTrigger} />
           </div>
         )}
 
         {activeTab === 'leads' && (
           <div className="max-w-7xl mx-auto">
-            <LeadsTable />
+            <LeadsTable key={refreshTrigger} />
           </div>
         )}
 
         {activeTab === 'scraped_emails' && (
           <div className="max-w-7xl mx-auto">
-            <LeadsTable emailsOnly />
+            <LeadsTable emailsOnly key={refreshTrigger} />
           </div>
         )}
 

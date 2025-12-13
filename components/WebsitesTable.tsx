@@ -35,7 +35,23 @@ export default function WebsitesTable() {
     const interval = setInterval(() => {
       loadWebsites()
     }, 30000) // Refresh every 30 seconds (debounced to prevent loops)
-    return () => clearInterval(interval)
+    
+    // Listen for job completion events
+    const handleJobCompleted = () => {
+      console.log('🔄 Job completed event received, refreshing websites table...')
+      loadWebsites()
+    }
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('jobsCompleted', handleJobCompleted)
+    }
+    
+    return () => {
+      clearInterval(interval)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('jobsCompleted', handleJobCompleted)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip])
 

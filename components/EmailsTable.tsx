@@ -32,7 +32,23 @@ export default function EmailsTable() {
   useEffect(() => {
     loadSentEmails()
     const interval = setInterval(loadSentEmails, 15000)
-    return () => clearInterval(interval)
+    
+    // Listen for job completion events
+    const handleJobCompleted = () => {
+      console.log('🔄 Job completed event received, refreshing emails table...')
+      loadSentEmails()
+    }
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('jobsCompleted', handleJobCompleted)
+    }
+    
+    return () => {
+      clearInterval(interval)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('jobsCompleted', handleJobCompleted)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip])
 
