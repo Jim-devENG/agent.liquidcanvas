@@ -59,27 +59,41 @@ export default function Dashboard() {
         clearInterval(interval)
       }
       
-      // Check current jobs state
-      const hasRunningJobs = jobs.some(job => job.status === 'running' || job.status === 'pending')
-      const pollInterval = hasRunningJobs ? 5000 : 30000 // 5s when running, 30s when idle
-      
-      interval = setInterval(() => {
+      // Check current jobs state from the state variable
+      // We'll use a closure to access the latest jobs state
+      const checkAndPoll = () => {
+        // Access jobs from the outer scope - this will be stale but we'll update it
+        // by checking inside loadData which updates jobs state
         loadData()
-      }, pollInterval)
+      }
+      
+      // Start with faster polling, will adjust based on jobs state
+      interval = setInterval(checkAndPoll, 5000) // Start with 5s, will adjust
     }
     
     setupPolling()
     
-    // Re-check and adjust interval periodically
+    // Re-check and adjust interval periodically based on jobs state
     const jobsCheckInterval = setInterval(() => {
-      setupPolling()
+      // Check if we have running jobs by looking at the current jobs state
+      // This is a bit of a workaround - we check the state in the closure
+      const hasRunningJobs = jobs.some(job => job.status === 'running' || job.status === 'pending')
+      const pollInterval = hasRunningJobs ? 5000 : 30000
+      
+      // Clear and recreate with new interval
+      if (interval) {
+        clearInterval(interval)
+      }
+      interval = setInterval(() => {
+        loadData()
+      }, pollInterval)
     }, 10000) // Check every 10 seconds
     
     return () => {
       if (interval) clearInterval(interval)
       clearInterval(jobsCheckInterval)
     }
-  }, [router]) // Only depend on router, jobs will be checked inside the effect
+  }, [router, jobs]) // Include jobs in dependencies to react to job state changes
 
   const loadData = async () => {
     try {
