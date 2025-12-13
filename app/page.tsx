@@ -187,7 +187,7 @@ export default function Dashboard() {
             {/* Right Column - Jobs & Activity */}
             <div className="lg:col-span-5 space-y-6">
               {jobs.length > 0 ? (
-                <JobStatusPanel jobs={jobs} />
+                <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
               ) : (
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
                   <p className="text-gray-500">No jobs found.</p>
@@ -224,7 +224,7 @@ export default function Dashboard() {
 
         {activeTab === 'jobs' && jobs.length > 0 && (
           <div className="max-w-7xl mx-auto">
-            <JobStatusPanel jobs={jobs} expanded />
+            <JobStatusPanel jobs={jobs} expanded onRefresh={refreshData} />
           </div>
         )}
 

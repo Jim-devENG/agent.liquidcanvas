@@ -7,9 +7,10 @@ import { cancelJob, type Job } from '@/lib/api'
 interface JobStatusPanelProps {
   jobs: Job[]
   expanded?: boolean
+  onRefresh?: () => void
 }
 
-export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPanelProps) {
+export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: JobStatusPanelProps) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
   const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
 
@@ -30,13 +31,30 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
     
     setCancellingJobs(prev => new Set(prev).add(jobId))
     try {
-      await cancelJob(jobId)
-      // Refresh the page or reload jobs after a short delay
-      setTimeout(() => {
-        window.location.reload()
-      }, 1000)
+      console.log(`🛑 Attempting to cancel job: ${jobId}`)
+      const result = await cancelJob(jobId)
+      console.log('✅ Cancel job response:', result)
+      
+      // Show success message
+      if (result.success) {
+        // If onRefresh callback is provided, use it; otherwise reload page
+        if (onRefresh) {
+          // Wait a moment for backend to process, then refresh
+          setTimeout(() => {
+            onRefresh()
+          }, 1500)
+        } else {
+          // Fallback to page reload
+          setTimeout(() => {
+            window.location.reload()
+          }, 1500)
+        }
+      } else {
+        throw new Error(result.error || 'Failed to cancel job')
+      }
     } catch (error: any) {
-      alert(`Failed to cancel job: ${error.message}`)
+      console.error('❌ Error cancelling job:', error)
+      alert(`Failed to cancel job: ${error.message || 'Unknown error'}`)
       setCancellingJobs(prev => {
         const newSet = new Set(prev)
         newSet.delete(jobId)
