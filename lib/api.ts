@@ -402,33 +402,6 @@ export type EnrichmentResult = {
   [key: string]: any
 }
 
-export async function enrichProspectById(prospectId: string): Promise<{ success: boolean; email?: string; message?: string; error?: string }> {
-  try {
-    const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/enrich`, {
-      method: 'POST',
-    })
-    
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to enrich prospect' }))
-      throw new Error(error.detail || error.error || 'Failed to enrich prospect')
-    }
-    
-    const result = await res.json()
-    return {
-      success: result.success || false,
-      email: result.email || undefined,
-      message: result.message || undefined,
-      error: result.error || undefined,
-    }
-  } catch (error: any) {
-    console.error('❌ Error enriching prospect:', error)
-    return {
-      success: false,
-      error: error.message || 'Failed to enrich prospect',
-    }
-  }
-}
-
 export async function enrichEmail(domain: string, name?: string): Promise<EnrichmentResult> {
   const token = getAuthToken()
   if (!token) {
@@ -437,6 +410,33 @@ export async function enrichEmail(domain: string, name?: string): Promise<Enrich
   
   try {
     const res = await authenticatedFetch(`${API_BASE}/prospects/enrich/direct?domain=${encodeURIComponent(domain)}${name ? `&name=${encodeURIComponent(name)}` : ''}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to enrich email' }))
+      throw new Error(error.detail || error.error || 'Failed to enrich email')
+    }
+    
+    const data = await res.json()
+    return data
+  } catch (error: any) {
+    console.error('❌ Error enriching email:', error)
+    throw new Error(`Enrichment failed: ${error.message}`)
+  }
+}
+
+export async function enrichProspectById(prospectId: string): Promise<EnrichmentResult> {
+  const token = getAuthToken()
+  if (!token) {
+    throw new Error('Authentication required. Please log in first.')
+  }
+  
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/enrich`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -539,44 +539,9 @@ export async function listProspects(
   const result: any = await res.json()
   
   // Normalize to PaginatedResponse<Prospect>
-  // Backend returns: {success: bool, data: {data: [...], prospects: [...], total: number, ...}}
-  let dataArray: Prospect[] = []
-  let totalCount = 0
-  
-  // Handle backend response format: {success: true, data: {data: [...], prospects: [...], total: ...}}
-  if (result && result.success && result.data) {
-    const dataObj = result.data
-    // Try data.data first (main field), then data.prospects (backward compatibility)
-    if (Array.isArray(dataObj.data)) {
-      dataArray = dataObj.data
-    } else if (Array.isArray(dataObj.prospects)) {
-      dataArray = dataObj.prospects
-    }
-    totalCount = dataObj.total ?? dataArray.length
-  } else if (Array.isArray(result)) {
-    // Direct array response (fallback)
-    dataArray = result
-    totalCount = result.length
-  } else if (Array.isArray(result.prospects)) {
-    // Response with 'prospects' field (fallback)
-    dataArray = result.prospects
-    totalCount = result.total ?? result.count ?? dataArray.length
-  } else if (Array.isArray(result.data)) {
-    // Response with 'data' field as array (fallback)
-    dataArray = result.data
-    totalCount = result.total ?? result.count ?? dataArray.length
-  } else if (result && typeof result === 'object') {
-    // Try to find any array field (last resort)
-    const arrayFields = Object.values(result).filter(Array.isArray)
-    if (arrayFields.length > 0) {
-      dataArray = arrayFields[0] as Prospect[]
-      totalCount = result.total ?? result.count ?? dataArray.length
-    }
-  }
-  
   return {
-    data: dataArray,
-    total: totalCount,
+    data: (result.prospects || result.data || []) as Prospect[],
+    total: (result.total ?? 0) as number,
     skip,
     limit,
   }
@@ -649,9 +614,9 @@ export async function getStats(): Promise<Stats | null> {
   try {
     // Fetch all data in parallel with defensive error handling
     const [allProspects, jobs, prospectsWithEmail] = await Promise.all([
-      listProspects(0, 1000).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 } as ProspectListResponse)),
+      listProspects(0, 1000).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 })),
       listJobs(0, 100).catch(() => []),
-      listProspects(0, 1000, undefined, undefined, true).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 } as ProspectListResponse)),
+      listProspects(0, 1000, undefined, undefined, true).catch(() => ({ data: [], total: 0, skip: 0, limit: 0 })),
     ])
     
     // Log actual API responses for debugging (only in development)
@@ -668,16 +633,12 @@ export async function getStats(): Promise<Stats | null> {
     }
     
     // Extract prospects array from PaginatedResponse<Prospect> format
-    // listProspects always returns ProspectListResponse, so we can safely access .data
-    const allProspectsList: Prospect[] = Array.isArray(allProspects?.data) ? allProspects.data : []
-    const prospectsWithEmailList: Prospect[] = Array.isArray(prospectsWithEmail?.data) ? prospectsWithEmail.data : []
+    const allProspectsList: Prospect[] = allProspects?.data || []
+    const prospectsWithEmailList: Prospect[] = prospectsWithEmail?.data || []
     
     // Extract totals from PaginatedResponse<Prospect> format
     const allProspectsTotal = allProspects?.total ?? 0
     const prospectsWithEmailTotal = prospectsWithEmail?.total ?? 0
-    
-    // Remove the warning - empty arrays are valid
-    // The previous check was incorrectly flagging empty arrays as invalid
     
     // Count prospects by status - defensive forEach guard
     let prospects_pending = 0
@@ -700,11 +661,10 @@ export async function getStats(): Promise<Stats | null> {
         console.error('⚠️ Error in forEach loop (likely from devtools hook or invalid data):', forEachError)
         // Continue with zero counts rather than failing - app stays running
       }
-    } else if (allProspectsList !== null && allProspectsList !== undefined && !Array.isArray(allProspectsList)) {
-      // Log warning only if we expected an array but got something else (not an empty array)
+    } else if (allProspectsList !== null && allProspectsList !== undefined) {
+      // Log warning if we expected an array but got something else
       console.warn('⚠️ getStats: allProspectsList is not a valid array:', typeof allProspectsList, allProspectsList)
     }
-    // Note: Empty arrays are valid and don't need a warning
     
     // Safely handle jobs array - defensive guard
     let jobsArray: any[] = []

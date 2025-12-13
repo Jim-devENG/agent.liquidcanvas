@@ -10,21 +10,20 @@ export default function WebsitesTable() {
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
   const [total, setTotal] = useState(0)
-  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set())
   const limit = 50
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set())
 
   const loadWebsites = async () => {
     try {
       setLoading(true)
       const response = await listProspects(skip, limit)
-      // Defensive check: ensure data is always an array
       const data = Array.isArray(response?.data) ? response.data : 
                    Array.isArray(response) ? response : []
       setProspects(data)
       setTotal(response?.total ?? data.length)
     } catch (error) {
       console.error('Failed to load websites:', error)
-      setProspects([]) // Ensure prospects is always an array
+      setProspects([])
       setTotal(0)
     } finally {
       setLoading(false)
@@ -35,9 +34,8 @@ export default function WebsitesTable() {
     loadWebsites()
     const interval = setInterval(() => {
       loadWebsites()
-    }, 30000) // Refresh every 30 seconds (debounced to prevent loops)
+    }, 30000)
     
-    // Listen for job completion events
     const handleJobCompleted = () => {
       console.log('🔄 Job completed event received, refreshing websites table...')
       loadWebsites()
@@ -66,11 +64,9 @@ export default function WebsitesTable() {
       const result = await enrichProspectById(prospectId)
       if (result.success && result.email) {
         console.log(`✅ Email found for ${domain}: ${result.email}`)
-        // Refresh the table to show the new email
         await loadWebsites()
       } else {
         console.warn(`⚠️ No email found for ${domain}: ${result.message || result.error}`)
-        // Still refresh to update status
         await loadWebsites()
       }
     } catch (error: any) {
@@ -111,20 +107,19 @@ export default function WebsitesTable() {
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Domain</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Email</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Page Title</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">DA Score</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Score</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Email</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Created</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {prospects.map((prospect) => {
                   const isEnriching = enrichingIds.has(prospect.id)
-                  const hasEmail = prospect.contact_email && prospect.contact_email.trim() !== ''
-                  
+                  const hasEmail: boolean = Boolean(prospect.contact_email && prospect.contact_email.trim() !== '')
                   return (
                     <tr key={prospect.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4">
@@ -143,13 +138,6 @@ export default function WebsitesTable() {
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        {hasEmail ? (
-                          <span className="text-green-700 font-medium">{prospect.contact_email}</span>
-                        ) : (
-                          <span className="text-gray-400 text-sm">No email</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
                         <span className="text-gray-900">{prospect.page_title || 'N/A'}</span>
                       </td>
                       <td className="py-3 px-4">
@@ -157,6 +145,13 @@ export default function WebsitesTable() {
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-gray-900">{safeToFixed(prospect.score, 2)}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {hasEmail ? (
+                          <span className="text-green-700 font-medium">{prospect.contact_email}</span>
+                        ) : (
+                          <span className="text-gray-500">No Email</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -168,39 +163,29 @@ export default function WebsitesTable() {
                           {prospect.outreach_status}
                         </span>
                       </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">
+                        {formatDate(prospect.created_at)}
+                      </td>
                       <td className="py-3 px-4">
                         <button
                           onClick={() => handleEnrichEmail(prospect.id, prospect.domain)}
                           disabled={isEnriching || hasEmail}
                           className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs transition-colors ${
-                            isEnriching
-                              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                              : hasEmail
+                            hasEmail
                               ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                              : 'bg-olive-600 hover:bg-olive-700 text-white'
+                              : isEnriching
+                                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                                : 'bg-olive-100 text-olive-700 hover:bg-olive-200'
                           }`}
-                          title={hasEmail ? 'Email already found' : isEnriching ? 'Enriching...' : 'Enrich email using Snov.io'}
+                          title={hasEmail ? "Email already found" : "Enrich email for this website"}
                         >
                           {isEnriching ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Enriching...</span>
-                            </>
-                          ) : hasEmail ? (
-                            <>
-                              <Mail className="w-3.5 h-3.5" />
-                              <span>Has Email</span>
-                            </>
+                            <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
-                            <>
-                              <Mail className="w-3.5 h-3.5" />
-                              <span>Enrich</span>
-                            </>
+                            <Mail className="w-3 h-3" />
                           )}
+                          <span>{hasEmail ? 'Has Email' : (isEnriching ? 'Enriching...' : 'Enrich')}</span>
                         </button>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {formatDate(prospect.created_at)}
                       </td>
                     </tr>
                   )
