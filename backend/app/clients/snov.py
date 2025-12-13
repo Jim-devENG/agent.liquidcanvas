@@ -154,36 +154,55 @@ class SnovIOClient:
             }
             
             # Try multiple endpoint variations with different parameter formats
+            # Snov.io API may use GET with params, POST with body, or different auth methods
             endpoints_to_try = [
+                # Method 1: GET with Bearer token in header (OAuth2 standard)
                 {
+                    "method": "GET",
                     "endpoint": "/get-domain-emails-with-info",
                     "params": {"domain": domain, "type": "all", "limit": min(limit, 100)},
-                    "headers": headers
+                    "headers": headers,
+                    "body": None
                 },
+                # Method 2: GET with access_token in params (legacy)
                 {
+                    "method": "GET",
                     "endpoint": "/get-domain-emails-with-info",
                     "params": {"domain": domain, "access_token": access_token, "type": "all", "limit": min(limit, 100)},
-                    "headers": {"Content-Type": "application/json"}
+                    "headers": {"Content-Type": "application/json"},
+                    "body": None
                 },
+                # Method 3: POST with Bearer token (some APIs use POST)
                 {
+                    "method": "POST",
+                    "endpoint": "/get-domain-emails-with-info",
+                    "params": None,
+                    "headers": headers,
+                    "body": {"domain": domain, "type": "all", "limit": min(limit, 100)}
+                },
+                # Method 4: POST with access_token in body
+                {
+                    "method": "POST",
+                    "endpoint": "/get-domain-emails-with-info",
+                    "params": None,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {"domain": domain, "access_token": access_token, "type": "all", "limit": min(limit, 100)}
+                },
+                # Method 5: Alternative endpoint - GET with Bearer
+                {
+                    "method": "GET",
                     "endpoint": "/get-domain-emails",
                     "params": {"domain": domain, "type": "all", "limit": min(limit, 100)},
-                    "headers": headers
+                    "headers": headers,
+                    "body": None
                 },
+                # Method 6: Alternative endpoint - GET with access_token param
                 {
+                    "method": "GET",
                     "endpoint": "/get-domain-emails",
                     "params": {"domain": domain, "access_token": access_token, "type": "all", "limit": min(limit, 100)},
-                    "headers": {"Content-Type": "application/json"}
-                },
-                {
-                    "endpoint": "/domain-emails",
-                    "params": {"domain": domain, "type": "all", "limit": min(limit, 100)},
-                    "headers": headers
-                },
-                {
-                    "endpoint": "/domain-emails",
-                    "params": {"domain": domain, "access_token": access_token, "type": "all", "limit": min(limit, 100)},
-                    "headers": {"Content-Type": "application/json"}
+                    "headers": {"Content-Type": "application/json"},
+                    "body": None
                 },
             ]
             
