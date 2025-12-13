@@ -263,6 +263,12 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                     search_stats["queries_executed"] += 1
                     
                     try:
+                        # Check for cancellation before making API call
+                        await db.refresh(job)
+                        if job.status == "cancelled":
+                            logger.info(f"Job {job_id} was cancelled before API call")
+                            return {"error": "Job was cancelled"}
+                        
                         logger.info(f"🔍 Searching: '{query}' in {loc} (location_code: {location_code})...")
                         # Call DataForSEO API with explicit parameters
                         serp_results = await client.serp_google_organic(
@@ -272,6 +278,12 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             depth=10,
                             device="desktop"
                         )
+                        
+                        # Check for cancellation after API call
+                        await db.refresh(job)
+                        if job.status == "cancelled":
+                            logger.info(f"Job {job_id} was cancelled after API call")
+                            return {"error": "Job was cancelled"}
                         
                         if not serp_results or not serp_results.get("success"):
                             error_msg = serp_results.get('error', 'Unknown error') if serp_results else 'No response'
@@ -581,6 +593,9 @@ async def process_discovery_job(job_id: str):
     """
     try:
         await discover_websites_async(job_id)
+    except asyncio.CancelledError:
+        logger.info(f"Discovery job {job_id} was cancelled")
+        raise  # Re-raise to properly handle cancellation
     except Exception as e:
         logger.error(f"Error processing discovery job {job_id}: {e}", exc_info=True)
 

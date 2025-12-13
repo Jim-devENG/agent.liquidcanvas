@@ -200,8 +200,30 @@ async def create_discovery_job(
             # Start background task to process job
             # This runs asynchronously without blocking the API response
             try:
-                task = asyncio.create_task(process_discovery_job(str(job.id)))
-                logger.info(f"Discovery job {job.id} started in background (task_id: {id(task)})")
+                from app.task_manager import register_task, unregister_task
+                from app.db.database import AsyncSessionLocal
+                
+                async def task_wrapper():
+                    """Wrapper to register/unregister task and handle cancellation"""
+                    task = asyncio.create_task(process_discovery_job(str(job.id)))
+                    register_task(str(job.id), task)
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        logger.info(f"Discovery job {job.id} task was cancelled")
+                        # Update job status in database
+                        async with AsyncSessionLocal() as task_db:
+                            result = await task_db.execute(select(Job).where(Job.id == job.id))
+                            task_job = result.scalar_one_or_none()
+                            if task_job:
+                                task_job.status = "cancelled"
+                                task_job.error_message = "Job cancelled by user"
+                                await task_db.commit()
+                    finally:
+                        unregister_task(str(job.id))
+                
+                asyncio.create_task(task_wrapper())
+                logger.info(f"Discovery job {job.id} started in background")
             except Exception as task_error:
                 # Task creation failed - update job status immediately
                 logger.error(f"Failed to create background task for job {job.id}: {task_error}", exc_info=True)
@@ -335,6 +357,16 @@ async def cancel_job(
             "error": f"Cannot cancel job with status '{job.status}'. Only pending or running jobs can be cancelled.",
             "status": job.status
         }
+    
+    # Try to cancel the asyncio task if it's running
+    from app.task_manager import cancel_task
+    job_id_str = str(job_id)
+    task_cancelled = cancel_task(job_id_str)
+    
+    if task_cancelled:
+        logger.info(f"Successfully cancelled asyncio task for job {job_id}")
+    else:
+        logger.info(f"No running asyncio task found for job {job_id}, marking as cancelled in database")
     
     # Update job status to cancelled
     job.status = "cancelled"
