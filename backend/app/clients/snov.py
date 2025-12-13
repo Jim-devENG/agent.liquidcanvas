@@ -242,7 +242,20 @@ class SnovIOClient:
         
         except httpx.HTTPStatusError as e:
             status_code = e.response.status_code
-            logger.error(f"Snov.io API HTTP error for {domain}: {status_code} - {e.response.text}")
+            error_text = e.response.text
+            
+            # Handle 404 gracefully - domain not in Snov.io database
+            if status_code == 404:
+                logger.info(f"Snov.io returned 404 for {domain} - domain not in database")
+                return {
+                    "success": True,  # Treat as success (no emails found, not an error)
+                    "domain": domain,
+                    "emails": [],
+                    "total": 0,
+                    "message": "Domain not found in Snov.io database"
+                }
+            
+            logger.error(f"Snov.io API HTTP error for {domain}: {status_code} - {error_text}")
             
             # Detect 429 rate limit
             if status_code == 429:
