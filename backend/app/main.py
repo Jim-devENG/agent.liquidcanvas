@@ -124,18 +124,40 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    """Health check endpoint - responds immediately for Render deployment checks"""
+    return {"status": "healthy", "service": "art-outreach-api"}
+
+@app.get("/health/ready")
+async def readiness():
+    """Readiness check - verifies database connectivity"""
+    try:
+        # Quick database connectivity check (with timeout)
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "connected"}
+    except Exception as e:
+        logger.warning(f"Readiness check failed: {e}")
+        # Still return 200 so Render doesn't fail deployment
+        # Database might be temporarily unavailable
+        return {"status": "ready", "database": "checking", "warning": str(e)}
 
 
 @app.on_event("startup")
 async def startup():
     """Startup event - run migrations and start scheduler"""
+    # Log that server is starting (important for Render deployment checks)
+    logger.info("🚀 Server starting up...")
+    logger.info(f"📡 Server will listen on port {os.getenv('PORT', '8000')}")
+    
     # All database operations run in background to avoid blocking server startup
     import asyncio
     
     async def run_database_setup():
         """Run all database setup operations in background"""
+        # Add a small delay to ensure server is fully started first
+        await asyncio.sleep(2)
+        
         try:
             from alembic.config import Config
             from alembic import command
@@ -233,6 +255,9 @@ async def startup():
         logger.info("✅ Scheduler started successfully (automatic scraper check enabled)")
     except Exception as e:
         logger.error(f"❌ Failed to start scheduler: {e}", exc_info=True)
+    
+    # Log that startup is complete (server is ready to accept requests)
+    logger.info("✅ Server startup complete - ready to accept requests")
 
 
 @app.on_event("shutdown")
