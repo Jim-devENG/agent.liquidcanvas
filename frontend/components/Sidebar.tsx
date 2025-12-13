@@ -23,7 +23,7 @@ interface Tab {
 
 interface SidebarProps {
   activeTab: string
-  onTabChange: (tab: string) => void
+  onTabChange: (tab: 'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide') => void
   tabs: Tab[]
 }
 
@@ -74,7 +74,7 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
               <button
                 key={tab.id}
                 onClick={() => {
-                  onTabChange(tab.id)
+                  onTabChange(tab.id as 'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
                   setMobileMenuOpen(false) // Close mobile menu when tab is selected
                 }}
                 className={`
@@ -102,6 +102,7 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
         </div>
       </div>
     </aside>
+    </>
   )
 }
 
