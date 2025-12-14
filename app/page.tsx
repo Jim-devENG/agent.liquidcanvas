@@ -1,7 +1,7 @@
 'use client'
 // Version: 3.1 - Discovery feature removed - FORCE REDEPLOY
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import StatsCards from '@/components/StatsCards'
@@ -34,13 +34,27 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
-  const [previousJobStatuses, setPreviousJobStatuses] = useState<Map<string, string>>(new Map())
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [activeTab, setActiveTab] = useState<
     'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
   >('overview')
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
+    // Check if user is authenticated
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (!token) {
+      router.push('/login')
+      return
+    }
+
+    loadData()
+    // Refresh every 30 seconds (debounced to prevent loops) - increased from 10s
+    const interval = setInterval(() => {
+      loadData()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [router])
+
+  const loadData = async () => {
     try {
       const [statsData, jobsData] = await Promise.all([
         getStats().catch(err => {
@@ -53,36 +67,13 @@ export default function Dashboard() {
         }),
       ])
       
-      // Check for job status changes (especially completion)
-      if (jobsData && jobsData.length > 0 && previousJobStatuses.size > 0) {
-        const currentStatuses = new Map(jobsData.map(job => [job.id, job.status]))
-        let jobCompleted = false
-        
-        previousJobStatuses.forEach((oldStatus, jobId) => {
-          const newStatus = currentStatuses.get(jobId)
-          if (oldStatus === 'running' && newStatus === 'completed') {
-            jobCompleted = true
-            console.log(`✅ Job ${jobId} completed! Triggering refresh...`)
-          }
-        })
-        
-        if (jobCompleted) {
-          // Trigger refresh of all table components
-          setRefreshTrigger(prev => prev + 1)
-          // Dispatch custom event for table components to listen to
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('jobsCompleted'))
-          }
-        }
-        
-        setPreviousJobStatuses(currentStatuses)
-      } else if (jobsData && jobsData.length > 0) {
-        // First load - initialize previous statuses
-        setPreviousJobStatuses(new Map(jobsData.map(job => [job.id, job.status])))
-      }
-      
       if (statsData) setStats(statsData)
-      if (jobsData) setJobs(jobsData)
+      // Ensure jobsData is always an array
+      if (jobsData) {
+        setJobs(Array.isArray(jobsData) ? jobsData : [])
+      } else {
+        setJobs([])
+      }
       
       const backendResponding = statsData !== null || jobsData.length > 0
       setConnectionError(!backendResponding)
@@ -99,58 +90,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [previousJobStatuses])
-
-  useEffect(() => {
-    // Check if user is authenticated
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    if (!token) {
-      router.push('/login')
-      return
-    }
-
-    loadData()
-    
-    // Dynamic polling: faster when jobs are running, slower when idle
-    let interval: NodeJS.Timeout | null = null
-    
-    const setupPolling = () => {
-      // Clear existing interval
-      if (interval) {
-        clearInterval(interval)
-      }
-      
-      // Check current jobs state from the state variable
-      const checkAndPoll = () => {
-        loadData()
-      }
-      
-      // Start with faster polling, will adjust based on jobs state
-      interval = setInterval(checkAndPoll, 5000) // Start with 5s, will adjust
-    }
-    
-    setupPolling()
-    
-    // Re-check and adjust interval periodically based on jobs state
-    const jobsCheckInterval = setInterval(() => {
-      // Check if we have running jobs by looking at the current jobs state
-      const hasRunningJobs = jobs.some(job => job.status === 'running' || job.status === 'pending')
-      const pollInterval = hasRunningJobs ? 5000 : 30000
-      
-      // Clear and recreate with new interval
-      if (interval) {
-        clearInterval(interval)
-      }
-      interval = setInterval(() => {
-        loadData()
-      }, pollInterval)
-    }, 10000) // Check every 10 seconds
-    
-    return () => {
-      if (interval) clearInterval(interval)
-      clearInterval(jobsCheckInterval)
-    }
-  }, [router, jobs, loadData]) // Include loadData and jobs in dependencies
+  }
 
   const refreshData = () => {
     loadData()
@@ -194,43 +134,43 @@ export default function Dashboard() {
                 {tabs.find(t => t.id === activeTab)?.label || 'Dashboard'}
               </h2>
             </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem('auth_token')
-                router.push('/login')
-              }}
+              <button
+                onClick={() => {
+                  localStorage.removeItem('auth_token')
+                  router.push('/login')
+                }}
               className="flex items-center space-x-2 px-4 py-2 bg-olive-600 hover:bg-olive-700 text-white rounded-md transition-colors text-sm"
-            >
+              >
               <LogOutIcon className="w-4 h-4" />
-              <span>Logout</span>
-            </button>
-          </div>
-        </header>
+                <span>Logout</span>
+              </button>
+        </div>
+      </header>
 
-        {/* Connection Error Banner */}
-        {connectionError && (
+      {/* Connection Error Banner */}
+      {connectionError && (
           <div className="px-4 sm:px-6 py-4">
-            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
-              <div className="flex items-center">
-                <div>
-                  <p className="text-sm font-medium text-red-800">
-                    Backend not connected
-                  </p>
-                  <p className="text-xs text-red-600 mt-1">
-                    Unable to connect to API server. Please ensure the backend is running.
-                  </p>
-                </div>
+          <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm">
+            <div className="flex items-center">
+              <div>
+                <p className="text-sm font-medium text-red-800">
+                  Backend not connected
+                </p>
+                <p className="text-xs text-red-600 mt-1">
+                  Unable to connect to API server. Please ensure the backend is running.
+                </p>
               </div>
             </div>
           </div>
-        )}
-
-        {/* System Status Bar */}
-        <div className="px-4 sm:px-6 py-3">
-          <SystemStatus jobs={jobs} loading={loading} />
         </div>
+      )}
 
-        {/* Main Content */}
+      {/* System Status Bar */}
+        <div className="px-4 sm:px-6 py-3">
+        <SystemStatus jobs={jobs} loading={loading} />
+      </div>
+
+      {/* Main Content */}
         <main className="flex-1 px-4 sm:px-6 py-4 overflow-y-auto">
         {activeTab === 'overview' && (
           <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -252,7 +192,7 @@ export default function Dashboard() {
             {/* Right Column - Jobs & Activity */}
             <div className="lg:col-span-5 space-y-6">
               {jobs.length > 0 ? (
-                <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
+                <JobStatusPanel jobs={jobs} />
               ) : (
                 <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
                   <p className="text-gray-500">No jobs found.</p>
@@ -265,19 +205,19 @@ export default function Dashboard() {
 
         {activeTab === 'websites' && (
           <div className="max-w-7xl mx-auto">
-            <WebsitesTable key={refreshTrigger} />
+            <WebsitesTable />
           </div>
         )}
 
         {activeTab === 'leads' && (
           <div className="max-w-7xl mx-auto">
-            <LeadsTable key={refreshTrigger} />
+            <LeadsTable />
           </div>
         )}
 
         {activeTab === 'scraped_emails' && (
           <div className="max-w-7xl mx-auto">
-            <LeadsTable emailsOnly key={refreshTrigger} />
+            <LeadsTable emailsOnly />
           </div>
         )}
 
@@ -289,7 +229,7 @@ export default function Dashboard() {
 
         {activeTab === 'jobs' && jobs.length > 0 && (
           <div className="max-w-7xl mx-auto">
-            <JobStatusPanel jobs={jobs} expanded onRefresh={refreshData} />
+            <JobStatusPanel jobs={jobs} expanded />
           </div>
         )}
 
@@ -330,7 +270,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        </main>
+      </main>
       </div>
     </div>
   )

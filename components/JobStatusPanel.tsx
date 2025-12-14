@@ -1,19 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter, X } from 'lucide-react'
-import { cancelJob, type Job } from '@/lib/api'
+import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter } from 'lucide-react'
+import type { Job } from '@/lib/api'
 
 interface JobStatusPanelProps {
   jobs: Job[]
   expanded?: boolean
-  onRefresh?: () => void
 }
 
-export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: JobStatusPanelProps) {
+export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPanelProps) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
-  const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
-  const [showCancelConfirm, setShowCancelConfirm] = useState<string | null>(null)
 
   const toggleJob = (jobId: string) => {
     const newExpanded = new Set(expandedJobs)
@@ -23,48 +20,6 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
       newExpanded.add(jobId)
     }
     setExpandedJobs(newExpanded)
-  }
-
-  const handleCancelJob = async (jobId: string) => {
-    // Show custom confirmation dialog instead of using confirm()
-    setShowCancelConfirm(jobId)
-  }
-
-  const confirmCancelJob = async (jobId: string) => {
-    setShowCancelConfirm(null)
-    setCancellingJobs(prev => new Set(prev).add(jobId))
-    try {
-      console.log(`🛑 Attempting to cancel job: ${jobId}`)
-      const result = await cancelJob(jobId)
-      console.log('✅ Cancel job response:', result)
-      
-      // Show success message
-      if (result.success) {
-        // If onRefresh callback is provided, use it; otherwise reload page
-        if (onRefresh) {
-          // Wait a moment for backend to process, then refresh
-          setTimeout(() => {
-            onRefresh()
-          }, 1500)
-        } else {
-          // Fallback to page reload
-          setTimeout(() => {
-            window.location.reload()
-          }, 1500)
-        }
-      } else {
-        throw new Error(result.error || 'Failed to cancel job')
-      }
-    } catch (error: any) {
-      console.error('❌ Error cancelling job:', error)
-      // Use a custom alert or just log the error
-      console.error(`Failed to cancel job: ${error.message || 'Unknown error'}`)
-      setCancellingJobs(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(jobId)
-        return newSet
-      })
-    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -90,7 +45,7 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
 
     const result = job.result as any
     const stats = result.search_statistics
-    const queries = result.queries_detail || []
+    const queries = Array.isArray(result.queries_detail) ? result.queries_detail : []
 
     return (
       <div className="mt-3 space-y-3 pt-3 border-t border-gray-200">
@@ -229,104 +184,67 @@ export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: Jo
     )
   }
 
-  const displayJobs = expanded ? jobs : jobs.slice(0, 5)
+  // Ensure jobs is always an array
+  const jobsArray = Array.isArray(jobs) ? jobs : []
+  const displayJobs = expanded ? jobsArray : jobsArray.slice(0, 5)
 
   return (
-    <>
-      {/* Cancel Confirmation Modal */}
-      {showCancelConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Cancel Job?</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to cancel this job? This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowCancelConfirm(null)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
+      <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Jobs</h2>
+      {displayJobs.length === 0 ? (
+        <p className="text-gray-500 text-sm">No jobs found</p>
+      ) : (
+        <div className="space-y-3">
+          {displayJobs.map((job) => {
+            const isExpanded = expandedJobs.has(job.id)
+            return (
+              <div
+                key={job.id}
+                className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
               >
-                No, Keep Running
-              </button>
-              <button
-                onClick={() => confirmCancelJob(showCancelConfirm)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-              >
-                Yes, Cancel Job
-              </button>
-            </div>
-          </div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center space-x-2">
+                    {getStatusIcon(job.status)}
+                    <span className="font-semibold text-gray-900 capitalize">{job.job_type}</span>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      job.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      job.status === 'failed' ? 'bg-red-100 text-red-800' :
+                      job.status === 'running' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {job.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-gray-500">{formatDate(job.created_at)}</span>
+                    {job.result && (
+                      <button
+                        onClick={() => toggleJob(job.id)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {job.error_message && (
+                  <p className="text-sm text-red-600 mt-2">{job.error_message}</p>
+                )}
+                {isExpanded && renderDiscoveryJobDetails(job)}
+                {!isExpanded && job.result && job.job_type === 'discover' && (
+                  <button
+                    onClick={() => toggleJob(job.id)}
+                    className="text-xs text-blue-600 hover:text-blue-800 mt-2"
+                  >
+                    Click to view detailed statistics
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
-
-      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Jobs</h2>
-        {displayJobs.length === 0 ? (
-          <p className="text-gray-500 text-sm">No jobs found</p>
-        ) : (
-          <div className="space-y-3">
-            {displayJobs.map((job) => {
-              const isExpanded = expandedJobs.has(job.id)
-              return (
-                <div
-                  key={job.id}
-                  className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(job.status)}
-                      <span className="font-semibold text-gray-900 capitalize">{job.job_type}</span>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        job.status === 'completed' ? 'bg-green-100 text-green-800' :
-                        job.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        job.status === 'running' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {job.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-500">{formatDate(job.created_at)}</span>
-                      {job.status === 'running' && (
-                        <button
-                          onClick={() => handleCancelJob(job.id)}
-                          disabled={cancellingJobs.has(job.id)}
-                          className="flex items-center space-x-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          title="Cancel job"
-                        >
-                          <X className="w-3 h-3" />
-                          <span>{cancellingJobs.has(job.id) ? 'Cancelling...' : 'Cancel'}</span>
-                        </button>
-                      )}
-                      {job.result && (
-                        <button
-                          onClick={() => toggleJob(job.id)}
-                          className="text-gray-500 hover:text-gray-700"
-                        >
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {job.error_message && (
-                    <p className="text-sm text-red-600 mt-2">{job.error_message}</p>
-                  )}
-                  {isExpanded && renderDiscoveryJobDetails(job)}
-                  {!isExpanded && job.result && job.job_type === 'discover' && (
-                    <button
-                      onClick={() => toggleJob(job.id)}
-                      className="text-xs text-blue-600 hover:text-blue-800 mt-2"
-                    >
-                      Click to view detailed statistics
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </>
+    </div>
   )
 }
 
