@@ -1,16 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter } from 'lucide-react'
-import type { Job } from '@/lib/api'
+import { CheckCircle, XCircle, Clock, Loader, ChevronDown, ChevronUp, Search, Globe, Mail, Filter, X } from 'lucide-react'
+import { cancelJob, type Job } from '@/lib/api'
 
 interface JobStatusPanelProps {
   jobs: Job[]
   expanded?: boolean
+  onRefresh?: () => void
 }
 
-export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPanelProps) {
+export default function JobStatusPanel({ jobs, expanded = false, onRefresh }: JobStatusPanelProps) {
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
+  const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set())
+  const [showCancelModal, setShowCancelModal] = useState<{ show: boolean; jobId: string | null }>({ show: false, jobId: null })
 
   const toggleJob = (jobId: string) => {
     const newExpanded = new Set(expandedJobs)
@@ -20,6 +23,41 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
       newExpanded.add(jobId)
     }
     setExpandedJobs(newExpanded)
+  }
+
+  const handleCancelJob = async (jobId: string) => {
+    setShowCancelModal({ show: true, jobId })
+  }
+
+  const confirmCancelJob = async () => {
+    if (!showCancelModal.jobId) return
+    
+    const jobId = showCancelModal.jobId
+    setCancellingJobs(prev => new Set(prev).add(jobId))
+    setShowCancelModal({ show: false, jobId: null })
+    
+    try {
+      await cancelJob(jobId)
+      console.log(`✅ Job ${jobId} cancelled successfully`)
+      // Trigger refresh if callback provided
+      if (onRefresh) {
+        onRefresh()
+      } else {
+        // Fallback: dispatch event to refresh
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        }
+      }
+    } catch (error: any) {
+      console.error(`❌ Failed to cancel job ${jobId}:`, error)
+      alert(`Failed to cancel job: ${error.message || 'Unknown error'}`)
+    } finally {
+      setCancellingJobs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(jobId)
+        return newSet
+      })
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -217,6 +255,17 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-gray-500">{formatDate(job.created_at)}</span>
+                    {(job.status === 'running' || job.status === 'pending') && (
+                      <button
+                        onClick={() => handleCancelJob(job.id)}
+                        disabled={cancellingJobs.has(job.id)}
+                        className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        title="Cancel this job"
+                      >
+                        <X className="w-3 h-3" />
+                        {cancellingJobs.has(job.id) ? 'Cancelling...' : 'Cancel'}
+                      </button>
+                    )}
                     {job.result && (
                       <button
                         onClick={() => toggleJob(job.id)}
@@ -242,6 +291,32 @@ export default function JobStatusPanel({ jobs, expanded = false }: JobStatusPane
               </div>
             )
           })}
+        </div>
+      )}
+      
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Cancel Job?</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to cancel this job? This will stop the discovery process, but it will NOT delete any prospects that have already been saved.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowCancelModal({ show: false, jobId: null })}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                No, Keep Running
+              </button>
+              <button
+                onClick={confirmCancelJob}
+                className="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700"
+              >
+                Yes, Cancel Job
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
