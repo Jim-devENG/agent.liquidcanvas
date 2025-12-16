@@ -57,10 +57,15 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
             # Order by: NULL emails first (highest priority), then by created_at (oldest first)
             from sqlalchemy import or_, nullslast
             
+            from sqlalchemy import or_
             query = select(Prospect).where(
                 Prospect.outreach_status == "pending",
                 # Only enrich service/brand intent (partner-qualified domains)
-                Prospect.serp_intent.in_(["service", "brand"])
+                # Also include prospects with NULL serp_intent (created before intent filtering was added)
+                or_(
+                    Prospect.serp_intent.in_(["service", "brand"]),
+                    Prospect.serp_intent.is_(None)  # Include legacy prospects without intent classification
+                )
             )
             
             # If only_missing_emails is True, filter to only prospects without emails
