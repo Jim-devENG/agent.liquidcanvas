@@ -2,7 +2,7 @@
 Pydantic schemas for job-related endpoints
 """
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 
