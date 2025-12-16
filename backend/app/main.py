@@ -241,6 +241,33 @@ async def startup():
                     logger.info("✅ Added discovery_query_id column, index, and foreign key")
                 else:
                     logger.info("✅ discovery_query_id column already exists")
+                
+                # Check and add serp_intent columns if missing
+                serp_intent_check = await conn.execute(
+                    text("""
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'prospects' AND column_name = 'serp_intent'
+                    """)
+                )
+                serp_intent_exists = serp_intent_check.fetchone() is not None
+                
+                if not serp_intent_exists:
+                    logger.warning("⚠️  Missing serp_intent columns - adding them now...")
+                    # Add serp_intent column
+                    await conn.execute(
+                        text("ALTER TABLE prospects ADD COLUMN serp_intent VARCHAR")
+                    )
+                    # Add serp_confidence column
+                    await conn.execute(
+                        text("ALTER TABLE prospects ADD COLUMN serp_confidence NUMERIC(3, 2)")
+                    )
+                    # Add serp_signals column (JSON)
+                    await conn.execute(
+                        text("ALTER TABLE prospects ADD COLUMN serp_signals JSONB")
+                    )
+                    logger.info("✅ Added serp_intent, serp_confidence, and serp_signals columns")
+                else:
+                    logger.info("✅ serp_intent columns already exist")
         except Exception as e:
             logger.error(f"Failed to check/add discovery_query_id column: {e}", exc_info=True)
     
