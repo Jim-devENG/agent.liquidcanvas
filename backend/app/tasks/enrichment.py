@@ -28,6 +28,9 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
     - Always compares new vs existing email confidence and updates when better.
     - Uses a very low‑confidence guesser fallback when the provider returns no emails.
     """
+    # CANARY LOG - If you see this, the task started successfully
+    logger.info(f"🚀 Enrichment job started: {job_id}")
+    
     async with AsyncSessionLocal() as db:
         try:
             # Get job
@@ -312,7 +315,8 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                         logger.info(
                             f"⚠️  [ENRICHMENT] [{idx}/{len(prospects)}] No usable email or fallback for {domain}"
                         )
-                        prospect.hunter_payload = hunter_result
+                        # Store snov_result for diagnostics (no hunter_payload - Hunter.io removed)
+                        prospect.snov_payload = snov_result
                     
                     await db.commit()
                     await db.refresh(prospect)

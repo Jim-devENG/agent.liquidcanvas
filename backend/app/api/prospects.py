@@ -88,7 +88,7 @@ async def enrich_direct(
                 "company": result.get("company") if isinstance(result, dict) else None,
                 "confidence": result.get("confidence") if isinstance(result, dict) else None,
                 "domain": domain,
-                "source": result.get("source") if isinstance(result, dict) else "hunter_io",
+                "source": result.get("source") if isinstance(result, dict) else "snov_io",
                 "error": f"No email found for domain {domain}",
             }
         
@@ -103,7 +103,7 @@ async def enrich_direct(
             "company": result.get("company"),
             "confidence": result.get("confidence"),
             "domain": domain,
-            "source": result.get("source", "hunter_io"),
+            "source": result.get("source", "snov_io"),
             "error": None,
         }
         
@@ -119,7 +119,7 @@ async def enrich_direct(
             "company": None,
             "confidence": None,
             "domain": domain,
-            "source": "hunter_io",
+            "source": "snov_io",
             "error": error_msg,
         }
 
@@ -163,7 +163,7 @@ async def enrich_prospect_by_id(
                 "company": enrich_result.get("company"),
                 "confidence": enrich_result.get("confidence"),
                 "domain": prospect.domain,
-                "source": enrich_result.get("source", "hunter_io"),
+                "source": enrich_result.get("source", "snov_io"),
                 "message": f"Email enriched for {prospect.domain}"
             }
         else:
@@ -267,17 +267,17 @@ async def create_enrichment_job(
         # Re-raise HTTP exceptions (already handled above)
         raise
     except Exception as e:
-        logger.error(f"❌ Failed to start enrichment job {job.id}: {e}", exc_info=True)
+        logger.exception("❌ Failed to start enrichment job")
         job.status = "failed"
-        # Use helper to format error message
-        job.error_message = format_job_error(e)
+        # Store full error for debugging
+        job.error_message = str(e)
         await db.commit()
         await db.refresh(job)
-        return {
-            "job_id": job.id,
-            "status": "failed",
-            "error": job.error_message
-        }
+        # Raise HTTPException with actual error for debugging
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
     
     return {
         "job_id": job.id,
@@ -817,10 +817,10 @@ async def compose_email(
     if prospect.dataforseo_payload and isinstance(prospect.dataforseo_payload, dict):
         page_snippet = prospect.dataforseo_payload.get("description") or prospect.dataforseo_payload.get("snippet")
     
-    # Extract contact name from Hunter.io payload (safe list access)
+    # Extract contact name from Snov.io payload (safe list access)
     contact_name = None
-    if prospect.hunter_payload and isinstance(prospect.hunter_payload, dict):
-        emails = prospect.hunter_payload.get("emails", [])
+    if prospect.snov_payload and isinstance(prospect.snov_payload, dict):
+        emails = prospect.snov_payload.get("emails", [])
         if emails and isinstance(emails, list) and len(emails) > 0:
             first_email = emails[0]
             if isinstance(first_email, dict):
