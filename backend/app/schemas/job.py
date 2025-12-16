@@ -38,3 +38,17 @@ class JobStatusResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
 
+
+class JobCreate(BaseModel):
+    """Request schema for creating a job"""
+    job_type: str
+    params: Optional[Dict[str, Any]] = None
+
+
+class JobListResponse(BaseModel):
+    """Response schema for listing jobs"""
+    data: List[JobResponse]
+    total: int
+    skip: int
+    limit: int
+
