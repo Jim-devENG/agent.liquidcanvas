@@ -23,6 +23,9 @@ class ProspectResponse(BaseModel):
     followups_sent: int
     draft_subject: Optional[str] = None
     draft_body: Optional[str] = None
+    serp_intent: Optional[str] = None  # SERP intent: service, brand, blog, media, marketplace, platform, unknown
+    serp_confidence: Optional[Decimal] = None  # Confidence score (0.0-1.0)
+    serp_signals: Optional[list[str]] = None  # List of signals that led to intent classification
     created_at: datetime
     updated_at: datetime
     
