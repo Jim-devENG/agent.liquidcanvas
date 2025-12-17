@@ -231,11 +231,11 @@ async def create_job(
                 logger.error(f"Failed to create enrichment task for job {new_job.id}: {task_error}", exc_info=True)
                 new_job.status = "failed"
                 new_job.error_message = f"Failed to start enrichment task: {task_error}"
-    await db.commit()
+                await db.commit()
                 await db.refresh(new_job)
         elif job.job_type == "send":
-    try:
-        from app.tasks.send import process_send_job
+            try:
+                from app.tasks.send import process_send_job
                 # Start send task in background
                 asyncio.create_task(process_send_job(str(new_job.id)))
                 logger.info(f"Send job {new_job.id} started in background")
