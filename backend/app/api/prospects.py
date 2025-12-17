@@ -192,7 +192,7 @@ async def enrich_prospect_by_id(
             prospect.contact_email = None
             prospect.contact_method = "no_email_found"
             prospect.snov_payload = enrich_result
-                await db.commit()
+            await db.commit()
             await db.refresh(prospect)
             
             pages_crawled = len(enrich_result.get("pages_crawled", []))
