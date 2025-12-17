@@ -510,7 +510,8 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                     "title": title
                                 },
                                 # PIPELINE MODE: Set discovery status, store metadata, NO enrichment
-                                discovery_status="DISCOVERED" if pipeline_mode else None,
+                                # Canonical status: DISCOVERED (pipeline mode) or NEW (legacy mode)
+                                discovery_status="DISCOVERED" if pipeline_mode else "NEW",
                                 discovery_category=query_category if pipeline_mode else None,
                                 discovery_location=loc if pipeline_mode else None,
                                 discovery_keywords=keywords if pipeline_mode else None,

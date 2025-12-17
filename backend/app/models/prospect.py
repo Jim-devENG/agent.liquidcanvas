@@ -24,7 +24,10 @@ class Prospect(Base):
     score = Column(Numeric(5, 2), default=0)  # Overall prospect score
     
     # STRICT PIPELINE STATUS FIELDS
-    discovery_status = Column(String, default="pending", index=True)  # pending, DISCOVERED, failed
+    # Canonical statuses: NEW, DISCOVERED, SCRAPED, VERIFIED, OUTREACH_READY, CONTACTED
+    # discovery_status: Required to enforce strict step-by-step pipeline progression
+    # Without this, we cannot block steps or track where prospects are in the discovery phase
+    discovery_status = Column(String, nullable=False, server_default='NEW', index=True)
     approval_status = Column(String, default="pending", index=True)  # pending, approved, rejected, deleted
     scrape_status = Column(String, default="pending", index=True)  # pending, SCRAPED, NO_EMAIL_FOUND, failed
     verification_status = Column(String, default="pending", index=True)  # pending, verified, unverified, failed

@@ -597,8 +597,10 @@ async def get_pipeline_status(
 ):
     """
     Get overall pipeline status - counts for each step
+    Uses canonical discovery_status values: NEW, DISCOVERED, SCRAPED, VERIFIED, OUTREACH_READY, CONTACTED
     """
-    # Count prospects at each step
+    # Count prospects at each step using canonical statuses
+    # Step 1: DISCOVERED (canonical status for discovered websites)
     discovered = await db.execute(
         select(func.count(Prospect.id)).where(Prospect.discovery_status == "DISCOVERED")
     )
@@ -630,12 +632,12 @@ async def get_pipeline_status(
     sent_count = sent.scalar() or 0
     
     return {
-        "step_1_discovered": discovered_count,
-        "step_2_approved": approved_count,
-        "step_3_scraped": scraped_count,
-        "step_4_verified": verified_count,
-        "step_5_review_ready": verified_count,  # Same as verified
-        "step_6_drafted": drafted_count,
-        "step_7_sent": sent_count,
+        "discovered": discovered_count,
+        "approved": approved_count,
+        "scraped": scraped_count,
+        "verified": verified_count,
+        "reviewed": verified_count,  # Same as verified for review step
+        "drafted": drafted_count,
+        "sent": sent_count,
     }
 
