@@ -28,9 +28,11 @@ class Prospect(Base):
     # discovery_status: Required to enforce strict step-by-step pipeline progression
     # Without this, we cannot block steps or track where prospects are in the discovery phase
     discovery_status = Column(String, nullable=False, server_default='NEW', index=True)
-    approval_status = Column(String, default="pending", index=True)  # pending, approved, rejected, deleted
+    # approval_status: Tracks human selection step - required for pipeline progression
+    approval_status = Column(String, nullable=False, server_default='pending', index=True)  # pending, approved, rejected, deleted
     scrape_status = Column(String, default="pending", index=True)  # pending, SCRAPED, NO_EMAIL_FOUND, failed
-    verification_status = Column(String, default="pending", index=True)  # pending, verified, unverified, failed
+    # verification_status: Tracks email verification step - required for pipeline status queries
+    verification_status = Column(String, nullable=False, server_default='unverified', index=True)  # pending, verified, unverified, failed
     draft_status = Column(String, default="pending", index=True)  # pending, drafted, failed
     send_status = Column(String, default="pending", index=True)  # pending, sent, failed
     

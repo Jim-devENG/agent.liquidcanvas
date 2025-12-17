@@ -234,30 +234,30 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
 
                     # STRICT MODE: Save email if found, otherwise already handled above
                     if new_email:
-                            # Final validation before saving
-                            if not is_plausible_email(new_email):
-                                logger.warning(f"🚫 [ENRICHMENT] Rejecting implausible email before save: {new_email}")
+                        # Final validation before saving
+                        if not is_plausible_email(new_email):
+                            logger.warning(f"🚫 [ENRICHMENT] Rejecting implausible email before save: {new_email}")
                             prospect.contact_email = None
                             prospect.contact_method = "no_email_found"
                             prospect.snov_payload = enrich_result
-                                no_email_count += 1
+                            no_email_count += 1
                             await db.commit()
                             await db.refresh(prospect)
-                                continue
-                            
+                            continue
+                        
                         # Save the email
-                            old_email_log = str(prospect.contact_email) if prospect.contact_email else None
-                            logger.info(
+                        old_email_log = str(prospect.contact_email) if prospect.contact_email else None
+                        logger.info(
                             f"✅ [ENRICHMENT] [{idx}/{len(prospects)}] Saving email for {domain}: "
                             f"{old_email_log or 'None'} -> {new_email}, source={provider_source}, "
                             f"pages_crawled={len(enrich_result.get('pages_crawled', []))}, "
                             f"total_emails={len(enrich_result.get('emails', []))}"
-                            )
-                            prospect.contact_email = new_email
-                            prospect.contact_method = provider_source
+                        )
+                        prospect.contact_email = new_email
+                        prospect.contact_method = provider_source
                         # Store full enrichment result in snov_payload
                         prospect.snov_payload = enrich_result
-                            enriched_count += 1
+                        enriched_count += 1
                     else:
                         # This should not happen (handled above), but log it
                         logger.error(

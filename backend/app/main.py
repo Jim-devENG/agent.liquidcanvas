@@ -270,68 +270,88 @@ async def startup():
                 else:
                     logger.info("✅ serp_intent columns already exist")
                 
-                # CRITICAL FIX: Check and add discovery_status column if missing
-                # This column is required for /api/pipeline/status to work
-                discovery_status_check = await conn.execute(
-                    text("""
-                        SELECT column_name, is_nullable, column_default
-                        FROM information_schema.columns 
-                        WHERE table_name = 'prospects' 
-                        AND column_name = 'discovery_status'
-                    """)
-                )
-                discovery_status_row = discovery_status_check.fetchone()
+                # CRITICAL FIX: Ensure ALL pipeline status columns exist
+                # Required columns for /api/pipeline/status to work without 500 errors
+                # Format: (column_name, sql_type, default_value, should_be_not_null)
+                required_pipeline_columns = [
+                    ("discovery_status", "VARCHAR", "NEW", True),
+                    ("approval_status", "VARCHAR", "pending", True),
+                    ("verification_status", "VARCHAR", "unverified", True),
+                ]
                 
-                if not discovery_status_row:
-                    logger.warning("⚠️  Missing discovery_status column - adding it now...")
-                    # Step 1: Add column as nullable first (safe for existing rows)
-                    await conn.execute(
-                        text("ALTER TABLE prospects ADD COLUMN discovery_status VARCHAR")
+                for column_name, sql_type, default_value, should_be_not_null in required_pipeline_columns:
+                    # Check if column exists
+                    column_check = await conn.execute(
+                        text("""
+                            SELECT column_name, is_nullable, column_default
+                            FROM information_schema.columns 
+                            WHERE table_name = 'prospects' 
+                            AND column_name = :column_name
+                        """),
+                        {"column_name": column_name}
                     )
-                    # Step 2: Backfill existing rows with 'NEW' (canonical default)
-                    await conn.execute(
-                        text("UPDATE prospects SET discovery_status = 'NEW' WHERE discovery_status IS NULL")
-                    )
-                    # Step 3: Set default to 'NEW'
-                    await conn.execute(
-                        text("ALTER TABLE prospects ALTER COLUMN discovery_status SET DEFAULT 'NEW'")
-                    )
-                    # Step 4: Make NOT NULL (safe now that all rows have values)
-                    await conn.execute(
-                        text("ALTER TABLE prospects ALTER COLUMN discovery_status SET NOT NULL")
-                    )
-                    # Step 5: Create index for performance
-                    await conn.execute(
-                        text("CREATE INDEX IF NOT EXISTS ix_prospects_discovery_status ON prospects(discovery_status)")
-                    )
-                    logger.info("✅ Added discovery_status column (NOT NULL, DEFAULT 'NEW') with index")
-                else:
-                    # Column exists - check if it needs to be fixed (nullable or wrong default)
-                    is_nullable = discovery_status_row[1] == 'YES'
-                    current_default = discovery_status_row[2]
+                    column_row = column_check.fetchone()
                     
-                    if is_nullable or (current_default and "'NEW'" not in str(current_default)):
-                        logger.warning(f"⚠️  discovery_status column exists but needs fixing (nullable={is_nullable}, default={current_default})")
-                        # Backfill NULL values
+                    if not column_row:
+                        logger.warning(f"⚠️  Missing {column_name} column - adding it now...")
+                        # Step 1: Add column as nullable first (safe for existing rows)
                         await conn.execute(
-                            text("UPDATE prospects SET discovery_status = 'NEW' WHERE discovery_status IS NULL")
+                            text(f"ALTER TABLE prospects ADD COLUMN {column_name} {sql_type}")
                         )
-                        # Update default if needed
-                        if not current_default or "'NEW'" not in str(current_default):
+                        # Step 2: Backfill existing rows with default value
+                        await conn.execute(
+                            text(f"UPDATE prospects SET {column_name} = :default_value WHERE {column_name} IS NULL"),
+                            {"default_value": default_value}
+                        )
+                        # Step 3: Set default (use string formatting for ALTER TABLE)
+                        await conn.execute(
+                            text(f"ALTER TABLE prospects ALTER COLUMN {column_name} SET DEFAULT '{default_value}'")
+                        )
+                        # Step 4: Make NOT NULL if required (safe now that all rows have values)
+                        if should_be_not_null:
                             await conn.execute(
-                                text("ALTER TABLE prospects ALTER COLUMN discovery_status DROP DEFAULT")
+                                text(f"ALTER TABLE prospects ALTER COLUMN {column_name} SET NOT NULL")
                             )
-                            await conn.execute(
-                                text("ALTER TABLE prospects ALTER COLUMN discovery_status SET DEFAULT 'NEW'")
-                            )
-                        # Make NOT NULL if currently nullable
-                        if is_nullable:
-                            await conn.execute(
-                                text("ALTER TABLE prospects ALTER COLUMN discovery_status SET NOT NULL")
-                            )
-                        logger.info("✅ Fixed discovery_status column (now NOT NULL with DEFAULT 'NEW')")
+                        # Step 5: Create index for performance
+                        await conn.execute(
+                            text(f"CREATE INDEX IF NOT EXISTS ix_prospects_{column_name} ON prospects({column_name})")
+                        )
+                        logger.info(f"✅ Added {column_name} column ({'NOT NULL' if should_be_not_null else 'NULLABLE'}, DEFAULT '{default_value}') with index")
                     else:
-                        logger.info("✅ discovery_status column already exists and is correct")
+                        # Column exists - check if it needs to be fixed
+                        is_nullable = column_row[1] == 'YES'
+                        current_default = column_row[2]
+                        default_str = f"'{default_value}'"
+                        
+                        needs_fix = False
+                        if should_be_not_null and is_nullable:
+                            needs_fix = True
+                        if current_default and default_str not in str(current_default):
+                            needs_fix = True
+                        
+                        if needs_fix:
+                            logger.warning(f"⚠️  {column_name} column exists but needs fixing (nullable={is_nullable}, default={current_default})")
+                            # Backfill NULL values
+                            await conn.execute(
+                                text(f"UPDATE prospects SET {column_name} = :default_value WHERE {column_name} IS NULL"),
+                                {"default_value": default_value}
+                            )
+                            # Update default if needed
+                            if not current_default or default_str not in str(current_default):
+                                await conn.execute(
+                                    text(f"ALTER TABLE prospects ALTER COLUMN {column_name} DROP DEFAULT")
+                                )
+                                await conn.execute(
+                                    text(f"ALTER TABLE prospects ALTER COLUMN {column_name} SET DEFAULT '{default_value}'")
+                                )
+                            # Make NOT NULL if required and currently nullable
+                            if should_be_not_null and is_nullable:
+                                await conn.execute(
+                                    text(f"ALTER TABLE prospects ALTER COLUMN {column_name} SET NOT NULL")
+                                )
+                            logger.info(f"✅ Fixed {column_name} column (now {'NOT NULL' if should_be_not_null else 'NULLABLE'} with DEFAULT '{default_value}')")
+                        else:
+                            logger.info(f"✅ {column_name} column already exists and is correct")
         except Exception as e:
             logger.error(f"Failed to check/add discovery_status column: {e}", exc_info=True)
     
