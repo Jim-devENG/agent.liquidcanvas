@@ -241,24 +241,24 @@ async def create_enrichment_job(
         try:
             from app.tasks.enrichment import process_enrichment_job
         except SyntaxError as syntax_err:
-            logger.error(f"❌ Syntax error in enrichment task module: {syntax_err}", exc_info=True)
+            logger.exception("❌ Syntax error in enrichment task module")
             job.status = "failed"
-            job.error_message = "System error: Code syntax issue detected. Please contact support."
+            job.error_message = str(syntax_err)
             await db.commit()
             await db.refresh(job)
             raise HTTPException(
                 status_code=500,
-                detail="System error: Unable to start enrichment job due to code issue. Please contact support."
+                detail=str(syntax_err)
             )
         except ImportError as import_err:
-            logger.error(f"❌ Import error for enrichment task: {import_err}", exc_info=True)
+            logger.exception("❌ Import error for enrichment task")
             job.status = "failed"
-            job.error_message = "System error: Module import failed. Please contact support."
+            job.error_message = str(import_err)
             await db.commit()
             await db.refresh(job)
             raise HTTPException(
                 status_code=500,
-                detail="System error: Unable to import enrichment task module. Please contact support."
+                detail=str(import_err)
             )
         
         asyncio.create_task(process_enrichment_job(str(job.id)))
