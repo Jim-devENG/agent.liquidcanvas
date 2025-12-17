@@ -54,7 +54,7 @@ async def scrape_prospects_async(job_id: str):
                 select(Prospect).where(
                     Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
                     Prospect.approval_status == "approved",
-                    Prospect.scrape_status == "pending"
+                    Prospect.scrape_status == "DISCOVERED"
                 )
             )
             prospects = result.scalars().all()

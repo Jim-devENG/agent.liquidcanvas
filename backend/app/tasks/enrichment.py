@@ -257,6 +257,8 @@ async def process_enrichment_job(job_id: str) -> Dict[str, Any]:
                         prospect.contact_method = provider_source
                         # Store full enrichment result in snov_payload
                         prospect.snov_payload = enrich_result
+                        # Update scrape_status to ENRICHED when email is successfully found
+                        prospect.scrape_status = "ENRICHED"
                         enriched_count += 1
                     else:
                         # This should not happen (handled above), but log it

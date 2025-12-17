@@ -613,11 +613,20 @@ async def get_pipeline_status(
     )
     approved_count = approved.scalar() or 0
     
-    # Step 3: SCRAPED (scrape_status = "SCRAPED")
+    # Step 3: SCRAPED (scrape_status = "SCRAPED" or "ENRICHED")
+    # Count both SCRAPED (emails found via scraping) and ENRICHED (emails found via enrichment)
     scraped = await db.execute(
-        select(func.count(Prospect.id)).where(Prospect.scrape_status == "SCRAPED")
+        select(func.count(Prospect.id)).where(
+            Prospect.scrape_status.in_(["SCRAPED", "ENRICHED"])
+        )
     )
     scraped_count = scraped.scalar() or 0
+    
+    # Also count DISCOVERED (ready for scraping)
+    discovered_for_scraping = await db.execute(
+        select(func.count(Prospect.id)).where(Prospect.scrape_status == "DISCOVERED")
+    )
+    discovered_for_scraping_count = discovered_for_scraping.scalar() or 0
     
     # Step 4: VERIFIED (verification_status = "verified")
     verified = await db.execute(
@@ -625,12 +634,14 @@ async def get_pipeline_status(
     )
     verified_count = verified.scalar() or 0
     
-    # Return only the four guaranteed counts
-    # All other steps (draft, send) are optional and not queried to prevent 500 errors
+    # Return pipeline status counts
+    # scrape_status lifecycle: DISCOVERED → SCRAPED → ENRICHED → EMAILED (send_status)
+    # All queries are defensive and return 0 if no rows exist
     return {
         "discovered": discovered_count,
         "approved": approved_count,
-        "scraped": scraped_count,
+        "scraped": scraped_count,  # Includes both SCRAPED and ENRICHED
+        "discovered_for_scraping": discovered_for_scraping_count,  # DISCOVERED status (ready for scraping)
         "verified": verified_count,
         "reviewed": verified_count,  # Same as verified for review step
     }

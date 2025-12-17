@@ -276,7 +276,7 @@ async def startup():
                 # These four columns are CRITICAL - missing any causes 500 errors
                 required_pipeline_columns = [
                     ("discovery_status", "VARCHAR", "NEW", True),
-                    ("scrape_status", "VARCHAR", "PENDING", True),
+                    ("scrape_status", "VARCHAR", "DISCOVERED", True),
                     ("approval_status", "VARCHAR", "PENDING", True),
                     ("verification_status", "VARCHAR", "UNVERIFIED", True),
                 ]
