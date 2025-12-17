@@ -1,5 +1,6 @@
 """
 Prospect model - stores discovered websites and their contact information
+STRICT PIPELINE: Each step has explicit status tracking
 """
 from sqlalchemy import Column, String, Text, Numeric, Integer, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
@@ -21,17 +22,46 @@ class Prospect(Base):
     contact_method = Column(String)  # email, form, social, etc.
     da_est = Column(Numeric(5, 2))  # Domain Authority estimate (0-100)
     score = Column(Numeric(5, 2), default=0)  # Overall prospect score
+    
+    # STRICT PIPELINE STATUS FIELDS
+    discovery_status = Column(String, default="pending", index=True)  # pending, DISCOVERED, failed
+    approval_status = Column(String, default="pending", index=True)  # pending, approved, rejected, deleted
+    scrape_status = Column(String, default="pending", index=True)  # pending, SCRAPED, NO_EMAIL_FOUND, failed
+    verification_status = Column(String, default="pending", index=True)  # pending, verified, unverified, failed
+    draft_status = Column(String, default="pending", index=True)  # pending, drafted, failed
+    send_status = Column(String, default="pending", index=True)  # pending, sent, failed
+    
+    # Legacy outreach_status (kept for backward compatibility)
     outreach_status = Column(String, default="pending", index=True)  # pending/sent/replied/accepted/rejected
+    
     last_sent = Column(DateTime(timezone=True))
     followups_sent = Column(Integer, default=0)
     draft_subject = Column(Text)  # Draft email subject
     draft_body = Column(Text)  # Draft email body
+    
+    # Discovery metadata
+    discovery_query_id = Column(UUID(as_uuid=True), ForeignKey("discovery_queries.id"), nullable=True, index=True)
+    discovery_category = Column(String)  # Category from discovery
+    discovery_location = Column(String)  # Location from discovery
+    discovery_keywords = Column(Text)  # Keywords from discovery
+    
+    # Scraping metadata
+    scrape_payload = Column(JSON)  # Emails found during scraping: {url: [emails]}
+    scrape_source_url = Column(Text)  # URL where email was found
+    
+    # Verification metadata
+    verification_confidence = Column(Numeric(5, 2))  # Confidence score from Snov
+    verification_payload = Column(JSON)  # Raw verification response
+    
+    # Raw API responses (kept for backward compatibility)
     dataforseo_payload = Column(JSON)  # Raw DataForSEO response
     snov_payload = Column(JSON)  # Raw Snov.io response
-    discovery_query_id = Column(UUID(as_uuid=True), ForeignKey("discovery_queries.id"), nullable=True, index=True)  # Link to discovery query
+    
+    # SERP intent (from previous implementation)
     serp_intent = Column(String)  # SERP intent: service, brand, blog, media, marketplace, platform, unknown
     serp_confidence = Column(Numeric(3, 2))  # Confidence score (0.0-1.0)
     serp_signals = Column(JSON)  # List of signals that led to intent classification
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
@@ -39,5 +69,20 @@ class Prospect(Base):
     discovery_query = relationship("DiscoveryQuery", back_populates="prospects", lazy="select")
     
     def __repr__(self):
-        return f"<Prospect(id={self.id}, domain={self.domain}, status={self.outreach_status})>"
-
+        return f"<Prospect(id={self.id}, domain={self.domain}, discovery={self.discovery_status}, approval={self.approval_status})>"
+    
+    def can_proceed_to_scraping(self) -> bool:
+        """Check if prospect can proceed to scraping step"""
+        return self.discovery_status == "DISCOVERED" and self.approval_status == "approved"
+    
+    def can_proceed_to_verification(self) -> bool:
+        """Check if prospect can proceed to verification step"""
+        return self.scrape_status in ["SCRAPED", "NO_EMAIL_FOUND"]
+    
+    def can_proceed_to_drafting(self) -> bool:
+        """Check if prospect can proceed to drafting step"""
+        return self.verification_status in ["verified", "unverified"]
+    
+    def can_proceed_to_sending(self) -> bool:
+        """Check if prospect can proceed to sending step"""
+        return self.draft_status == "drafted"

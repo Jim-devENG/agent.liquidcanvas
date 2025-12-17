@@ -502,8 +502,8 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
       }
       // Try other possible keys
       const jobs = data.jobs || data.items || []
-      if (Array.isArray(jobs)) {
-        return jobs
+        if (Array.isArray(jobs)) {
+          return jobs
       }
       console.warn('⚠️ listJobs: Response is not an array. Got:', typeof data, data)
       return []
@@ -511,7 +511,7 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
     
     // If it's already an array, return it
     if (Array.isArray(data)) {
-      return data
+    return data
     }
     
     return []
@@ -541,14 +541,14 @@ export async function listProspects(
   params.append('_t', Date.now().toString())
   
   try {
-    const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
+  const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
       throw new Error(error.detail || `Failed to list prospects: ${res.status} ${res.statusText}`)
-    }
-    const result: any = await res.json()
-    
-    // Normalize to PaginatedResponse<Prospect>
+  }
+  const result: any = await res.json()
+  
+  // Normalize to PaginatedResponse<Prospect>
     // Backend returns: {success: true, data: {data: [...], prospects: [...], total: ...}}
     // Handle nested structure
     let prospectsData: Prospect[] = []
@@ -578,11 +578,11 @@ export async function listProspects(
     
     console.log(`📊 listProspects: Found ${prospectsData.length} prospects (total: ${total})`)
     
-    return {
+  return {
       data: prospectsData,
       total: total,
-      skip,
-      limit,
+    skip,
+    limit,
     }
   } catch (error: any) {
     console.error('listProspects API error:', error)

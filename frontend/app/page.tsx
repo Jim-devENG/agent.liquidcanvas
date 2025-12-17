@@ -38,7 +38,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<
     'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
   >('overview')
-  
+
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
 
@@ -201,7 +201,7 @@ export default function Dashboard() {
                 <LogOutIcon className="w-4 h-4" />
                 <span>Logout</span>
               </button>
-            </div>
+          </div>
         </div>
       </header>
 

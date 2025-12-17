@@ -80,12 +80,12 @@ async def get_job(
     Get a specific job by ID
     """
     try:
-        result = await db.execute(select(Job).where(Job.id == job_id))
-        job = result.scalar_one_or_none()
-        
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
         return JobResponse.model_validate(job)
     except HTTPException:
         raise
@@ -104,18 +104,18 @@ async def cancel_job(
     Cancel a running or pending job
     """
     try:
-        result = await db.execute(select(Job).where(Job.id == job_id))
-        job = result.scalar_one_or_none()
-        
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        if job.status not in ["pending", "running"]:
-            raise HTTPException(
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status not in ["pending", "running"]:
+        raise HTTPException(
                 status_code=400,
                 detail=f"Cannot cancel job with status '{job.status}'. Only pending or running jobs can be cancelled."
             )
-        
+    
         # Cancel the background task if it exists
         try:
             from app.task_manager import unregister_task, get_task
@@ -231,11 +231,11 @@ async def create_job(
                 logger.error(f"Failed to create enrichment task for job {new_job.id}: {task_error}", exc_info=True)
                 new_job.status = "failed"
                 new_job.error_message = f"Failed to start enrichment task: {task_error}"
-                await db.commit()
+    await db.commit()
                 await db.refresh(new_job)
         elif job.job_type == "send":
-            try:
-                from app.tasks.send import process_send_job
+    try:
+        from app.tasks.send import process_send_job
                 # Start send task in background
                 asyncio.create_task(process_send_job(str(new_job.id)))
                 logger.info(f"Send job {new_job.id} started in background")

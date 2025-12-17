@@ -487,6 +487,10 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                 else:
                                     logger.info(f"💾 [DISCOVERY] Saving prospect {domain} without email (intent: {serp_intent} - skipped)")
                             
+                            # Check if this is pipeline mode (strict step-by-step)
+                            job_params = job.params if job else {}
+                            pipeline_mode = job_params.get("pipeline_mode", False)
+                            
                             prospect = Prospect(
                                 domain=domain,
                                 page_url=normalized_url,
@@ -504,7 +508,17 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                     "location": loc,
                                     "url": normalized_url,
                                     "title": title
-                                }
+                                },
+                                # PIPELINE MODE: Set discovery status, store metadata, NO enrichment
+                                discovery_status="DISCOVERED" if pipeline_mode else None,
+                                discovery_category=query_category if pipeline_mode else None,
+                                discovery_location=loc if pipeline_mode else None,
+                                discovery_keywords=keywords if pipeline_mode else None,
+                                approval_status="pending" if pipeline_mode else None,
+                                scrape_status="pending" if pipeline_mode else None,
+                                verification_status="pending" if pipeline_mode else None,
+                                draft_status="pending" if pipeline_mode else None,
+                                send_status="pending" if pipeline_mode else None,
                             )
                             
                             db.add(prospect)

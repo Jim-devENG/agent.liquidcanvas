@@ -97,7 +97,7 @@ app.add_middleware(
 )
 
 # Include routers
-from app.api import auth, settings, scraper
+from app.api import auth, settings, scraper, pipeline
 # To use Supabase Auth instead, replace the line below with:
 # from app.api import auth_supabase
 # app.include_router(auth_supabase.router, prefix="/api/auth", tags=["auth"])
@@ -106,6 +106,7 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
+app.include_router(pipeline.router, tags=["pipeline"])  # Already has /api/pipeline prefix
 
 # Webhook routes
 from app.api import webhooks
