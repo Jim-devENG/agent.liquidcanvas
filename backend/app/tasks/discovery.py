@@ -434,49 +434,49 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                     logger.info(f"🔍 [DISCOVERY] Enriching {domain} before saving (intent: {serp_intent})...")
                                     # Pass page_url to enrichment so it can try that page first
                                     enrich_result = await enrich_prospect_email(domain, None, normalized_url)
-                                
-                                if enrich_result:
-                                    enrich_status = enrich_result.get("status")
                                     
-                                    # Handle rate limits and retry status - DO NOT skip, mark for retry
-                                    if enrich_status in ["rate_limited", "pending_retry"]:
-                                        logger.warning(f"⚠️  [DISCOVERY] {domain} marked for retry (status: {enrich_status})")
-                                        # Still save prospect, but mark email as pending
-                                        contact_email = None  # Will be set later via retry
-                                        snov_payload = {
-                                            "status": enrich_status,
-                                            "error": enrich_result.get("error"),
-                                            "retry_needed": True
-                                        }
-                                    elif enrich_result.get("email"):
-                                        # Email found successfully
-                                        contact_email = enrich_result["email"]
-                                        # Store enrichment metadata
-                                        snov_payload = {
-                                            "email": contact_email,
-                                            "confidence": enrich_result.get("confidence", 0),
-                                            "source": enrich_result.get("source", "snov_io")
-                                        }
-                                        logger.info(f"✅ [DISCOVERY] Enriched {domain}: {contact_email}")
+                                    if enrich_result:
+                                        enrich_status = enrich_result.get("status")
+                                        
+                                        # Handle rate limits and retry status - DO NOT skip, mark for retry
+                                        if enrich_status in ["rate_limited", "pending_retry"]:
+                                            logger.warning(f"⚠️  [DISCOVERY] {domain} marked for retry (status: {enrich_status})")
+                                            # Still save prospect, but mark email as pending
+                                            contact_email = None  # Will be set later via retry
+                                            snov_payload = {
+                                                "status": enrich_status,
+                                                "error": enrich_result.get("error"),
+                                                "retry_needed": True
+                                            }
+                                        elif enrich_result.get("email"):
+                                            # Email found successfully
+                                            contact_email = enrich_result["email"]
+                                            # Store enrichment metadata
+                                            snov_payload = {
+                                                "email": contact_email,
+                                                "confidence": enrich_result.get("confidence", 0),
+                                                "source": enrich_result.get("source", "snov_io")
+                                            }
+                                            logger.info(f"✅ [DISCOVERY] Enriched {domain}: {contact_email}")
+                                        else:
+                                            # No email but not rate limited - mark for retry
+                                            logger.warning(f"⚠️  [DISCOVERY] No email found for {domain}, marking for retry")
+                                            contact_email = None
+                                            snov_payload = {
+                                                "status": "pending_retry",
+                                                "error": enrich_result.get("error", "No email found"),
+                                                "retry_needed": True
+                                            }
                                     else:
-                                        # No email but not rate limited - mark for retry
-                                        logger.warning(f"⚠️  [DISCOVERY] No email found for {domain}, marking for retry")
+                                        # Enrichment returned None - mark for retry
+                                        logger.warning(f"⚠️  [DISCOVERY] Enrichment returned None for {domain}, marking for retry")
                                         contact_email = None
                                         snov_payload = {
                                             "status": "pending_retry",
-                                            "error": enrich_result.get("error", "No email found"),
+                                            "error": "Enrichment returned no result",
                                             "retry_needed": True
                                         }
-                                else:
-                                    # Enrichment returned None - mark for retry
-                                    logger.warning(f"⚠️  [DISCOVERY] Enrichment returned None for {domain}, marking for retry")
-                                    contact_email = None
-                                    hunter_payload = {
-                                        "status": "pending_retry",
-                                        "error": "Enrichment returned no result",
-                                        "retry_needed": True
-                                    }
-                                    
+                                        
                                 except Exception as e:
                                     # DEFENSIVE: Log error but DO NOT skip - mark for retry instead
                                     logger.error(f"❌ [DISCOVERY] Enrichment failed for {domain}: {e}", exc_info=True)
