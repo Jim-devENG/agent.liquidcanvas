@@ -104,14 +104,14 @@ async def cancel_job(
     Cancel a running or pending job
     """
     try:
-    result = await db.execute(select(Job).where(Job.id == job_id))
-    job = result.scalar_one_or_none()
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    if job.status not in ["pending", "running"]:
-        raise HTTPException(
+        result = await db.execute(select(Job).where(Job.id == job_id))
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        if job.status not in ["pending", "running"]:
+            raise HTTPException(
                 status_code=400,
                 detail=f"Cannot cancel job with status '{job.status}'. Only pending or running jobs can be cancelled."
             )
