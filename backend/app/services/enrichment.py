@@ -190,46 +190,88 @@ async def _scrape_email_from_url(url: str, domain: Optional[str] = None) -> Opti
     return None
 
 
+def _classify_email(email: str) -> str:
+    """
+    Classify an email address as generic, role_based, or personal.
+    
+    Args:
+        email: Email address (e.g., "info@example.com")
+    
+    Returns:
+        Classification: "generic", "role_based", or "personal"
+    """
+    if not email or "@" not in email:
+        return "generic"
+    
+    local_part = email.split("@")[0].lower()
+    
+    # Generic contact emails (most common)
+    generic_patterns = ['info', 'contact', 'hello', 'hi', 'general', 'inquiry', 'enquiry', 'mail', 'email']
+    if local_part in generic_patterns:
+        return "generic"
+    
+    # Role-based emails (business functions)
+    role_patterns = ['support', 'sales', 'help', 'admin', 'team', 'marketing', 'press', 'media', 'pr', 
+                     'business', 'service', 'services', 'customerservice', 'customer-service',
+                     'publicrelations', 'public-relations', 'office', 'main', 'reach', 'connect']
+    if local_part in role_patterns:
+        return "role_based"
+    
+    # Personal emails (name-based patterns)
+    # If it contains dots, hyphens, or looks like a name, it's likely personal
+    if '.' in local_part or '-' in local_part or len(local_part.split()) > 1:
+        # Check if it looks like firstname.lastname or firstnamelastname
+        if any(char.isalpha() for char in local_part):
+            return "personal"
+    
+    # Default to generic if unclear
+    return "generic"
+
+
 def _generate_email_patterns(domain: str, person_name: Optional[str] = None) -> List[str]:
     """
     Generate common email patterns for a domain.
+    Prioritizes generic contact emails first (V1 requirement: at least one reachable email).
     
     Args:
         domain: Domain name (e.g., "example.com")
         person_name: Optional person name for personalized patterns
     
     Returns:
-        List of generated email addresses
+        List of generated email addresses, ordered by priority (generic first)
     """
     if not domain or not validate_domain(domain):
         return []
     
     patterns = []
     
-    # Common contact email patterns (expanded list for better coverage)
-    common_prefixes = [
-        'info', 'contact', 'support', 'hello', 'sales', 'help', 'admin', 'team',
-        'hi', 'inquiry', 'enquiry', 'general', 'office', 'main', 'mail',
-        'email', 'reach', 'connect', 'getintouch', 'get-in-touch', 'reachout',
-        'business', 'service', 'services', 'customerservice', 'customer-service',
-        'marketing', 'press', 'media', 'pr', 'publicrelations', 'public-relations'
-    ]
-    for prefix in common_prefixes:
+    # Priority 1: Most common generic contact emails (V1 requirement)
+    high_priority_generic = ['info', 'contact', 'hello', 'support']
+    for prefix in high_priority_generic:
         patterns.append(f"{prefix}@{domain}")
     
-    # Personalized patterns if name provided
+    # Priority 2: Other common contact emails
+    common_prefixes = [
+        'sales', 'help', 'admin', 'team', 'hi', 'inquiry', 'enquiry', 
+        'general', 'office', 'main', 'mail', 'email', 'reach', 'connect',
+        'getintouch', 'get-in-touch', 'reachout', 'business', 'service', 
+        'services', 'customerservice', 'customer-service', 'marketing', 
+        'press', 'media', 'pr', 'publicrelations', 'public-relations'
+    ]
+    for prefix in common_prefixes:
+        if f"{prefix}@{domain}" not in patterns:  # Avoid duplicates
+            patterns.append(f"{prefix}@{domain}")
+    
+    # Priority 3: Personalized patterns if name provided
     if person_name:
         name_parts = person_name.strip().lower().split()
         if len(name_parts) >= 1:
             first_name = name_parts[0]
-            # firstname@domain
             patterns.append(f"{first_name}@{domain}")
             
             if len(name_parts) >= 2:
                 last_name = name_parts[1]
-                # firstname.lastname@domain
                 patterns.append(f"{first_name}.{last_name}@{domain}")
-                # firstnamelastname@domain
                 patterns.append(f"{first_name}{last_name}@{domain}")
     
     return patterns
@@ -477,37 +519,88 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             except Exception as scrape_err:
                 logger.debug(f"Local scraping fallback failed for {normalized_domain}: {scrape_err}")
             
-            # Fallback 2: Generate email patterns and verify
+            # Fallback 2: Generate email patterns and verify (V1: deterministic pipeline)
+            logger.info(f"🔍 [ENRICHMENT] Step 2: Generating email patterns for {normalized_domain}")
             try:
                 generated_patterns = _generate_email_patterns(normalized_domain, name)
-                logger.info(f"🔍 [ENRICHMENT] Generated {len(generated_patterns)} email patterns for {normalized_domain}")
+                logger.info(f"📧 [ENRICHMENT] Generated {len(generated_patterns)} email patterns for {normalized_domain}")
                 
-                # Try to verify patterns (increased limit for better coverage)
-                for pattern_email in generated_patterns[:10]:  # Increased from 5 to 10 to try more patterns
+                # Step 2a: Try to verify patterns (preferred method)
+                verified_email = None
+                verified_score = 0.0
+                for pattern_email in generated_patterns[:10]:  # Try top 10 patterns
                     try:
+                        logger.debug(f"🔍 [ENRICHMENT] Verifying pattern: {pattern_email}")
                         verify_result = await snov_client.email_verifier(pattern_email)
                         if verify_result.get("success") and verify_result.get("result") == "deliverable":
                             score = verify_result.get("score", 0)
                             logger.info(f"✅ [ENRICHMENT] Verified pattern email {pattern_email} (score: {score})")
-                            return {
-                                "email": pattern_email,
-                                "name": name,
-                                "company": None,
-                                "confidence": float(score),
-                                "domain": normalized_domain,
-                                "success": True,
-                                "source": "pattern_generated",
-                                "error": None,
-                                "status": None,
-                            }
+                            verified_email = pattern_email
+                            verified_score = float(score)
+                            break  # Use first verified email
                     except Exception as verify_err:
-                        logger.debug(f"Email verification failed for {pattern_email}: {verify_err}")
+                        logger.debug(f"⚠️  [ENRICHMENT] Verification failed for {pattern_email}: {verify_err}")
                         continue
+                
+                # Step 2b: If verification succeeded, return verified email
+                if verified_email:
+                    email_classification = _classify_email(verified_email)
+                    logger.info(f"✅ [ENRICHMENT] Using verified pattern email: {verified_email} (classification: {email_classification})")
+                    return {
+                        "email": verified_email,
+                        "name": name,
+                        "company": None,
+                        "confidence": verified_score,
+                        "domain": normalized_domain,
+                        "success": True,
+                        "source": "pattern_verified",
+                        "error": None,
+                        "status": None,
+                        "email_classification": email_classification,
+                    }
+                
+                # Step 2c: V1 FALLBACK - Use first plausible pattern without verification
+                # This ensures we ALWAYS have at least one email per website
+                logger.warning(f"⚠️  [ENRICHMENT] No patterns verified, using unverified fallback for {normalized_domain}")
+                for pattern_email in generated_patterns[:5]:  # Try top 5 most common patterns
+                    if is_plausible_email(pattern_email):
+                        email_classification = _classify_email(pattern_email)
+                        logger.info(f"🟡 [ENRICHMENT] Using unverified pattern email: {pattern_email} (classification: {email_classification}) - V1 fallback")
+                        return {
+                            "email": pattern_email,
+                            "name": name,
+                            "company": None,
+                            "confidence": 20.0,  # Low confidence for unverified
+                            "domain": normalized_domain,
+                            "success": True,
+                            "source": "pattern_unverified",
+                            "error": None,
+                            "status": None,
+                            "email_classification": email_classification,
+                        }
+                
             except Exception as pattern_err:
-                logger.debug(f"Email pattern generation failed for {normalized_domain}: {pattern_err}")
+                logger.error(f"❌ [ENRICHMENT] Pattern generation failed for {normalized_domain}: {pattern_err}", exc_info=True)
             
-            # Mark for retry instead of returning None
-            logger.warning(f"⚠️  [ENRICHMENT] No emails found for {normalized_domain} via any method, marking for retry")
+            # Final fallback: Use info@ as absolute last resort (V1 requirement)
+            final_fallback = f"info@{normalized_domain}"
+            if is_plausible_email(final_fallback):
+                logger.warning(f"🟡 [ENRICHMENT] Using final fallback email: {final_fallback} for {normalized_domain} - V1 requirement")
+                return {
+                    "email": final_fallback,
+                    "name": name,
+                    "company": None,
+                    "confidence": 10.0,  # Very low confidence
+                    "domain": normalized_domain,
+                    "success": True,
+                    "source": "final_fallback",
+                    "error": None,
+                    "status": None,
+                    "email_classification": "generic",
+                }
+            
+            # This should never happen, but log it
+            logger.error(f"❌ [ENRICHMENT] CRITICAL: Could not generate any email for {normalized_domain}")
             return {
                 "email": None,
                 "name": None,
@@ -516,7 +609,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
                 "domain": normalized_domain,
                 "success": False,
                 "source": None,
-                "error": "No emails found via Snov.io, local scraping, or pattern generation",
+                "error": "Failed to generate any email pattern (critical error)",
                 "status": "pending_retry",
             }
         
@@ -630,6 +723,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
         
         total_time = (time.time() - start_time) * 1000
         
+        email_classification = _classify_email(email_value)
         result: Dict[str, Any] = {
             "email": email_value,
             "name": full_name,
@@ -642,6 +736,7 @@ async def enrich_prospect_email(domain: str, name: Optional[str] = None, page_ur
             "success": True,
             "source": "snov_io",
             "error": None,
+            "email_classification": email_classification,
         }
         
         logger.info(f"✅ [ENRICHMENT] Enriched {normalized_domain} in {total_time:.0f}ms")
