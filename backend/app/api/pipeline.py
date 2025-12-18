@@ -681,13 +681,16 @@ async def get_pipeline_status(
     )
     scraped_count = scraped.scalar() or 0
     
-    # Also count DISCOVERED (ready for scraping)
-    discovered_for_scraping = await db.execute(
+    # Scrape-ready: any DISCOVERED prospect that has NOT been explicitly rejected.
+    # This unlocks scraping as soon as at least one website has been discovered,
+    # while still allowing optional manual rejection to exclude sites.
+    scrape_ready = await db.execute(
         select(func.count(Prospect.id)).where(
-            Prospect.scrape_status == ScrapeStatus.DISCOVERED.value
+            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+            Prospect.approval_status != "rejected",
         )
     )
-    discovered_for_scraping_count = discovered_for_scraping.scalar() or 0
+    scrape_ready_count = scrape_ready.scalar() or 0
     
     # Step 4: VERIFIED (verification_status = "verified")
     verified = await db.execute(
@@ -704,7 +707,10 @@ async def get_pipeline_status(
         "discovered": discovered_count,
         "approved": approved_count,
         "scraped": scraped_count,  # Includes both SCRAPED and ENRICHED
-        "discovered_for_scraping": discovered_for_scraping_count,  # DISCOVERED status
+        # Backwards-compatible field kept for older frontends (was using scrape_status == DISCOVERED)
+        "discovered_for_scraping": scrape_ready_count,
+        # New explicit field used by the pipeline UI to unlock scraping
+        "scrape_ready_count": scrape_ready_count,
         "verified": verified_count,
         "reviewed": verified_count,  # Same as verified for review step
     }

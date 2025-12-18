@@ -173,28 +173,20 @@ export default function Pipeline() {
       name: 'Scraping',
       description: 'Extract emails from approved websites',
       icon: Scissors,
-      // UNLOCK as soon as we have discovered websites to avoid deadlock
-      status: normalizedStatus.discovered === 0 ? 'locked' :
+      // UNLOCK as soon as we have at least one scrape-ready website from the backend
+      status: normalizedStatus.scrape_ready_count === 0 ? 'locked' :
               normalizedStatus.scraped > 0 ? 'completed' : 'active',
       count: normalizedStatus.scraped,
-      ctaText: normalizedStatus.discovered === 0
+      ctaText: normalizedStatus.scrape_ready_count === 0
         ? 'Discover Websites First'
-        : normalizedStatus.approved === 0
-        ? 'Approve All Websites'
         : normalizedStatus.scraped > 0
         ? 'View Prospects'
         : 'Start Scraping',
       ctaAction: () => {
-        // If nothing discovered yet, guide user back to discovery
-        if (normalizedStatus.discovered === 0) {
+        // If nothing is scrape-ready yet, guide user back to discovery
+        if (normalizedStatus.scrape_ready_count === 0) {
           const event = new CustomEvent('show-discovery-form')
           window.dispatchEvent(event)
-          return
-        }
-
-        // If we have discovered but zero approved, offer bulk-approve action
-        if (normalizedStatus.approved === 0) {
-          handleApproveAll()
           return
         }
 
@@ -333,16 +325,11 @@ export default function Pipeline() {
                   {step.id === 2 && (
                     <div className="mt-1 space-y-1">
                       <p className="text-xs text-gray-500">
-                        Discovered: {normalizedStatus.discovered} • Approved: {normalizedStatus.approved}
+                        Discovered: {normalizedStatus.discovered} • Scrape-ready: {normalizedStatus.scrape_ready_count}
                       </p>
-                      {normalizedStatus.discovered === 0 && (
+                      {normalizedStatus.scrape_ready_count === 0 && (
                         <p className="text-xs text-red-500">
                           Blocked: No discovered websites yet. Run discovery first.
-                        </p>
-                      )}
-                      {normalizedStatus.discovered > 0 && normalizedStatus.approved === 0 && normalizedStatus.scraped === 0 && (
-                        <p className="text-xs text-amber-600">
-                          Blocked: 0 approved websites. Use &quot;Approve All Websites&quot; to continue.
                         </p>
                       )}
                     </div>
