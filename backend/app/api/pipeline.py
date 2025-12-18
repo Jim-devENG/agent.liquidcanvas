@@ -263,15 +263,24 @@ async def scrape_websites(
     STEP 3: Scrape approved websites for emails
     
     Requirements:
-    - Only approved prospects can be scraped
+    - Any discovered prospect can be scraped
+    - Explicitly rejected prospects are excluded
     - Crawls homepage + contact/about pages
     - Extracts visible emails only
     - Sets scrape_status = "SCRAPED" or "NO_EMAIL_FOUND"
     """
-    # Get approved prospects ready for scraping
+    # Get discovered, non-rejected prospects ready for scraping
+    # Scrape eligibility:
+    # - discovery_status == DISCOVERED
+    # - approval_status is NOT "rejected" (NULL or any other value is allowed)
+    # - scrape_status == DISCOVERED (avoid re-scraping already processed prospects)
     query = select(Prospect).where(
-        Prospect.approval_status == "approved",
-        Prospect.scrape_status == "pending"
+        Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+        or_(
+            Prospect.approval_status.is_(None),
+            Prospect.approval_status != "rejected",
+        ),
+        Prospect.scrape_status == ScrapeStatus.DISCOVERED.value,
     )
     
     if request.prospect_ids:
@@ -283,7 +292,7 @@ async def scrape_websites(
     if len(prospects) == 0:
         raise HTTPException(
             status_code=400,
-            detail="No approved prospects found ready for scraping. Ensure prospects are approved in Step 2."
+            detail="No discovered prospects available for scraping."
         )
     
     logger.info(f"🔍 [PIPELINE STEP 3] Scraping {len(prospects)} approved prospects")
