@@ -414,11 +414,11 @@ async def verify_emails(
         else:
             # Column doesn't exist yet - fallback to scrape_status + email
             logger.warning("⚠️  stage column not found, using fallback logic for verification")
-            query = select(Prospect).where(
+    query = select(Prospect).where(
                 Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
                 Prospect.contact_email.isnot(None),
-                Prospect.verification_status == VerificationStatus.PENDING.value,
-            )
+        Prospect.verification_status == VerificationStatus.PENDING.value,
+    )
             if request.prospect_ids:
                 query = query.where(Prospect.id.in_(request.prospect_ids))
             
@@ -432,11 +432,11 @@ async def verify_emails(
             Prospect.contact_email.isnot(None),
             Prospect.verification_status == VerificationStatus.PENDING.value,
         )
-        if request.prospect_ids:
-            query = query.where(Prospect.id.in_(request.prospect_ids))
-        
-        result = await db.execute(query)
-        prospects = result.scalars().all()
+    if request.prospect_ids:
+        query = query.where(Prospect.id.in_(request.prospect_ids))
+    
+    result = await db.execute(query)
+    prospects = result.scalars().all()
     
     if len(prospects) == 0:
         raise HTTPException(
@@ -581,9 +581,9 @@ async def draft_emails(
             # Column exists - use stage-based query
             # Check for VERIFIED stage (after verification, stage becomes VERIFIED, not LEAD)
             # OR LEAD stage with verified status (in case verification didn't update stage yet)
-            result = await db.execute(
-                select(Prospect).where(
-                    Prospect.id.in_(request.prospect_ids),
+    result = await db.execute(
+        select(Prospect).where(
+            Prospect.id.in_(request.prospect_ids),
                     Prospect.stage.in_([ProspectStage.VERIFIED.value, ProspectStage.LEAD.value]),
                     Prospect.verification_status == VerificationStatus.VERIFIED.value,
                     Prospect.contact_email.isnot(None),
@@ -610,11 +610,11 @@ async def draft_emails(
             select(Prospect).where(
                 Prospect.id.in_(request.prospect_ids),
                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None),
-                Prospect.draft_status == "pending"
-            )
+            Prospect.contact_email.isnot(None),
+            Prospect.draft_status == "pending"
         )
-        prospects = result.scalars().all()
+    )
+    prospects = result.scalars().all()
     
     if len(prospects) != len(request.prospect_ids):
         raise HTTPException(
@@ -667,7 +667,7 @@ async def draft_emails(
 # ============================================
 
 class SendRequest(BaseModel):
-    prospect_ids: List[UUID]
+    prospect_ids: Optional[List[UUID]] = None  # If None or empty, query all send-ready prospects automatically
 
 
 class SendResponse(BaseModel):
@@ -686,31 +686,57 @@ async def send_emails(
     """
     STEP 7: Send emails using Gmail API
     
-    Requirements:
-    - Only drafted prospects can be sent
-    - Uses Gmail API
-    - Sets send_status = "sent" or "failed"
-    - Logs success or failure
+    Requirements (DATA-DRIVEN):
+    - contact_email IS NOT NULL
+    - verification_status = 'verified'
+    - draft_subject IS NOT NULL
+    - draft_body IS NOT NULL
+    - send_status != 'sent'
+    
+    If prospect_ids provided, use those (manual selection).
+    If prospect_ids empty or not provided, query all send-ready prospects automatically.
     """
-    # Get drafted prospects ready for sending
-    result = await db.execute(
-        select(Prospect).where(
-            Prospect.id.in_(request.prospect_ids),
-            Prospect.draft_status == "drafted",
-            Prospect.draft_subject.isnot(None),
-            Prospect.draft_body.isnot(None),
-            Prospect.send_status == "pending"
+    # DATA-DRIVEN: Query send-ready prospects directly from database
+    # Redefine send-ready as: verified + drafted + not sent
+    if request.prospect_ids is not None and len(request.prospect_ids) > 0:
+        # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
+        result = await db.execute(
+            select(Prospect).where(
+                Prospect.id.in_(request.prospect_ids),
+                Prospect.contact_email.isnot(None),
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.draft_subject.isnot(None),
+                Prospect.draft_body.isnot(None),
+                Prospect.send_status != SendStatus.SENT.value
+            )
         )
-    )
-    prospects = result.scalars().all()
-    
-    if len(prospects) != len(request.prospect_ids):
-        raise HTTPException(
-            status_code=400,
-            detail="Some prospects not found or not ready for sending. Ensure they are drafted with subject and body."
+        prospects = result.scalars().all()
+        
+        if len(prospects) != len(request.prospect_ids):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
+            )
+    else:
+        # Automatic: query all send-ready prospects
+        result = await db.execute(
+            select(Prospect).where(
+                Prospect.contact_email.isnot(None),
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.draft_subject.isnot(None),
+                Prospect.draft_body.isnot(None),
+                Prospect.send_status != SendStatus.SENT.value
+            )
         )
+        prospects = result.scalars().all()
+        
+        if len(prospects) == 0:
+            raise HTTPException(
+                status_code=422,
+                detail="No prospects ready for sending. Ensure prospects have verified email, draft subject, and draft body."
+            )
     
-    logger.info(f"📧 [PIPELINE STEP 7] Sending emails for {len(prospects)} drafted prospects")
+    logger.info(f"📧 [PIPELINE STEP 7] Sending emails for {len(prospects)} send-ready prospects (data-driven)")
     
     # Create sending job
     job = Job(
@@ -855,7 +881,7 @@ async def get_pipeline_status(
             logger.warning("⚠️  stage column not found, using fallback logic for stage counts")
             # Fallback: count prospects with emails as EMAIL_FOUND
             email_found_fallback = await db.execute(
-                select(func.count(Prospect.id)).where(
+        select(func.count(Prospect.id)).where(
                     Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
                     Prospect.contact_email.isnot(None)
                 )
@@ -954,14 +980,31 @@ async def get_pipeline_status(
             logger.error(f"❌ Fallback drafting_ready also failed: {fallback_err}", exc_info=True)
             drafting_ready = 0
     
-    # Step 6: DRAFTED (draft_status = "drafted")
+    # Step 6: DRAFTED (draft_subject IS NOT NULL AND draft_body IS NOT NULL)
     # Data-driven: Count prospects with drafted emails from prospects table ONLY
+    # Redefine drafted as: prospect.draft_subject IS NOT NULL AND prospect.draft_body IS NOT NULL
     drafted = await db.execute(
         select(func.count(Prospect.id)).where(
-            Prospect.draft_status == DraftStatus.DRAFTED.value
+            Prospect.draft_subject.isnot(None),
+            Prospect.draft_body.isnot(None)
         )
     )
     drafted_count = drafted.scalar() or 0
+    
+    # Step 7: SEND READY (verified + drafted + not sent)
+    # Data-driven: Count prospects ready for sending based on actual data
+    # Requirements: contact_email IS NOT NULL, verification_status = 'verified', 
+    #               draft_subject IS NOT NULL, draft_body IS NOT NULL, send_status != 'sent'
+    send_ready = await db.execute(
+        select(func.count(Prospect.id)).where(
+            Prospect.contact_email.isnot(None),
+            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+            Prospect.draft_subject.isnot(None),
+            Prospect.draft_body.isnot(None),
+            Prospect.send_status != SendStatus.SENT.value
+        )
+    )
+    send_ready_count = send_ready.scalar() or 0
     
     # Return pipeline status counts
     # Stage lifecycle: DISCOVERED → SCRAPED/EMAIL_FOUND → LEAD → VERIFIED → DRAFTED → SENT
@@ -979,12 +1022,16 @@ async def get_pipeline_status(
         "leads": leads_count,  # Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
         "verified": emails_verified_count,  # Backwards-compatible: verification_status=verified AND email IS NOT NULL
         "verified_email_count": emails_verified_count,  # Backwards-compatible alias
+        "verified_count": emails_verified_count,  # Data-driven: contact_email IS NOT NULL AND verification_status = 'verified'
         "emails_verified": emails_verified_count,  # Data-driven: verification_status=verified AND contact_email IS NOT NULL (matches Leads page)
         "verified_stage": verified_stage_count,  # stage = VERIFIED
         "reviewed": emails_verified_count,  # Same as emails_verified_count for review step
         "drafting_ready": drafting_ready,  # Data-driven: stage=LEAD, email IS NOT NULL, verification_status=verified
         "drafting_ready_count": drafting_ready,  # Backwards-compatible alias
-        "drafted": drafted_count,  # Data-driven: draft_status=drafted (prospects with email drafts)
+        "drafted": drafted_count,  # Data-driven: draft_subject IS NOT NULL AND draft_body IS NOT NULL
+        "drafted_count": drafted_count,  # Explicit count of drafted prospects
+        "send_ready": send_ready_count,  # Data-driven: verified + drafted + not sent
+        "send_ready_count": send_ready_count,  # Explicit count of send-ready prospects
     }
 
 
