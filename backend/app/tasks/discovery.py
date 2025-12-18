@@ -587,6 +587,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                                 if pipeline_mode
                                 else None,
                                 # Canonical pipeline stage - set to DISCOVERED on creation
+                                # Defensive: Only set if stage column exists (handled by model default)
                                 stage=ProspectStage.DISCOVERED.value,
                             )
                             

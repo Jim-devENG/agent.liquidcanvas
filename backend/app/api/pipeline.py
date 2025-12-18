@@ -4,7 +4,7 @@ No auto-triggering, each step must be explicitly unlocked
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, text
 from typing import List, Optional, Dict
 from uuid import UUID
 import logging
@@ -369,16 +369,74 @@ async def verify_emails(
     """
     # Get LEAD prospects ready for verification (canonical stage-based query)
     # LEAD stage = scraped prospects with emails, ready to be verified
-    query = select(Prospect).where(
-        Prospect.stage == ProspectStage.LEAD.value,
-        Prospect.verification_status == VerificationStatus.PENDING.value,
-    )
-    
-    if request.prospect_ids:
-        query = query.where(Prospect.id.in_(request.prospect_ids))
-    
-    result = await db.execute(query)
-    prospects = result.scalars().all()
+    # Defensive: Check if stage column exists, fallback to scrape_status + email
+    try:
+        # Check if stage column exists
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'stage'
+            """)
+        )
+        column_exists = column_check.fetchone() is not None
+        if column_exists:
+            # Column exists - use raw SQL to build query safely (avoid ORM attribute access)
+            # Build WHERE clause conditions
+            where_clause = "stage = :stage_value AND verification_status = :verification_status"
+            params = {
+                "stage_value": ProspectStage.LEAD.value,
+                "verification_status": VerificationStatus.PENDING.value
+            }
+            
+            # If prospect_ids specified, add to WHERE clause
+            if request.prospect_ids:
+                where_clause += " AND id = ANY(:prospect_ids)"
+                params["prospect_ids"] = [str(pid) for pid in request.prospect_ids]
+            
+            # Use raw SQL to fetch prospect IDs, then load as ORM objects
+            raw_query = text(f"""
+                SELECT id FROM prospects 
+                WHERE {where_clause}
+            """)
+            result = await db.execute(raw_query, params)
+            rows = result.fetchall()
+            
+            # Convert rows to Prospect objects by ID (safe - doesn't use stage attribute)
+            prospects = []
+            for row in rows:
+                # Extract ID from row (SQLAlchemy Row object)
+                prospect_id = row.id if hasattr(row, 'id') else row[0]
+                prospect = await db.get(Prospect, prospect_id)
+                if prospect:
+                    prospects.append(prospect)
+        else:
+            # Column doesn't exist yet - fallback to scrape_status + email
+            logger.warning("⚠️  stage column not found, using fallback logic for verification")
+            query = select(Prospect).where(
+                Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                Prospect.contact_email.isnot(None),
+                Prospect.verification_status == VerificationStatus.PENDING.value,
+            )
+            if request.prospect_ids:
+                query = query.where(Prospect.id.in_(request.prospect_ids))
+            
+            result = await db.execute(query)
+            prospects = result.scalars().all()
+    except Exception as e:
+        logger.error(f"❌ Error checking stage column: {e}, using fallback", exc_info=True)
+        # Fallback to scrape_status + email if stage check fails
+        query = select(Prospect).where(
+            Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+            Prospect.contact_email.isnot(None),
+            Prospect.verification_status == VerificationStatus.PENDING.value,
+        )
+        if request.prospect_ids:
+            query = query.where(Prospect.id.in_(request.prospect_ids))
+        
+        result = await db.execute(query)
+        prospects = result.scalars().all()
     
     if len(prospects) == 0:
         raise HTTPException(
@@ -703,12 +761,53 @@ async def get_pipeline_status(
     
     # Step 3.5: LEAD (stage = "LEAD" - scraped prospects with emails, ready for verification)
     # This is the canonical count for verification readiness
-    leads = await db.execute(
-        select(func.count(Prospect.id)).where(
-            Prospect.stage == ProspectStage.LEAD.value
+    # Defensive: Check if stage column exists before querying (use raw SQL to avoid ORM errors)
+    leads_count = 0
+    try:
+        # Check if stage column exists using raw SQL
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'stage'
+            """)
         )
-    )
-    leads_count = leads.scalar() or 0
+        if column_check.fetchone():
+            # Column exists - use raw SQL to query safely
+            leads_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE stage = :stage_value
+                """),
+                {"stage_value": ProspectStage.LEAD.value}
+            )
+            leads_count = leads_result.scalar() or 0
+        else:
+            # Column doesn't exist yet - fallback to scrape_status + email
+            logger.warning("⚠️  stage column not found, using fallback logic for leads count")
+            leads = await db.execute(
+                select(func.count(Prospect.id)).where(
+                    Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                    Prospect.contact_email.isnot(None)
+                )
+            )
+            leads_count = leads.scalar() or 0
+    except Exception as e:
+        logger.error(f"❌ Error counting leads: {e}", exc_info=True)
+        # Fallback to scrape_status + email if stage query fails
+        try:
+            leads = await db.execute(
+                select(func.count(Prospect.id)).where(
+                    Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                    Prospect.contact_email.isnot(None)
+                )
+            )
+            leads_count = leads.scalar() or 0
+        except Exception as fallback_err:
+            logger.error(f"❌ Fallback leads count also failed: {fallback_err}", exc_info=True)
+            leads_count = 0
     
     # Step 4: VERIFIED (verification_status = "verified")
     verified = await db.execute(

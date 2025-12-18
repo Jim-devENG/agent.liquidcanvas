@@ -98,17 +98,28 @@ async def scrape_prospects_async(job_id: str):
                         prospect.scrape_source_url = source_url
                         prospect.scrape_payload = emails_by_page
                         prospect.scrape_status = ScrapeStatus.SCRAPED.value
-                        prospect.stage = ProspectStage.LEAD.value  # Promote to LEAD stage - ready for verification
+                        # Promote to LEAD stage - ready for verification (defensive: only if stage column exists)
+                        try:
+                            prospect.stage = ProspectStage.LEAD.value
+                        except AttributeError:
+                            # Stage column doesn't exist yet - skip stage update
+                            logger.debug(f"⚠️  stage column not available, skipping stage update for {prospect.id}")
                         scraped_count += 1
                         logger.info(f"✅ [SCRAPING] Found {len(all_emails)} email(s) for {prospect.domain}: {all_emails[0]}")
-                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, stage=LEAD, contact_email={all_emails[0]}")
+                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, contact_email={all_emails[0]}")
                     else:
-                        # No emails found - update prospect state
+                        # No emails found - update prospect state (remain at SCRAPED stage, not promoted to LEAD)
                         prospect.scrape_status = ScrapeStatus.NO_EMAIL_FOUND.value
                         prospect.scrape_payload = {}
+                        # Set stage to SCRAPED (not LEAD, since no email found)
+                        try:
+                            prospect.stage = ProspectStage.SCRAPED.value
+                        except AttributeError:
+                            # Stage column doesn't exist yet - skip stage update
+                            logger.debug(f"⚠️  stage column not available, skipping stage update for {prospect.id}")
                         no_email_count += 1
                         logger.warning(f"⚠️  [SCRAPING] No emails found for {prospect.domain}")
-                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=NO_EMAIL_FOUND")
+                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=NO_EMAIL_FOUND, stage=SCRAPED")
                     
                     # CRITICAL: Commit state update immediately
                     await db.commit()

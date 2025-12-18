@@ -36,16 +36,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         emailsOnly ? true : undefined
       )
       // Ensure data is always an array
-      // FILTER: Only show prospects that have been scraped (scrape_status = SCRAPED or ENRICHED)
-      // This ensures we only show prospects, not discovery results
+      // FILTER: Only show prospects with stage=LEAD (canonical pipeline stage)
+      // LEAD = scraped prospects with emails, ready for verification
       const allProspects = Array.isArray(response?.data) ? response.data : []
-      const scrapedProspects = allProspects.filter((p: Prospect) => 
-        p.scrape_status === 'SCRAPED' || p.scrape_status === 'ENRICHED'
+      const leads = allProspects.filter((p: Prospect) => 
+        p.stage === 'LEAD'
       )
-      setProspects(scrapedProspects)
+      setProspects(leads)
       // Note: total count is approximate since we're filtering client-side
       // In production, this should be a backend filter
-      setTotal(scrapedProspects.length)
+      setTotal(leads.length)
       // Clear error if we successfully got data (even if empty)
       // Empty data is not an error, it's a valid state
     } catch (error: any) {

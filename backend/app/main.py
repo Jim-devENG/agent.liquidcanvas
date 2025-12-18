@@ -336,6 +336,7 @@ async def startup():
                     ("verification_status", "VARCHAR", "UNVERIFIED", True),
                     ("draft_status", "VARCHAR", "pending", True),  # pending, drafted, failed
                     ("send_status", "VARCHAR", "pending", True),  # pending, sent, failed
+                    ("stage", "VARCHAR", "DISCOVERED", True),  # Canonical pipeline stage: DISCOVERED, SCRAPED, LEAD, VERIFIED, DRAFTED, SENT
                 ]
                 
                 for column_name, sql_type, default_value, should_be_not_null in required_pipeline_columns:
@@ -376,6 +377,23 @@ async def startup():
                             text(f"CREATE INDEX IF NOT EXISTS ix_prospects_{column_name} ON prospects({column_name})")
                         )
                         logger.info(f"✅ Added {column_name} column ({'NOT NULL' if should_be_not_null else 'NULLABLE'}, DEFAULT '{default_value}') with index")
+                        
+                        # Special handling for stage column: backfill based on email presence
+                        if column_name == "stage":
+                            logger.info("🔄 Backfilling stage column based on email presence...")
+                            # Prospects with emails → LEAD
+                            await conn.execute(
+                                text("UPDATE prospects SET stage = 'LEAD' WHERE contact_email IS NOT NULL AND contact_email != '' AND stage = 'DISCOVERED'")
+                            )
+                            # Prospects with scrape_status=SCRAPED but no email → SCRAPED
+                            await conn.execute(
+                                text("UPDATE prospects SET stage = 'SCRAPED' WHERE scrape_status = 'SCRAPED' AND (contact_email IS NULL OR contact_email = '') AND stage = 'DISCOVERED'")
+                            )
+                            # Prospects with scrape_status=ENRICHED → LEAD (they have emails)
+                            await conn.execute(
+                                text("UPDATE prospects SET stage = 'LEAD' WHERE scrape_status = 'ENRICHED' AND stage = 'DISCOVERED'")
+                            )
+                            logger.info("✅ Stage column backfilled based on email presence")
                     else:
                         # Column exists - check if it needs to be fixed
                         is_nullable = column_row[1] == 'YES'
@@ -409,6 +427,23 @@ async def startup():
                                     text(f"ALTER TABLE prospects ALTER COLUMN {column_name} SET NOT NULL")
                                 )
                             logger.info(f"✅ Fixed {column_name} column (now {'NOT NULL' if should_be_not_null else 'NULLABLE'} with DEFAULT '{default_value}')")
+                            
+                            # Special handling for stage column: backfill based on email presence
+                            if column_name == "stage":
+                                logger.info("🔄 Backfilling stage column based on email presence...")
+                                # Prospects with emails → LEAD
+                                await conn.execute(
+                                    text("UPDATE prospects SET stage = 'LEAD' WHERE contact_email IS NOT NULL AND contact_email != '' AND stage = 'DISCOVERED'")
+                                )
+                                # Prospects with scrape_status=SCRAPED but no email → SCRAPED
+                                await conn.execute(
+                                    text("UPDATE prospects SET stage = 'SCRAPED' WHERE scrape_status = 'SCRAPED' AND (contact_email IS NULL OR contact_email = '') AND stage = 'DISCOVERED'")
+                                )
+                                # Prospects with scrape_status=ENRICHED → LEAD (they have emails)
+                                await conn.execute(
+                                    text("UPDATE prospects SET stage = 'LEAD' WHERE scrape_status = 'ENRICHED' AND stage = 'DISCOVERED'")
+                                )
+                                logger.info("✅ Stage column backfilled based on email presence")
                         else:
                             logger.info(f"✅ {column_name} column already exists and is correct")
         except Exception as e:

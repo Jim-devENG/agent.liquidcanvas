@@ -206,14 +206,14 @@ export default function Pipeline() {
       name: 'Verification',
       description: 'Verify emails with Snov.io',
       icon: Shield,
-      status: normalizedStatus.scraped === 0 ? 'locked' :
+      status: normalizedStatus.leads === 0 ? 'locked' :
               normalizedStatus.verified > 0 ? 'completed' : 'active',
       count: normalizedStatus.verified,
-      ctaText: normalizedStatus.scraped === 0 ? 'Scrape Websites First' :
+      ctaText: normalizedStatus.leads === 0 ? 'Scrape Websites First' :
                normalizedStatus.verified > 0 ? 'View Verified' : 'Start Verification',
       ctaAction: () => {
-        if (normalizedStatus.scraped === 0) {
-          alert('Please scrape websites first')
+        if (normalizedStatus.leads === 0) {
+          alert('Please scrape websites first to create leads')
           return
         }
         handleVerify()

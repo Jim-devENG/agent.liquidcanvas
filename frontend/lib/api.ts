@@ -140,6 +140,7 @@ export interface Prospect {
   verification_status?: string
   draft_status?: string
   send_status?: string
+  stage?: string  // Canonical pipeline stage: DISCOVERED, SCRAPED, LEAD, VERIFIED, DRAFTED, SENT
   discovery_category?: string
   discovery_location?: string
   discovery_keywords?: string
@@ -1055,6 +1056,7 @@ export interface PipelineStatus {
   discovered?: number
   approved?: number
   scraped?: number
+  leads?: number  // Canonical count: prospects with stage=LEAD (ready for verification)
   verified?: number
   reviewed?: number  // Same as verified for review step
   drafted?: number  // Optional - may not be in response
@@ -1068,6 +1070,7 @@ export interface NormalizedPipelineStatus {
   discovered: number
   approved: number
   scraped: number
+  leads: number  // Canonical count: prospects with stage=LEAD (ready for verification)
   verified: number
   reviewed: number
   drafted: number
@@ -1095,6 +1098,7 @@ export function normalizePipelineStatus(rawStatus: Partial<PipelineStatus> | nul
     discovered: typeof rawStatus?.discovered === 'number' ? rawStatus.discovered : 0,
     approved: typeof rawStatus?.approved === 'number' ? rawStatus.approved : 0,
     scraped: typeof rawStatus?.scraped === 'number' ? rawStatus.scraped : 0,
+    leads: typeof rawStatus?.leads === 'number' ? rawStatus.leads : 0,  // Canonical count for verification readiness
     verified: typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0,
     reviewed: typeof rawStatus?.reviewed === 'number' ? rawStatus.reviewed : 0,
     drafted: typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : 0,

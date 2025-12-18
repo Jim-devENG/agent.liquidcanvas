@@ -53,13 +53,50 @@ async def verify_prospects_async(job_id: str):
                 return {"error": "No prospect IDs provided"}
             
             # Get LEAD prospects ready for verification (canonical stage-based query)
-            result = await db.execute(
-                select(Prospect).where(
-                    Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
-                    Prospect.stage == ProspectStage.LEAD.value,
-                    Prospect.verification_status == VerificationStatus.PENDING.value,
+            # Defensive: Check if stage column exists, fallback to scrape_status + email
+            from sqlalchemy import text
+            try:
+                # Check if stage column exists
+                column_check = await db.execute(
+                    text("""
+                        SELECT column_name
+                        FROM information_schema.columns 
+                        WHERE table_name = 'prospects' 
+                        AND column_name = 'stage'
+                    """)
                 )
-            )
+                if column_check.fetchone():
+                    # Column exists - use stage-based query
+                    result = await db.execute(
+                        select(Prospect).where(
+                            Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+                            Prospect.stage == ProspectStage.LEAD.value,
+                            Prospect.verification_status == VerificationStatus.PENDING.value,
+                        )
+                    )
+                else:
+                    # Column doesn't exist yet - fallback to scrape_status + email
+                    logger.warning("⚠️  stage column not found, using fallback logic for verification")
+                    result = await db.execute(
+                        select(Prospect).where(
+                            Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+                            Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                            Prospect.contact_email.isnot(None),
+                            Prospect.verification_status == VerificationStatus.PENDING.value,
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"❌ Error checking stage column: {e}, using fallback", exc_info=True)
+                # Fallback to scrape_status + email if stage check fails
+                result = await db.execute(
+                    select(Prospect).where(
+                        Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+                        Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                        Prospect.contact_email.isnot(None),
+                        Prospect.verification_status == VerificationStatus.PENDING.value,
+                    )
+                )
+            
             prospects = result.scalars().all()
             
             logger.info(f"✅ [VERIFICATION] Starting verification for {len(prospects)} leads (stage=LEAD)")
@@ -109,12 +146,17 @@ async def verify_prospects_async(job_id: str):
                                 prospect.verification_status = (
                                     VerificationStatus.VERIFIED.value
                                 )
-                                prospect.stage = ProspectStage.VERIFIED.value  # Promote to VERIFIED stage
+                                # Promote to VERIFIED stage (defensive: only if stage column exists)
+                                try:
+                                    prospect.stage = ProspectStage.VERIFIED.value
+                                except AttributeError:
+                                    # Stage column doesn't exist yet - skip stage update
+                                    logger.debug(f"⚠️  stage column not available, skipping stage update for {prospect.id}")
                                 prospect.verification_confidence = confidence
                                 prospect.verification_payload = snov_result
                                 verified_count += 1
                                 logger.info(f"✅ [VERIFICATION] Verified scraped email for {prospect.domain}: {prospect.contact_email} (confidence: {confidence})")
-                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - stage=VERIFIED")
+                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - verification_status=VERIFIED")
                             else:
                                 prospect.verification_status = (
                                     VerificationStatus.UNVERIFIED_LOWER.value
@@ -159,12 +201,17 @@ async def verify_prospects_async(job_id: str):
                                 prospect.verification_status = (
                                     VerificationStatus.VERIFIED.value
                                 )
-                                prospect.stage = ProspectStage.VERIFIED.value  # Promote to VERIFIED stage
+                                # Promote to VERIFIED stage (defensive: only if stage column exists)
+                                try:
+                                    prospect.stage = ProspectStage.VERIFIED.value
+                                except AttributeError:
+                                    # Stage column doesn't exist yet - skip stage update
+                                    logger.debug(f"⚠️  stage column not available, skipping stage update for {prospect.id}")
                                 prospect.verification_confidence = confidence
                                 prospect.verification_payload = snov_result
                                 verified_count += 1
                                 logger.info(f"✅ [VERIFICATION] Found email via Snov for {prospect.domain}: {found_email} (confidence: {confidence})")
-                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - stage=VERIFIED")
+                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - verification_status=VERIFIED")
                             else:
                                 prospect.verification_status = (
                                     VerificationStatus.UNVERIFIED_LOWER.value
