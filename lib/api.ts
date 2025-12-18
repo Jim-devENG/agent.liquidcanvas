@@ -536,6 +536,61 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 }
 
 // Prospects API
+export async function listLeads(
+  skip = 0,
+  limit = 50
+): Promise<ProspectListResponse> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
+  params.append('_t', Date.now().toString())
+  
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/prospects/leads?${params}`)
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to list leads' }))
+      throw new Error(error.detail || `Failed to list leads: ${res.status} ${res.statusText}`)
+    }
+    const result: any = await res.json()
+    
+    // Normalize to PaginatedResponse<Prospect>
+    let prospectsData: Prospect[] = []
+    let total = 0
+    
+    if (result.data && Array.isArray(result.data)) {
+      prospectsData = result.data
+      total = result.total ?? prospectsData.length
+    } else if (Array.isArray(result)) {
+      prospectsData = result
+      total = prospectsData.length
+    }
+    
+    console.log(`📊 listLeads: Found ${prospectsData.length} leads (total: ${total})`)
+    
+    return {
+      data: prospectsData,
+      total: total,
+      skip,
+      limit,
+    }
+  } catch (error: any) {
+    console.error('listLeads API error:', error)
+    throw new Error(error.message || 'Failed to list leads. Check if backend is running.')
+  }
+}
+
+export async function promoteToLead(prospectId: string): Promise<{ success: boolean; message: string; stage: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/promote`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to promote prospect' }))
+    throw new Error(error.detail || 'Failed to promote prospect')
+  }
+  return res.json()
+}
+
 export async function listProspects(
   skip = 0,
   limit = 50,
@@ -1056,8 +1111,10 @@ export interface PipelineStatus {
   discovered?: number
   approved?: number
   scraped?: number
-  leads?: number  // Canonical count: prospects with stage=LEAD (ready for verification)
-  verified?: number
+  email_found?: number  // Prospects with emails found (stage=EMAIL_FOUND)
+  leads?: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
+  verified?: number  // verification_status = VERIFIED
+  verified_stage?: number  // stage = VERIFIED
   reviewed?: number  // Same as verified for review step
   drafted?: number  // Optional - may not be in response
   sent?: number  // Optional - may not be in response
@@ -1070,8 +1127,10 @@ export interface NormalizedPipelineStatus {
   discovered: number
   approved: number
   scraped: number
-  leads: number  // Canonical count: prospects with stage=LEAD (ready for verification)
-  verified: number
+  email_found: number  // Prospects with emails found (stage=EMAIL_FOUND)
+  leads: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
+  verified: number  // verification_status = VERIFIED
+  verified_stage: number  // stage = VERIFIED
   reviewed: number
   drafted: number
   sent: number
@@ -1098,8 +1157,10 @@ export function normalizePipelineStatus(rawStatus: Partial<PipelineStatus> | nul
     discovered: typeof rawStatus?.discovered === 'number' ? rawStatus.discovered : 0,
     approved: typeof rawStatus?.approved === 'number' ? rawStatus.approved : 0,
     scraped: typeof rawStatus?.scraped === 'number' ? rawStatus.scraped : 0,
-    leads: typeof rawStatus?.leads === 'number' ? rawStatus.leads : 0,  // Canonical count for verification readiness
-    verified: typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0,
+    email_found: typeof rawStatus?.email_found === 'number' ? rawStatus.email_found : 0,  // Prospects with emails found (stage=EMAIL_FOUND)
+    leads: typeof rawStatus?.leads === 'number' ? rawStatus.leads : 0,  // Explicitly promoted leads (stage=LEAD)
+    verified: typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0,  // verification_status = VERIFIED
+    verified_stage: typeof rawStatus?.verified_stage === 'number' ? rawStatus.verified_stage : 0,  // stage = VERIFIED
     reviewed: typeof rawStatus?.reviewed === 'number' ? rawStatus.reviewed : 0,
     drafted: typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : 0,
     sent: typeof rawStatus?.sent === 'number' ? rawStatus.sent : 0,

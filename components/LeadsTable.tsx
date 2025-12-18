@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users } from 'lucide-react'
-import { listProspects, composeEmail, sendEmail, type Prospect } from '@/lib/api'
+import { listLeads, promoteToLead, composeEmail, sendEmail, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
 interface LeadsTableProps {
@@ -28,36 +28,15 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await listProspects(
-        skip,
-        limit,
-        undefined,
-        undefined,
-        emailsOnly ? true : undefined
-      )
-      // Ensure data is always an array
-      // FILTER: Show prospects that are leads (canonical stage=LEAD OR fallback: scraped with email)
-      // LEAD = scraped prospects with emails, ready for verification
-      // Fallback: If stage column doesn't exist or wasn't set, use scrape_status + email
-      const allProspects = Array.isArray(response?.data) ? response.data : []
-      const leads = allProspects.filter((p: Prospect) => {
-        // Canonical: stage === 'LEAD'
-        if (p.stage === 'LEAD') return true
-        // Fallback: scrape_status === 'SCRAPED' or 'ENRICHED' AND has email
-        // This handles cases where stage column doesn't exist or wasn't set during scraping
-        if (p.contact_email && (p.scrape_status === 'SCRAPED' || p.scrape_status === 'ENRICHED')) {
-          return true
-        }
-        return false
-      })
+      // Use dedicated leads endpoint - returns ONLY stage = LEAD (explicitly promoted leads)
+      const response = await listLeads(skip, limit)
+      const leads = Array.isArray(response?.data) ? response.data : []
       setProspects(leads)
-      // Note: total count is approximate since we're filtering client-side
-      // In production, this should be a backend filter
-      setTotal(leads.length)
+      setTotal(response.total ?? leads.length)
       // Clear error if we successfully got data (even if empty)
       // Empty data is not an error, it's a valid state
     } catch (error: any) {
-      console.error('Failed to load prospects:', error)
+      console.error('Failed to load leads:', error)
       const errorMessage = error?.message || 'Failed to load leads. Check if backend is running.'
       setError(errorMessage)
       setProspects([])
@@ -68,15 +47,36 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   useEffect(() => {
-    loadProspects()
-    // Debounced refresh every 30 seconds (increased from 15s to prevent loops)
+    let abortController = new AbortController()
+    let debounceTimeout: NodeJS.Timeout | null = null
+    
+    const loadProspectsDebounced = () => {
+      // Cancel previous request if still in flight
+      abortController.abort()
+      abortController = new AbortController()
+      
+      // Clear existing debounce timeout
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
+      
+      // Debounce: wait 500ms before making request
+      debounceTimeout = setTimeout(() => {
+        loadProspects()
+      }, 500)
+    }
+    
+    // Initial load
+    loadProspectsDebounced()
+    
+    // Debounced refresh every 30 seconds
     const interval = setInterval(() => {
-      loadProspects()
+      loadProspectsDebounced()
     }, 30000)
     
     const handleJobCompleted = () => {
       console.log('🔄 Job completed event received, refreshing leads table...')
-      loadProspects()
+      loadProspectsDebounced()
     }
     
     if (typeof window !== 'undefined') {
@@ -84,6 +84,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
     
     return () => {
+      abortController.abort()
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
       clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('jobsCompleted', handleJobCompleted)

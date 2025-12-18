@@ -59,13 +59,41 @@ export default function Pipeline() {
   }
 
   useEffect(() => {
-    loadStatus()
-    loadDiscoveryJobs()
+    let abortController = new AbortController()
+    let debounceTimeout: NodeJS.Timeout | null = null
+    
+    const loadStatusDebounced = () => {
+      // Cancel previous request if still in flight
+      abortController.abort()
+      abortController = new AbortController()
+      
+      // Clear existing debounce timeout
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
+      
+      // Debounce: wait 300ms before making request
+      debounceTimeout = setTimeout(() => {
+        loadStatus()
+        loadDiscoveryJobs()
+      }, 300)
+    }
+    
+    // Initial load
+    loadStatusDebounced()
+    
+    // Debounced refresh every 10 seconds
     const interval = setInterval(() => {
-      loadStatus()
-      loadDiscoveryJobs()
+      loadStatusDebounced()
     }, 10000)
-    return () => clearInterval(interval)
+    
+    return () => {
+      abortController.abort()
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
+      clearInterval(interval)
+    }
   }, [])
 
   const handleDiscover = async () => {
@@ -320,7 +348,12 @@ export default function Pipeline() {
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{step.count}</p>
                   <p className="text-xs text-gray-500">
-                    {step.count === 1 ? 'item' : 'items'} {isCompleted ? 'completed' : 'ready'}
+                    {step.id === 1 && `${normalizedStatus.discovered} discovered`}
+                    {step.id === 2 && `${normalizedStatus.scraped} scraped • ${normalizedStatus.email_found || 0} with emails`}
+                    {step.id === 3 && `${normalizedStatus.leads} leads • ${normalizedStatus.verified_stage || normalizedStatus.verified} verified`}
+                    {step.id === 4 && `${normalizedStatus.drafted} drafted`}
+                    {step.id === 5 && `${normalizedStatus.sent} sent`}
+                    {!step.id && `${step.count} ${step.count === 1 ? 'item' : 'items'} ${isCompleted ? 'completed' : 'ready'}`}
                   </p>
                   {step.id === 2 && (
                     <div className="mt-1 space-y-1">
@@ -330,6 +363,18 @@ export default function Pipeline() {
                       {normalizedStatus.scrape_ready_count === 0 && (
                         <p className="text-xs text-red-500">
                           Blocked: No discovered websites yet. Run discovery first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {step.id === 3 && (
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-gray-500">
+                        Email found: {normalizedStatus.email_found || 0} • Promoted to lead: {normalizedStatus.leads}
+                      </p>
+                      {normalizedStatus.leads === 0 && normalizedStatus.email_found > 0 && (
+                        <p className="text-xs text-yellow-600">
+                          {normalizedStatus.email_found} prospects with emails need promotion to lead
                         </p>
                       )}
                     </div>
