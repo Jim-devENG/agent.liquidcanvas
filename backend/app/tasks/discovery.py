@@ -35,42 +35,74 @@ from app.db.database import AsyncSessionLocal
 from app.db.transaction_helpers import safe_commit, safe_flush
 
 
-def _generate_search_queries(keywords: str, categories: List[str]) -> List[str]:
+def _generate_search_queries(keywords: str, categories: List[str], locations: List[str]) -> List[str]:
     """
-    Generate search queries from keywords and categories
+    Generate search queries from keywords, categories, and locations.
+    Creates queries by combining categories/keywords with locations.
+    
+    Examples:
+    - "Art Gallery" + "United States" -> "Art Gallery United States"
+    - "contemporary art" + "United Kingdom" -> "contemporary art United Kingdom"
+    - "Art Gallery" + "contemporary art" + "United States" -> "Art Gallery contemporary art United States"
     """
     queries = []
+    
+    # Parse keywords into list
     base_keywords = [kw.strip() for kw in keywords.split(',') if kw.strip()] if keywords else []
-
-    # Add category-specific keywords
-    category_map = {
-        "home_decor": ["home decor blog", "interior design website", "furniture store online"],
-        "holiday": ["holiday gift guide", "seasonal decor shop", "christmas crafts blog"],
-        "parenting": ["parenting blog", "mom influencer", "family lifestyle website"],
-        "audio_visuals": ["audio visual production", "sound engineering blog", "video editing services"],
-        "gift_guides": ["unique gift ideas", "present inspiration", "curated gifts"],
-        "tech_innovation": ["tech startup blog", "innovation news", "gadget review site"]
-    }
-
-    if not base_keywords and not categories:
-        return ["art blog", "creative agency", "design studio"]  # Default if nothing specified
-
-    if base_keywords:
-        for bk in base_keywords:
-            queries.append(bk)
-            for cat in categories:
-                if cat in category_map:
-                    for ck in category_map[cat]:
-                        queries.append(f"{bk} {ck}")
-    else:  # Only categories selected
-        for cat in categories:
-            if cat in category_map:
-                for ck in category_map[cat]:
-                    queries.append(ck)
-
-    # Ensure uniqueness and limit
+    
+    # Category to search term mapping (use category names directly as they're user-friendly)
+    # Categories come from frontend as: "Art Gallery", "Museum", "Art Studio", etc.
+    category_terms = [cat.strip() for cat in categories if cat and cat.strip()] if categories else []
+    
+    # If no inputs provided, return empty list (will be caught and job will fail)
+    if not base_keywords and not category_terms and not locations:
+        return []
+    
+    # Generate queries: category/keyword × location combinations
+    search_terms = []
+    
+    # Add categories as search terms
+    search_terms.extend(category_terms)
+    
+    # Add keywords as search terms
+    search_terms.extend(base_keywords)
+    
+    # If no search terms but locations exist, use generic art-related terms
+    if not search_terms and locations:
+        search_terms = ["art gallery", "art studio", "creative agency"]
+    
+    # Generate all combinations: search_term × location
+    for term in search_terms:
+        if locations:
+            for location in locations:
+                # Create query: "{term} {location}"
+                query = f"{term} {location}".strip()
+                if query:  # Only add non-empty queries
+                    queries.append(query)
+        else:
+            # No locations, just use the term
+            if term:
+                queries.append(term)
+    
+    # Also add keyword + category combinations if both exist
+    if base_keywords and category_terms:
+        for keyword in base_keywords:
+            for category in category_terms:
+                if locations:
+                    for location in locations:
+                        query = f"{keyword} {category} {location}".strip()
+                        if query:
+                            queries.append(query)
+                else:
+                    query = f"{keyword} {category}".strip()
+                    if query:
+                        queries.append(query)
+    
+    # Ensure uniqueness and limit to reasonable number
     unique_queries = list(dict.fromkeys(queries))
-    return unique_queries[:20]
+    
+    # Limit to 50 queries max to avoid excessive API calls
+    return unique_queries[:50]
 
 
 async def discover_websites_async(job_id: str) -> Dict[str, Any]:
@@ -205,10 +237,24 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                     return {"error": "Job was cancelled"}
                 
                 location_code = client.get_location_code(loc)
-                search_queries = _generate_search_queries(keywords, categories)
+                
+                # Generate search queries for THIS location
+                # Pass single location list to generate location-specific queries
+                search_queries = _generate_search_queries(keywords, categories, [loc])
+                
+                # CRITICAL: Fail job if no queries generated for this location
+                if not search_queries or len(search_queries) == 0:
+                    error_msg = f"No valid search queries generated from keywords='{keywords}', categories={categories}, location='{loc}'"
+                    logger.error(f"❌ {error_msg}")
+                    job.status = "failed"
+                    job.error_message = error_msg
+                    await safe_commit(db, f"marking job {job_id} as failed (no queries generated)")
+                    return {"error": error_msg}
+                
                 search_stats["total_queries"] += len(search_queries)
                 
                 logger.info(f"📍 Processing location '{loc}' (code: {location_code}) with {len(search_queries)} queries")
+                logger.info(f"📝 Generated queries for {loc}: {search_queries[:5]}{'...' if len(search_queries) > 5 else ''}")
                 
                 for query in search_queries:
                     # Check for timeout or cancellation before each query
@@ -273,7 +319,6 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         "results_saved": 0,
                         "error": None
                     }
-                    search_stats["queries_executed"] += 1
                     
                     try:
                         # Check for cancellation before making API call
@@ -284,6 +329,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                         
                         logger.info(f"🔍 Searching: '{query}' in {loc} (location_code: {location_code})...")
                         # Call DataForSEO API with explicit parameters
+                        # CRITICAL: Only increment queries_executed AFTER making the API call
                         serp_results = await client.serp_google_organic(
                             keyword=query,
                             location_code=location_code,
@@ -291,6 +337,9 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             depth=10,
                             device="desktop"
                         )
+                        
+                        # Increment queries_executed AFTER successful API call
+                        search_stats["queries_executed"] += 1
                         
                         # Check for cancellation after API call
                         await db.refresh(job)
@@ -566,6 +615,19 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                 await safe_commit(db, f"marking job {job_id} as failed (commit error)")
                 return {"error": "Failed to commit prospects to database"}
             logger.info(f"💾 Committed {len(all_prospects)} new prospects to database")
+            
+            # CRITICAL: Fail job if zero queries were executed
+            if search_stats["queries_executed"] == 0:
+                error_msg = f"No queries were executed. Generated {search_stats['total_queries']} queries but none were sent to DataForSEO."
+                logger.error(f"❌ {error_msg}")
+                job.status = "failed"
+                job.error_message = error_msg
+                job.result = {
+                    "error": error_msg,
+                    "search_statistics": search_stats
+                }
+                await safe_commit(db, f"marking job {job_id} as failed (zero queries executed)")
+                return {"error": error_msg}
             
             # Update job status with detailed results
             job.status = "completed"
