@@ -38,7 +38,7 @@ export default function Dashboard() {
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
     'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
-  >('overview')
+  >('pipeline')  // Pipeline-first: default to Pipeline tab
 
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
@@ -131,9 +131,20 @@ export default function Dashboard() {
       loadData(false) // Don't set loading state on periodic refreshes
     }, 30000)
     
+    // Listen for tab change events from Pipeline component
+    const handleTabChange = (e: CustomEvent) => {
+      const tabId = e.detail as string
+      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
+        setActiveTab(tabId as any)
+      }
+    }
+    
+    window.addEventListener('change-tab', handleTabChange as EventListener)
+    
     return () => {
       clearInterval(interval)
       clearTimeout(loadTimeout)
+      window.removeEventListener('change-tab', handleTabChange as EventListener)
     }
   }, [router, loadData])
 

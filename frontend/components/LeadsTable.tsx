@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2 } from 'lucide-react'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users } from 'lucide-react'
 import { listProspects, composeEmail, sendEmail, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -36,9 +36,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         emailsOnly ? true : undefined
       )
       // Ensure data is always an array
-      const prospectsData = Array.isArray(response?.data) ? response.data : []
-      setProspects(prospectsData)
-      setTotal(response?.total ?? 0)
+      // FILTER: Only show prospects that have been scraped (scrape_status = SCRAPED or ENRICHED)
+      // This ensures we only show prospects, not discovery results
+      const allProspects = Array.isArray(response?.data) ? response.data : []
+      const scrapedProspects = allProspects.filter((p: Prospect) => 
+        p.scrape_status === 'SCRAPED' || p.scrape_status === 'ENRICHED'
+      )
+      setProspects(scrapedProspects)
+      // Note: total count is approximate since we're filtering client-side
+      // In production, this should be a backend filter
+      setTotal(scrapedProspects.length)
       // Clear error if we successfully got data (even if empty)
       // Empty data is not an error, it's a valid state
     } catch (error: any) {
@@ -169,12 +176,20 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </button>
         </div>
       ) : prospects.length === 0 && !loading ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500 mb-2">No {emailsOnly ? 'emails' : 'leads'} found</p>
-          <p className="text-gray-400 text-sm">
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium mb-2">
+            No {emailsOnly ? 'prospects with emails' : 'prospects'} yet
+          </p>
+          <p className="text-gray-500 text-sm mb-4">
             {emailsOnly 
-              ? 'Enrich prospects from the Websites tab to get email addresses.'
-              : 'Run a discovery job from the Overview tab to find leads.'}
+              ? 'No prospects with emails yet. Scrape discovered websites to extract contact information.'
+              : 'No prospects yet. Scrape discovered websites to create prospects.'}
+          </p>
+          <p className="text-gray-400 text-xs">
+            {emailsOnly 
+              ? 'Prospects appear here after scraping finds emails. Go to the Websites tab to approve and scrape websites.'
+              : 'Prospects are created after scraping. Go to the Websites tab to approve websites, then use the Pipeline tab to scrape them.'}
           </p>
         </div>
       ) : (
