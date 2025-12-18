@@ -641,6 +641,67 @@ async def get_pipeline_status(
         "discovered": discovered_count,
         "approved": approved_count,
         "scraped": scraped_count,  # Includes both SCRAPED and ENRICHED
+        "discovered_for_scraping": discovered_for_scraping_count,  # DISCOVERED status
+        "verified": verified_count,
+        "reviewed": verified_count,  # Same as verified for review step
+    }
+
+
+# ============================================
+# WEBSITES ENDPOINT (Discovery Results)
+# ============================================
+
+@router.get("/websites")
+async def get_websites(
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Get discovered websites (discovery results)
+    
+    Returns prospects with discovery_status = "DISCOVERED"
+    These are websites found during discovery, not yet scraped
+    """
+    result = await db.execute(
+        select(Prospect).where(
+            Prospect.discovery_status == "DISCOVERED"
+        )
+        .order_by(Prospect.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    websites = result.scalars().all()
+    
+    total_result = await db.execute(
+        select(func.count(Prospect.id)).where(
+            Prospect.discovery_status == "DISCOVERED"
+        )
+    )
+    total = total_result.scalar() or 0
+    
+    return {
+        "data": [{
+            "id": str(p.id),
+            "domain": p.domain,
+            "url": p.url or f"https://{p.domain}",
+            "title": p.page_title or p.domain,
+            "category": p.discovery_category or "Unknown",
+            "location": p.discovery_location or "Unknown",
+            "discovery_job_id": str(p.discovery_job_id) if p.discovery_job_id else None,
+            "discovered_at": p.created_at.isoformat() if p.created_at else None,
+            "scrape_status": p.scrape_status or "DISCOVERED",
+            "approval_status": p.approval_status or "PENDING",
+        } for p in websites],
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
+    return {
+        "discovered": discovered_count,
+        "approved": approved_count,
+        "scraped": scraped_count,  # Includes both SCRAPED and ENRICHED
         "discovered_for_scraping": discovered_for_scraping_count,  # DISCOVERED status (ready for scraping)
         "verified": verified_count,
         "reviewed": verified_count,  # Same as verified for review step
