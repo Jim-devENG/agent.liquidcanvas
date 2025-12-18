@@ -579,10 +579,12 @@ async def draft_emails(
         )
         if column_check.fetchone():
             # Column exists - use stage-based query
+            # Check for VERIFIED stage (after verification, stage becomes VERIFIED, not LEAD)
+            # OR LEAD stage with verified status (in case verification didn't update stage yet)
             result = await db.execute(
                 select(Prospect).where(
                     Prospect.id.in_(request.prospect_ids),
-                    Prospect.stage == ProspectStage.LEAD.value,
+                    Prospect.stage.in_([ProspectStage.VERIFIED.value, ProspectStage.LEAD.value]),
                     Prospect.verification_status == VerificationStatus.VERIFIED.value,
                     Prospect.contact_email.isnot(None),
                     Prospect.draft_status == "pending"
@@ -899,16 +901,19 @@ async def get_pipeline_status(
         )
         if column_check.fetchone():
             # Column exists - use raw SQL to query safely
+            # Check for VERIFIED stage (after verification, stage becomes VERIFIED, not LEAD)
+            # OR LEAD stage with verified status (in case verification didn't update stage yet)
             drafting_ready_result = await db.execute(
                 text("""
                     SELECT COUNT(*) 
                     FROM prospects 
-                    WHERE stage = :stage_value
+                    WHERE (stage = :verified_stage_value OR stage = :lead_stage_value)
                     AND contact_email IS NOT NULL
                     AND verification_status = :verification_status_value
                 """),
                 {
-                    "stage_value": ProspectStage.LEAD.value,
+                    "verified_stage_value": ProspectStage.VERIFIED.value,
+                    "lead_stage_value": ProspectStage.LEAD.value,
                     "verification_status_value": VerificationStatus.VERIFIED.value
                 }
             )
