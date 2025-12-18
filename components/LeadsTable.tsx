@@ -169,12 +169,20 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </button>
         </div>
       ) : prospects.length === 0 && !loading ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500 mb-2">No {emailsOnly ? 'emails' : 'leads'} found</p>
-          <p className="text-gray-400 text-sm">
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium mb-2">
+            No {emailsOnly ? 'prospects with emails' : 'prospects'} yet
+          </p>
+          <p className="text-gray-500 text-sm mb-4">
             {emailsOnly 
-              ? 'Enrich prospects from the Websites tab to get email addresses.'
-              : 'Run a discovery job from the Overview tab to find leads.'}
+              ? 'Prospects appear here after scraping finds contact information. Complete the Pipeline steps to create prospects.'
+              : 'Prospects are created after scraping websites. Complete the Pipeline steps: Discover → Approve → Scrape → Prospects appear here.'}
+          </p>
+          <p className="text-gray-400 text-xs">
+            {emailsOnly 
+              ? 'Use the Pipeline tab to scrape websites and extract emails.'
+              : 'Start with Step 1 (Discovery) in the Pipeline tab to find websites.'}
           </p>
         </div>
       ) : (

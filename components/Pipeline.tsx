@@ -12,9 +12,12 @@ import {
   pipelineSend, 
   pipelineStatus,
   listProspects,
+  listJobs,
   type Prospect,
+  type Job,
   type PipelineStatus as PipelineStatusType
 } from '@/lib/api'
+import DiscoveredWebsitesTable from './DiscoveredWebsitesTable'
 
 interface Step {
   id: number
@@ -35,7 +38,18 @@ export default function Pipeline() {
   const loadStatus = async () => {
     try {
       const statusData = await pipelineStatus()
-      setStatus(statusData)
+      // Defensive: ensure all counts are numbers (handle zero safely)
+      const safeStatus = {
+        discovered: statusData.discovered || 0,
+        approved: statusData.approved || 0,
+        scraped: statusData.scraped || 0,
+        verified: statusData.verified || 0,
+        reviewed: statusData.reviewed || 0,
+        drafted: statusData.drafted || 0,
+        sent: statusData.sent || 0,
+        discovered_for_scraping: statusData.discovered_for_scraping || 0,
+      }
+      setStatus(safeStatus as PipelineStatusType)
       
       // Update steps based on status
       const newSteps: Step[] = [
@@ -52,68 +66,68 @@ export default function Pipeline() {
           name: 'Human Selection',
           description: 'Review and approve websites',
           icon: Users,
-          status: statusData.discovered === 0 ? 'locked' : 
-                 statusData.approved > 0 ? 'completed' : 'active',
-          count: statusData.approved
+          status: (statusData.discovered || 0) === 0 ? 'locked' : 
+                 (statusData.approved || 0) > 0 ? 'completed' : 'active',
+          count: statusData.approved || 0
         },
         {
           id: 3,
           name: 'Scraping',
           description: 'Extract emails from websites',
           icon: Scissors,
-          status: statusData.approved === 0 ? 'locked' :
-                 statusData.scraped > 0 ? 'completed' : 'active',
-          count: statusData.scraped
+          status: (statusData.approved || 0) === 0 ? 'locked' :
+                 (statusData.scraped || 0) > 0 ? 'completed' : 'active',
+          count: statusData.scraped || 0
         },
         {
           id: 4,
           name: 'Verification',
           description: 'Verify emails with Snov.io',
           icon: Shield,
-          status: statusData.scraped === 0 ? 'locked' :
-                 statusData.verified > 0 ? 'completed' : 'active',
-          count: statusData.verified
+          status: (statusData.scraped || 0) === 0 ? 'locked' :
+                 (statusData.verified || 0) > 0 ? 'completed' : 'active',
+          count: statusData.verified || 0
         },
         {
           id: 5,
           name: 'Email Review',
           description: 'Manually review verified emails',
           icon: Eye,
-          status: statusData.verified === 0 ? 'locked' :
-                 statusData.reviewed > 0 ? 'completed' : 'active',
-          count: statusData.reviewed
+          status: (statusData.verified || 0) === 0 ? 'locked' :
+                 (statusData.reviewed || 0) > 0 ? 'completed' : 'active',
+          count: statusData.reviewed || 0
         },
         {
           id: 6,
           name: 'Drafting',
           description: 'Generate outreach emails with Gemini',
           icon: FileText,
-          status: statusData.reviewed === 0 ? 'locked' :
-                 statusData.drafted > 0 ? 'completed' : 'active',
-          count: statusData.drafted
+          status: (statusData.reviewed || 0) === 0 ? 'locked' :
+                 (statusData.drafted || 0) > 0 ? 'completed' : 'active',
+          count: statusData.drafted || 0
         },
         {
           id: 7,
           name: 'Sending',
           description: 'Send emails via Gmail API',
           icon: Send,
-          status: statusData.drafted === 0 ? 'locked' :
-                 statusData.sent > 0 ? 'completed' : 'active',
-          count: statusData.sent
+          status: (statusData.drafted || 0) === 0 ? 'locked' :
+                 (statusData.sent || 0) > 0 ? 'completed' : 'active',
+          count: statusData.sent || 0
         }
       ]
       
       setSteps(newSteps)
       
-      // Determine active step
-      if (statusData.sent > 0) setActiveStep(7)
-      else if (statusData.drafted > 0) setActiveStep(6)
-      else if (statusData.reviewed > 0) setActiveStep(5)
-      else if (statusData.verified > 0) setActiveStep(4)
-      else if (statusData.scraped > 0) setActiveStep(3)
-      else if (statusData.approved > 0) setActiveStep(2)
-      else if (statusData.discovered > 0) setActiveStep(1)
-      else setActiveStep(1)
+      // Determine active step (defensive: handle zero counts safely)
+      if ((statusData.sent || 0) > 0) setActiveStep(7)
+      else if ((statusData.drafted || 0) > 0) setActiveStep(6)
+      else if ((statusData.reviewed || 0) > 0) setActiveStep(5)
+      else if ((statusData.verified || 0) > 0) setActiveStep(4)
+      else if ((statusData.scraped || 0) > 0) setActiveStep(3)
+      else if ((statusData.approved || 0) > 0) setActiveStep(2)
+      else if ((statusData.discovered || 0) > 0) setActiveStep(1)
+      else setActiveStep(1)  // Default to Step 1 if no progress
       
     } catch (error) {
       console.error('Failed to load pipeline status:', error)
@@ -130,35 +144,35 @@ export default function Pipeline() {
 
   const loadProspects = async (step: number) => {
     try {
-      let query: any = {}
-      
+      // Step 1: Discovery - show discovered websites (not prospects yet)
       if (step === 1) {
-        // Discovered prospects
-        query = { discovery_status: 'DISCOVERED' }
+        // No prospects to load - discovered websites are shown separately
+        setProspects([])
+        return
       } else if (step === 2) {
-        // Discovered but not yet approved/rejected
+        // Discovered websites ready for approval (discovery_status = DISCOVERED, approval_status = pending)
         const all = await listProspects(0, 1000)
         const discovered = all.data.filter((p: Prospect) => 
           p.discovery_status === 'DISCOVERED' && 
-          (!p.approval_status || p.approval_status === 'pending')
+          (!p.approval_status || p.approval_status === 'pending' || p.approval_status === 'PENDING')
         )
         setProspects(discovered)
         return
       } else if (step === 3) {
-        // Approved prospects ready for scraping
+        // Approved websites ready for scraping (scrape_status = DISCOVERED)
         const all = await listProspects(0, 1000)
         const approved = all.data.filter((p: Prospect) => 
           p.approval_status === 'approved' && 
-          (!p.scrape_status || p.scrape_status === 'pending')
+          (p.scrape_status === 'DISCOVERED' || !p.scrape_status)
         )
         setProspects(approved)
         return
       } else if (step === 4) {
-        // Scraped prospects ready for verification
+        // Scraped prospects ready for verification (scrape_status = SCRAPED or ENRICHED)
         const all = await listProspects(0, 1000)
         const scraped = all.data.filter((p: Prospect) => 
-          p.scrape_status === 'SCRAPED' && 
-          (!p.verification_status || p.verification_status === 'pending')
+          (p.scrape_status === 'SCRAPED' || p.scrape_status === 'ENRICHED') && 
+          (!p.verification_status || p.verification_status === 'pending' || p.verification_status === 'PENDING')
         )
         setProspects(scraped)
         return
@@ -299,6 +313,11 @@ export default function Pipeline() {
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
         {activeStep === 1 && <Step1Discovery onComplete={loadStatus} />}
         {activeStep === 2 && <Step2Selection prospects={prospects} onComplete={loadStatus} />}
+        {activeStep === 1 && (
+          <div className="mt-6">
+            <DiscoveredWebsitesTable />
+          </div>
+        )}
         {activeStep === 3 && <Step3Scraping prospects={prospects} onComplete={loadStatus} />}
         {activeStep === 4 && <Step4Verification prospects={prospects} onComplete={loadStatus} />}
         {activeStep === 5 && <Step5Review prospects={prospects} onComplete={loadStatus} />}
@@ -317,6 +336,8 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [discoveryJobs, setDiscoveryJobs] = useState<Job[]>([])
+  const [discoveryJobStatus, setDiscoveryJobStatus] = useState<string | null>(null)
 
   const availableCategories = [
     'Art Gallery', 'Museum', 'Art Studio', 'Art School', 'Art Fair', 
@@ -327,6 +348,33 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
     'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
     'France', 'Italy', 'Spain', 'Netherlands', 'Belgium'
   ]
+
+  // Load discovery job status
+  useEffect(() => {
+    const loadDiscoveryJobs = async () => {
+      try {
+        const jobs = await listJobs(0, 50)
+        const discoveryJobsList = jobs.filter((j: Job) => j.job_type === 'discover')
+        setDiscoveryJobs(discoveryJobsList)
+        
+        // Get most recent discovery job status
+        if (discoveryJobsList.length > 0) {
+          const latestJob = discoveryJobsList.sort((a: Job, b: Job) => {
+            const dateA = new Date(a.created_at || 0).getTime()
+            const dateB = new Date(b.created_at || 0).getTime()
+            return dateB - dateA
+          })[0]
+          setDiscoveryJobStatus(latestJob.status)
+        }
+      } catch (err) {
+        console.error('Failed to load discovery jobs:', err)
+      }
+    }
+    
+    loadDiscoveryJobs()
+    const interval = setInterval(loadDiscoveryJobs, 5000) // Poll every 5 seconds
+    return () => clearInterval(interval)
+  }, [])
 
   const handleDiscover = async () => {
     if (categories.length === 0) {
@@ -436,7 +484,27 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
 
         {success && (
           <div className="p-3 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
-            ✅ Discovery job started! Check Step 2 to review discovered websites.
+            ✅ Discovery job started! The table below will update as websites are discovered.
+          </div>
+        )}
+
+        {/* Discovery Job Status */}
+        {discoveryJobs.length > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-sm font-medium text-blue-900 mb-2">Latest Discovery Job</p>
+            <div className="flex items-center space-x-4 text-sm">
+              <span className={`px-2 py-1 rounded font-medium ${
+                discoveryJobStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                discoveryJobStatus === 'running' ? 'bg-yellow-100 text-yellow-800' :
+                discoveryJobStatus === 'failed' ? 'bg-red-100 text-red-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {discoveryJobStatus || 'Unknown'}
+              </span>
+              <span className="text-blue-700">
+                {discoveryJobs.length} job{discoveryJobs.length !== 1 ? 's' : ''} found
+              </span>
+            </div>
           </div>
         )}
 
@@ -519,8 +587,15 @@ function Step2Selection({ prospects, onComplete }: { prospects: Prospect[], onCo
       <p className="text-gray-600 mb-6">Review discovered websites. Select and approve the ones you want to proceed with.</p>
       
       {prospects.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          No discovered websites found. Complete Step 1 first.
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium mb-2">No websites ready for approval</p>
+          <p className="text-gray-500 text-sm mb-4">
+            Complete Step 1 (Discovery) to find websites. Discovered websites will appear here for review.
+          </p>
+          <p className="text-gray-400 text-xs">
+            Websites become available for approval once discovery jobs complete.
+          </p>
         </div>
       ) : (
         <>
@@ -632,8 +707,15 @@ function Step3Scraping({ prospects, onComplete }: { prospects: Prospect[], onCom
       <p className="text-gray-600 mb-6">Scrape approved websites to extract visible emails from homepage and contact pages.</p>
       
       {prospects.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          No approved websites found. Complete Step 2 first.
+        <div className="text-center py-12">
+          <Scissors className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium mb-2">No approved websites ready for scraping</p>
+          <p className="text-gray-500 text-sm mb-4">
+            Complete Step 2 (Human Selection) to approve websites. Approved websites will appear here for scraping.
+          </p>
+          <p className="text-gray-400 text-xs">
+            After scraping, websites become prospects with contact information.
+          </p>
         </div>
       ) : (
         <>

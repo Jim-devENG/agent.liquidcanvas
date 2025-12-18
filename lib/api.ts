@@ -1044,8 +1044,9 @@ export interface PipelineStatus {
   scraped: number
   verified: number
   reviewed: number  // Same as verified for review step
-  drafted: number
-  sent: number
+  drafted?: number  // Optional - may not be in response
+  sent?: number  // Optional - may not be in response
+  discovered_for_scraping?: number  // DISCOVERED status (ready for scraping)
 }
 
 export async function pipelineStatus(): Promise<PipelineStatus> {

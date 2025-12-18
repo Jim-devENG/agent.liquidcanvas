@@ -38,7 +38,7 @@ export default function Dashboard() {
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
     'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
-  >('overview')
+  >('pipeline')  // Pipeline-first: default to Pipeline tab
 
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
