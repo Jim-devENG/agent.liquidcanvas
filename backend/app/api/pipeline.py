@@ -12,8 +12,14 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.api.auth import get_current_user_optional
-from app.models.prospect import Prospect
-from app.models.enums import DiscoveryStatus, ScrapeStatus, VerificationStatus, DraftStatus, SendStatus
+from app.models.prospect import (
+    Prospect,
+    DiscoveryStatus,
+    ScrapeStatus,
+    VerificationStatus,
+    DraftStatus,
+    SendStatus,
+)
 from app.models.job import Job
 
 logger = logging.getLogger(__name__)
@@ -150,7 +156,7 @@ async def approve_prospects(
     result = await db.execute(
         select(Prospect).where(
             Prospect.id.in_(request.prospect_ids),
-            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value  # Only allow approval of discovered prospects
+            Prospect.discovery_status == "DISCOVERED"  # Only allow approval of discovered prospects
         )
     )
     prospects = result.scalars().all()
@@ -219,7 +225,9 @@ async def approve_all_prospects(
 
     await db.commit()
 
-    logger.info(f"✅ [PIPELINE STEP 2] Bulk-approved {approved_count} discovered prospects")
+    logger.info(
+        f"✅ [PIPELINE STEP 2] Bulk-approved {approved_count} discovered prospects"
+    )
 
     return ApprovalResponse(
         success=True,
@@ -263,7 +271,7 @@ async def scrape_websites(
     # Get approved prospects ready for scraping
     query = select(Prospect).where(
         Prospect.approval_status == "approved",
-        Prospect.scrape_status == ScrapeStatus.DISCOVERED.value
+        Prospect.scrape_status == "pending"
     )
     
     if request.prospect_ids:
@@ -351,8 +359,10 @@ async def verify_emails(
     """
     # Get scraped prospects ready for verification
     query = select(Prospect).where(
-        Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.NO_EMAIL_FOUND.value]),
-        Prospect.verification_status == VerificationStatus.PENDING.value
+        Prospect.scrape_status.in_(
+            [ScrapeStatus.SCRAPED.value, ScrapeStatus.NO_EMAIL_FOUND.value]
+        ),
+        Prospect.verification_status == VerificationStatus.PENDING.value,
     )
     
     if request.prospect_ids:
@@ -425,7 +435,7 @@ async def get_review_prospects(
     """
     result = await db.execute(
         select(Prospect).where(
-            Prospect.verification_status.in_([VerificationStatus.VERIFIED.value, VerificationStatus.UNVERIFIED_LOWER.value]),
+            Prospect.verification_status.in_(["verified", "unverified"]),
             Prospect.contact_email.isnot(None)
         )
         .offset(skip)
@@ -435,7 +445,7 @@ async def get_review_prospects(
     
     total_result = await db.execute(
         select(func.count(Prospect.id)).where(
-            Prospect.verification_status.in_([VerificationStatus.VERIFIED.value, VerificationStatus.UNVERIFIED_LOWER.value]),
+            Prospect.verification_status.in_(["verified", "unverified"]),
             Prospect.contact_email.isnot(None)
         )
     )
@@ -492,7 +502,7 @@ async def draft_emails(
             Prospect.id.in_(request.prospect_ids),
             Prospect.verification_status.in_(["verified", "unverified"]),
             Prospect.contact_email.isnot(None),
-            Prospect.draft_status == DraftStatus.PENDING.value
+            Prospect.draft_status == "pending"
         )
     )
     prospects = result.scalars().all()
@@ -577,10 +587,10 @@ async def send_emails(
     result = await db.execute(
         select(Prospect).where(
             Prospect.id.in_(request.prospect_ids),
-            Prospect.draft_status == DraftStatus.DRAFTED.value,
+            Prospect.draft_status == "drafted",
             Prospect.draft_subject.isnot(None),
             Prospect.draft_body.isnot(None),
-            Prospect.send_status == SendStatus.PENDING.value
+            Prospect.send_status == "pending"
         )
     )
     prospects = result.scalars().all()
@@ -648,7 +658,9 @@ async def get_pipeline_status(
     # Count prospects at each step using ONLY the four guaranteed columns
     # Step 1: DISCOVERED (canonical status for discovered websites)
     discovered = await db.execute(
-        select(func.count(Prospect.id)).where(Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value)
+        select(func.count(Prospect.id)).where(
+            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+        )
     )
     discovered_count = discovered.scalar() or 0
     
@@ -662,20 +674,26 @@ async def get_pipeline_status(
     # Count both SCRAPED (emails found via scraping) and ENRICHED (emails found via enrichment)
     scraped = await db.execute(
         select(func.count(Prospect.id)).where(
-            Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value])
+            Prospect.scrape_status.in_(
+                [ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]
+            )
         )
     )
     scraped_count = scraped.scalar() or 0
     
     # Also count DISCOVERED (ready for scraping)
     discovered_for_scraping = await db.execute(
-        select(func.count(Prospect.id)).where(Prospect.scrape_status == ScrapeStatus.DISCOVERED.value)
+        select(func.count(Prospect.id)).where(
+            Prospect.scrape_status == ScrapeStatus.DISCOVERED.value
+        )
     )
     discovered_for_scraping_count = discovered_for_scraping.scalar() or 0
     
     # Step 4: VERIFIED (verification_status = "verified")
     verified = await db.execute(
-        select(func.count(Prospect.id)).where(Prospect.verification_status == VerificationStatus.VERIFIED.value)
+        select(func.count(Prospect.id)).where(
+            Prospect.verification_status == VerificationStatus.VERIFIED.value
+        )
     )
     verified_count = verified.scalar() or 0
     
@@ -736,7 +754,7 @@ async def get_websites(
             "location": p.discovery_location or "Unknown",
             "discovery_job_id": str(p.discovery_query_id) if p.discovery_query_id else None,
             "discovered_at": p.created_at.isoformat() if p.created_at else None,
-            "scrape_status": p.scrape_status or ScrapeStatus.DISCOVERED.value,
+            "scrape_status": p.scrape_status or "DISCOVERED",
             "approval_status": p.approval_status or "PENDING",
         } for p in websites],
         "total": total,

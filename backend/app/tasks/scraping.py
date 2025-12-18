@@ -11,10 +11,9 @@ from sqlalchemy import select
 from datetime import datetime, timezone
 
 from app.db.database import AsyncSessionLocal
-from app.models.prospect import Prospect
+from app.models.prospect import Prospect, ScrapeStatus
 from app.models.job import Job
 from app.services.enrichment import _scrape_emails_from_domain
-from app.models.enums import ScrapeStatus
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ async def scrape_prospects_async(job_id: str):
                 select(Prospect).where(
                     Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
                     Prospect.approval_status == "approved",
-                    Prospect.scrape_status == ScrapeStatus.DISCOVERED.value
+                    Prospect.scrape_status == ScrapeStatus.DISCOVERED.value,
                 )
             )
             prospects = result.scalars().all()
@@ -103,7 +102,10 @@ async def scrape_prospects_async(job_id: str):
                     await asyncio.sleep(1)
                     
                 except Exception as e:
-                    logger.error(f"❌ [SCRAPING] Failed to scrape {prospect.domain}: {e}", exc_info=True)
+                    logger.error(
+                        f"❌ [SCRAPING] Failed to scrape {prospect.domain}: {e}",
+                        exc_info=True,
+                    )
                     prospect.scrape_status = ScrapeStatus.FAILED.value
                     failed_count += 1
                     await db.commit()
