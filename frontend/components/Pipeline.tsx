@@ -235,10 +235,10 @@ export default function Pipeline() {
       description: 'Verify emails with Snov.io',
       icon: Shield,
       status: normalizedStatus.leads === 0 ? 'locked' :
-              normalizedStatus.verified > 0 ? 'completed' : 'active',
-      count: normalizedStatus.verified,
+              normalizedStatus.verified_email_count > 0 ? 'completed' : 'active',
+      count: normalizedStatus.verified_email_count,
       ctaText: normalizedStatus.leads === 0 ? 'Scrape Websites First' :
-               normalizedStatus.verified > 0 ? 'View Verified' : 'Start Verification',
+               normalizedStatus.verified_email_count > 0 ? 'View Verified' : 'Start Verification',
       ctaAction: () => {
         if (normalizedStatus.leads === 0) {
           alert('Please scrape websites first to create leads')
@@ -350,7 +350,7 @@ export default function Pipeline() {
                   <p className="text-xs text-gray-500">
                     {step.id === 1 && `${normalizedStatus.discovered} discovered`}
                     {step.id === 2 && `${normalizedStatus.scraped} scraped • ${normalizedStatus.email_found || 0} with emails`}
-                    {step.id === 3 && `${normalizedStatus.leads} leads • ${normalizedStatus.verified_stage || normalizedStatus.verified} verified`}
+                    {step.id === 3 && `${normalizedStatus.leads} leads • ${normalizedStatus.verified_email_count} verified`}
                     {step.id === 4 && `${normalizedStatus.drafting_ready_count || 0} ready • ${normalizedStatus.drafted} drafted`}
                     {step.id === 5 && `${normalizedStatus.sent} sent`}
                     {!step.id && `${step.count} ${step.count === 1 ? 'item' : 'items'} ${isCompleted ? 'completed' : 'ready'}`}

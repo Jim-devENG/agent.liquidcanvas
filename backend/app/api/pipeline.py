@@ -878,16 +878,19 @@ async def get_pipeline_status(
             email_found_count = 0
             leads_count = 0
     
-    # Step 4: VERIFIED (verification_status = "verified")
-    verified = await db.execute(
+    # Step 4: VERIFIED EMAILS (verification_status = "verified" AND contact_email IS NOT NULL)
+    # Data-driven: Count prospects with verified emails from prospects table ONLY
+    verified_email_count = await db.execute(
         select(func.count(Prospect.id)).where(
-            Prospect.verification_status == VerificationStatus.VERIFIED.value
+            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+            Prospect.contact_email.isnot(None)
         )
     )
-    verified_count = verified.scalar() or 0
+    verified_email_count = verified_email_count.scalar() or 0
     
     # Step 5: DRAFTING READY (stage = LEAD, email IS NOT NULL, verification_status = verified)
     # Data-driven: Count prospects ready for drafting based on actual data, not job completion
+    # Requirements: stage = LEAD, contact_email IS NOT NULL, verification_status = verified
     drafting_ready_count = 0
     try:
         # Check if stage column exists
@@ -901,18 +904,16 @@ async def get_pipeline_status(
         )
         if column_check.fetchone():
             # Column exists - use raw SQL to query safely
-            # Check for VERIFIED stage (after verification, stage becomes VERIFIED, not LEAD)
-            # OR LEAD stage with verified status (in case verification didn't update stage yet)
+            # Check for LEAD stage with verified email (explicit requirement: stage=LEAD)
             drafting_ready_result = await db.execute(
                 text("""
                     SELECT COUNT(*) 
                     FROM prospects 
-                    WHERE (stage = :verified_stage_value OR stage = :lead_stage_value)
+                    WHERE stage = :lead_stage_value
                     AND contact_email IS NOT NULL
                     AND verification_status = :verification_status_value
                 """),
                 {
-                    "verified_stage_value": ProspectStage.VERIFIED.value,
                     "lead_stage_value": ProspectStage.LEAD.value,
                     "verification_status_value": VerificationStatus.VERIFIED.value
                 }
@@ -956,9 +957,10 @@ async def get_pipeline_status(
         "scrape_ready_count": scrape_ready_count,
         "email_found": email_found_count,  # Prospects with emails found (stage=EMAIL_FOUND)
         "leads": leads_count,  # Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
-        "verified": verified_count,  # verification_status = VERIFIED
+        "verified": verified_email_count,  # Backwards-compatible: verification_status=verified AND email IS NOT NULL
+        "verified_email_count": verified_email_count,  # Data-driven: verification_status=verified AND contact_email IS NOT NULL
         "verified_stage": verified_stage_count,  # stage = VERIFIED
-        "reviewed": verified_count,  # Same as verified for review step
+        "reviewed": verified_email_count,  # Same as verified_email_count for review step
         "drafting_ready_count": drafting_ready_count,  # Data-driven: stage=LEAD, email IS NOT NULL, verification_status=verified
     }
 
@@ -1013,13 +1015,5 @@ async def get_websites(
         "total": total,
         "skip": skip,
         "limit": limit
-    }
-    return {
-        "discovered": discovered_count,
-        "approved": approved_count,
-        "scraped": scraped_count,  # Includes both SCRAPED and ENRICHED
-        "discovered_for_scraping": discovered_for_scraping_count,  # DISCOVERED status (ready for scraping)
-        "verified": verified_count,
-        "reviewed": verified_count,  # Same as verified for review step
     }
 

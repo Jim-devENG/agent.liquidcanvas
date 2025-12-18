@@ -146,22 +146,9 @@ async def verify_prospects_async(job_id: str):
                                 prospect.verification_status = (
                                     VerificationStatus.VERIFIED.value
                                 )
-                                # Promote to VERIFIED stage (defensive: check if column exists)
-                                from sqlalchemy import text
-                                try:
-                                    column_check = await db.execute(
-                                        text("""
-                                            SELECT column_name
-                                            FROM information_schema.columns 
-                                            WHERE table_name = 'prospects' 
-                                            AND column_name = 'stage'
-                                        """)
-                                    )
-                                    if column_check.fetchone():
-                                        prospect.stage = ProspectStage.VERIFIED.value
-                                        logger.debug(f"✅ [VERIFICATION] Set stage=VERIFIED for prospect {prospect.id}")
-                                except Exception as stage_err:
-                                    logger.warning(f"⚠️  Could not set stage=VERIFIED: {stage_err}")
+                                # Keep stage as LEAD (don't change to VERIFIED) - stage=LEAD + verification_status=verified = ready for drafting
+                                # Stage remains LEAD to match drafting_ready_count query requirement
+                                logger.debug(f"✅ [VERIFICATION] Verified email for prospect {prospect.id}, stage remains LEAD")
                                 prospect.verification_confidence = confidence
                                 prospect.verification_payload = snov_result
                                 verified_count += 1
@@ -211,27 +198,13 @@ async def verify_prospects_async(job_id: str):
                                 prospect.verification_status = (
                                     VerificationStatus.VERIFIED.value
                                 )
-                                # Promote to VERIFIED stage (defensive: check if column exists)
-                                from sqlalchemy import text
-                                try:
-                                    column_check = await db.execute(
-                                        text("""
-                                            SELECT column_name
-                                            FROM information_schema.columns 
-                                            WHERE table_name = 'prospects' 
-                                            AND column_name = 'stage'
-                                        """)
-                                    )
-                                    if column_check.fetchone():
-                                        prospect.stage = ProspectStage.VERIFIED.value
-                                        logger.debug(f"✅ [VERIFICATION] Set stage=VERIFIED for prospect {prospect.id}")
-                                except Exception as stage_err:
-                                    logger.warning(f"⚠️  Could not set stage=VERIFIED: {stage_err}")
+                                # Keep stage as LEAD (don't change to VERIFIED) - stage=LEAD + verification_status=verified = ready for drafting
+                                # Stage remains LEAD to match drafting_ready_count query requirement
                                 prospect.verification_confidence = confidence
                                 prospect.verification_payload = snov_result
                                 verified_count += 1
                                 logger.info(f"✅ [VERIFICATION] Found email via Snov for {prospect.domain}: {found_email} (confidence: {confidence})")
-                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - verification_status=VERIFIED, stage=VERIFIED")
+                                logger.info(f"📝 [VERIFICATION] Updated prospect {prospect.id} - verification_status=VERIFIED, stage remains LEAD")
                             else:
                                 prospect.verification_status = (
                                     VerificationStatus.UNVERIFIED_LOWER.value
