@@ -185,6 +185,50 @@ async def approve_prospects(
     )
 
 
+@router.post("/approve_all", response_model=ApprovalResponse)
+async def approve_all_prospects(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional),
+):
+    """
+    Bulk-approve ALL discovered websites in one action.
+
+    This is used by the pipeline UI \"Approve All Websites\" CTA to avoid
+    deadlocking users when they have discovered websites but none are approved yet.
+    """
+    # Find all discovered prospects that are not yet approved
+    result = await db.execute(
+        select(Prospect).where(
+            Prospect.discovery_status == \"DISCOVERED\",
+            Prospect.approval_status != \"approved\",
+        )
+    )
+    prospects = result.scalars().all()
+
+    if not prospects:
+        raise HTTPException(
+            status_code=400,
+            detail=\"No discovered prospects found to approve.\",
+        )
+
+    approved_count = 0
+    for prospect in prospects:
+        prospect.approval_status = \"approved\"
+        approved_count += 1
+
+    await db.commit()
+
+    logger.info(f\"✅ [PIPELINE STEP 2] Bulk-approved {approved_count} discovered prospects\")
+
+    return ApprovalResponse(
+        success=True,
+        approved_count=approved_count,
+        rejected_count=0,
+        deleted_count=0,
+        message=f\"Successfully approved {approved_count} discovered prospect(s)\",
+    )
+
+
 # ============================================
 # STEP 3: SCRAPING
 # ============================================
