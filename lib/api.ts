@@ -1038,15 +1038,48 @@ export async function pipelineSend(request?: PipelineSendRequest): Promise<Pipel
   return res.json()
 }
 
+// Raw API response - fields may be missing
 export interface PipelineStatus {
+  discovered?: number
+  approved?: number
+  scraped?: number
+  verified?: number
+  reviewed?: number  // Same as verified for review step
+  drafted?: number  // Optional - may not be in response
+  sent?: number  // Optional - may not be in response
+  discovered_for_scraping?: number  // DISCOVERED status (ready for scraping)
+}
+
+// Normalized pipeline status - ALL fields are guaranteed to be numbers
+export interface NormalizedPipelineStatus {
   discovered: number
   approved: number
   scraped: number
   verified: number
-  reviewed: number  // Same as verified for review step
-  drafted?: number  // Optional - may not be in response
-  sent?: number  // Optional - may not be in response
-  discovered_for_scraping?: number  // DISCOVERED status (ready for scraping)
+  reviewed: number
+  drafted: number
+  sent: number
+  discovered_for_scraping: number
+}
+
+/**
+ * Normalizes a partial pipeline status from the API into a complete status object.
+ * All missing fields default to 0, ensuring type safety throughout the application.
+ * 
+ * @param rawStatus - Partial status object from API (may have missing fields)
+ * @returns Complete normalized status with all fields as numbers
+ */
+export function normalizePipelineStatus(rawStatus: Partial<PipelineStatus> | null | undefined): NormalizedPipelineStatus {
+  return {
+    discovered: typeof rawStatus?.discovered === 'number' ? rawStatus.discovered : 0,
+    approved: typeof rawStatus?.approved === 'number' ? rawStatus.approved : 0,
+    scraped: typeof rawStatus?.scraped === 'number' ? rawStatus.scraped : 0,
+    verified: typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0,
+    reviewed: typeof rawStatus?.reviewed === 'number' ? rawStatus.reviewed : 0,
+    drafted: typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : 0,
+    sent: typeof rawStatus?.sent === 'number' ? rawStatus.sent : 0,
+    discovered_for_scraping: typeof rawStatus?.discovered_for_scraping === 'number' ? rawStatus.discovered_for_scraping : 0,
+  }
 }
 
 export async function listWebsites(skip: number = 0, limit: number = 50): Promise<{

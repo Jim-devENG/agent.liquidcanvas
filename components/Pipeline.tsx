@@ -11,8 +11,9 @@ import {
   pipelineSend,
   pipelineStatus,
   listJobs,
+  normalizePipelineStatus,
   type Job,
-  type PipelineStatus as PipelineStatusType
+  type NormalizedPipelineStatus
 } from '@/lib/api'
 
 interface StepCard {
@@ -28,26 +29,19 @@ interface StepCard {
 }
 
 export default function Pipeline() {
-  const [status, setStatus] = useState<PipelineStatusType | null>(null)
+  const [status, setStatus] = useState<NormalizedPipelineStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [discoveryJobs, setDiscoveryJobs] = useState<Job[]>([])
 
   const loadStatus = async () => {
     try {
-      const statusData = await pipelineStatus()
-      const safeStatus: PipelineStatusType = {
-        discovered: typeof statusData.discovered === 'number' ? statusData.discovered : 0,
-        approved: typeof statusData.approved === 'number' ? statusData.approved : 0,
-        scraped: typeof statusData.scraped === 'number' ? statusData.scraped : 0,
-        verified: typeof statusData.verified === 'number' ? statusData.verified : 0,
-        reviewed: typeof statusData.reviewed === 'number' ? statusData.reviewed : 0,
-        drafted: typeof statusData.drafted === 'number' ? statusData.drafted : 0,
-        sent: typeof statusData.sent === 'number' ? statusData.sent : 0,
-        discovered_for_scraping: typeof statusData.discovered_for_scraping === 'number' ? statusData.discovered_for_scraping : 0,
-      }
-      setStatus(safeStatus)
+      const rawStatus = await pipelineStatus()
+      const normalizedStatus = normalizePipelineStatus(rawStatus)
+      setStatus(normalizedStatus)
     } catch (error) {
       console.error('Failed to load pipeline status:', error)
+      // Set default normalized status on error
+      setStatus(normalizePipelineStatus(null))
     } finally {
       setLoading(false)
     }
@@ -125,16 +119,9 @@ export default function Pipeline() {
     )
   }
 
-  const safeStatus = status || {
-    discovered: 0,
-    approved: 0,
-    scraped: 0,
-    verified: 0,
-    reviewed: 0,
-    drafted: 0,
-    sent: 0,
-    discovered_for_scraping: 0,
-  }
+  // Normalized status is guaranteed to have all fields as numbers
+  // If status is null, use normalized empty status
+  const normalizedStatus: NormalizedPipelineStatus = status || normalizePipelineStatus(null)
 
   const latestDiscoveryJob = discoveryJobs.length > 0
     ? discoveryJobs.sort((a: Job, b: Job) => {
@@ -150,12 +137,12 @@ export default function Pipeline() {
       name: 'Website Discovery',
       description: 'Find websites using DataForSEO',
       icon: Search,
-      status: safeStatus.discovered > 0 ? 'completed' : 'active',
-      count: safeStatus.discovered,
-      ctaText: safeStatus.discovered > 0 ? 'View Websites' : 'Start Discovery',
+      status: normalizedStatus.discovered > 0 ? 'completed' : 'active',
+      count: normalizedStatus.discovered,
+      ctaText: normalizedStatus.discovered > 0 ? 'View Websites' : 'Start Discovery',
       ctaAction: () => {
         // Navigate to Websites tab or show discovery form
-        if (safeStatus.discovered > 0) {
+        if (normalizedStatus.discovered > 0) {
           // Trigger tab change via custom event
           const event = new CustomEvent('change-tab', { detail: 'websites' })
           window.dispatchEvent(event)
@@ -172,19 +159,19 @@ export default function Pipeline() {
       name: 'Scraping',
       description: 'Extract emails from approved websites',
       icon: Scissors,
-      status: safeStatus.approved === 0 ? 'locked' :
-              safeStatus.scraped > 0 ? 'completed' : 'active',
-      count: safeStatus.scraped,
-      ctaText: safeStatus.approved === 0 ? 'Approve Websites First' :
-               safeStatus.scraped > 0 ? 'View Prospects' : 'Start Scraping',
+      status: normalizedStatus.approved === 0 ? 'locked' :
+              normalizedStatus.scraped > 0 ? 'completed' : 'active',
+      count: normalizedStatus.scraped,
+      ctaText: normalizedStatus.approved === 0 ? 'Approve Websites First' :
+               normalizedStatus.scraped > 0 ? 'View Prospects' : 'Start Scraping',
       ctaAction: () => {
-        if (safeStatus.approved === 0) {
+        if (normalizedStatus.approved === 0) {
           alert('Please approve websites in the Websites tab first')
           const event = new CustomEvent('change-tab', { detail: 'websites' })
           window.dispatchEvent(event)
           return
         }
-        if (safeStatus.scraped > 0) {
+        if (normalizedStatus.scraped > 0) {
           const event = new CustomEvent('change-tab', { detail: 'leads' })
           window.dispatchEvent(event)
         } else {
@@ -197,13 +184,13 @@ export default function Pipeline() {
       name: 'Verification',
       description: 'Verify emails with Snov.io',
       icon: Shield,
-      status: safeStatus.scraped === 0 ? 'locked' :
-              safeStatus.verified > 0 ? 'completed' : 'active',
-      count: safeStatus.verified,
-      ctaText: safeStatus.scraped === 0 ? 'Scrape Websites First' :
-               safeStatus.verified > 0 ? 'View Verified' : 'Start Verification',
+      status: normalizedStatus.scraped === 0 ? 'locked' :
+              normalizedStatus.verified > 0 ? 'completed' : 'active',
+      count: normalizedStatus.verified,
+      ctaText: normalizedStatus.scraped === 0 ? 'Scrape Websites First' :
+               normalizedStatus.verified > 0 ? 'View Verified' : 'Start Verification',
       ctaAction: () => {
-        if (safeStatus.scraped === 0) {
+        if (normalizedStatus.scraped === 0) {
           alert('Please scrape websites first')
           return
         }
@@ -215,13 +202,13 @@ export default function Pipeline() {
       name: 'Drafting',
       description: 'Generate outreach emails with Gemini',
       icon: FileText,
-      status: safeStatus.verified === 0 ? 'locked' :
-              safeStatus.drafted > 0 ? 'completed' : 'active',
-      count: safeStatus.drafted,
-      ctaText: safeStatus.verified === 0 ? 'Verify Emails First' :
-               safeStatus.drafted > 0 ? 'View Drafts' : 'Start Drafting',
+      status: normalizedStatus.verified === 0 ? 'locked' :
+              normalizedStatus.drafted > 0 ? 'completed' : 'active',
+      count: normalizedStatus.drafted,
+      ctaText: normalizedStatus.verified === 0 ? 'Verify Emails First' :
+               normalizedStatus.drafted > 0 ? 'View Drafts' : 'Start Drafting',
       ctaAction: () => {
-        if (safeStatus.verified === 0) {
+        if (normalizedStatus.verified === 0) {
           alert('Please verify emails first')
           return
         }
@@ -233,13 +220,13 @@ export default function Pipeline() {
       name: 'Sending',
       description: 'Send emails via Gmail API',
       icon: Send,
-      status: safeStatus.drafted === 0 ? 'locked' :
-              safeStatus.sent > 0 ? 'completed' : 'active',
-      count: safeStatus.sent,
-      ctaText: safeStatus.drafted === 0 ? 'Draft Emails First' :
-               safeStatus.sent > 0 ? 'View Sent' : 'Start Sending',
+      status: normalizedStatus.drafted === 0 ? 'locked' :
+              normalizedStatus.sent > 0 ? 'completed' : 'active',
+      count: normalizedStatus.sent,
+      ctaText: normalizedStatus.drafted === 0 ? 'Draft Emails First' :
+               normalizedStatus.sent > 0 ? 'View Sent' : 'Start Sending',
       ctaAction: () => {
-        if (safeStatus.drafted === 0) {
+        if (normalizedStatus.drafted === 0) {
           alert('Please draft emails first')
           return
         }
