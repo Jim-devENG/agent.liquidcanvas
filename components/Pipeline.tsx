@@ -52,82 +52,82 @@ export default function Pipeline() {
       }
       setStatus(safeStatus)
       
-      // Update steps based on status
+      // Update steps based on status (use safeStatus for all calculations)
       const newSteps: Step[] = [
         {
           id: 1,
           name: 'Website Discovery',
           description: 'Find websites using DataForSEO',
           icon: Search,
-          status: statusData.discovered > 0 ? 'completed' : 'active',
-          count: statusData.discovered
+          status: safeStatus.discovered > 0 ? 'completed' : 'active',
+          count: safeStatus.discovered
         },
         {
           id: 2,
           name: 'Human Selection',
           description: 'Review and approve websites',
           icon: Users,
-          status: (statusData.discovered || 0) === 0 ? 'locked' : 
-                 (statusData.approved || 0) > 0 ? 'completed' : 'active',
-          count: statusData.approved || 0
+          status: safeStatus.discovered === 0 ? 'locked' : 
+                 safeStatus.approved > 0 ? 'completed' : 'active',
+          count: safeStatus.approved
         },
         {
           id: 3,
           name: 'Scraping',
           description: 'Extract emails from websites',
           icon: Scissors,
-          status: (statusData.approved || 0) === 0 ? 'locked' :
-                 (statusData.scraped || 0) > 0 ? 'completed' : 'active',
-          count: statusData.scraped || 0
+          status: safeStatus.approved === 0 ? 'locked' :
+                 safeStatus.scraped > 0 ? 'completed' : 'active',
+          count: safeStatus.scraped
         },
         {
           id: 4,
           name: 'Verification',
           description: 'Verify emails with Snov.io',
           icon: Shield,
-          status: (statusData.scraped || 0) === 0 ? 'locked' :
-                 (statusData.verified || 0) > 0 ? 'completed' : 'active',
-          count: statusData.verified || 0
+          status: safeStatus.scraped === 0 ? 'locked' :
+                 safeStatus.verified > 0 ? 'completed' : 'active',
+          count: safeStatus.verified
         },
         {
           id: 5,
           name: 'Email Review',
           description: 'Manually review verified emails',
           icon: Eye,
-          status: (statusData.verified || 0) === 0 ? 'locked' :
-                 (statusData.reviewed || 0) > 0 ? 'completed' : 'active',
-          count: statusData.reviewed || 0
+          status: safeStatus.verified === 0 ? 'locked' :
+                 safeStatus.reviewed > 0 ? 'completed' : 'active',
+          count: safeStatus.reviewed
         },
         {
           id: 6,
           name: 'Drafting',
           description: 'Generate outreach emails with Gemini',
           icon: FileText,
-          status: (statusData.reviewed || 0) === 0 ? 'locked' :
-                 (statusData.drafted || 0) > 0 ? 'completed' : 'active',
-          count: statusData.drafted || 0
+          status: safeStatus.reviewed === 0 ? 'locked' :
+                 (safeStatus.drafted || 0) > 0 ? 'completed' : 'active',
+          count: safeStatus.drafted || 0
         },
         {
           id: 7,
           name: 'Sending',
           description: 'Send emails via Gmail API',
           icon: Send,
-          status: (statusData.drafted || 0) === 0 ? 'locked' :
-                 (statusData.sent || 0) > 0 ? 'completed' : 'active',
-          count: statusData.sent || 0
+          status: (safeStatus.drafted || 0) === 0 ? 'locked' :
+                 (safeStatus.sent || 0) > 0 ? 'completed' : 'active',
+          count: safeStatus.sent || 0
         }
       ]
       
       setSteps(newSteps)
       
       // Determine active step (defensive: handle zero counts safely)
-      if ((statusData.sent || 0) > 0) setActiveStep(7)
-      else if ((statusData.drafted || 0) > 0) setActiveStep(6)
-      else if ((statusData.reviewed || 0) > 0) setActiveStep(5)
-      else if ((statusData.verified || 0) > 0) setActiveStep(4)
-      else if ((statusData.scraped || 0) > 0) setActiveStep(3)
-      else if ((statusData.approved || 0) > 0) setActiveStep(2)
-      else if ((statusData.discovered || 0) > 0) setActiveStep(1)
+      if ((safeStatus.sent || 0) > 0) setActiveStep(7)
+      else if ((safeStatus.drafted || 0) > 0) setActiveStep(6)
+      else if (safeStatus.reviewed > 0) setActiveStep(5)
+      else if (safeStatus.verified > 0) setActiveStep(4)
+      else if (safeStatus.scraped > 0) setActiveStep(3)
+      else if (safeStatus.approved > 0) setActiveStep(2)
+      else if (safeStatus.discovered > 0) setActiveStep(1)
       else setActiveStep(1)  // Default to Step 1 if no progress
       
     } catch (error) {
