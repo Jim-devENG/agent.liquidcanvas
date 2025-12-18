@@ -951,16 +951,57 @@ async def compose_email(
     """
     Compose an email for a prospect using Gemini
     
-    This will:
-    1. Fetch prospect details
-    2. Call Gemini API to generate email
-    3. Save draft to prospect record
+    STRICT DRAFT-ONLY: This endpoint ONLY saves drafts, never sends emails.
+    
+    Rules:
+    - If email already exists → overwrite draft, not duplicate
+    - Save draft_body and draft_subject
+    - Set drafted_at timestamp
+    - If this is a follow-up (duplicate domain/email), use Gemini follow-up logic with memory
     """
+    from datetime import datetime, timezone
+    from sqlalchemy import or_
+    from app.models.email_log import EmailLog
+    
     result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
     prospect = result.scalar_one_or_none()
     
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospect not found")
+    
+    # Check for duplicates (same domain OR same email) = follow-up
+    # If duplicate exists, this is a follow-up
+    duplicate_check = await db.execute(
+        select(Prospect).where(
+            Prospect.id != prospect_id,
+            or_(
+                Prospect.domain == prospect.domain,
+                Prospect.contact_email == prospect.contact_email
+            ),
+            Prospect.last_sent.isnot(None)  # Only count sent emails as duplicates
+        )
+    )
+    duplicate_prospect = duplicate_check.scalar_one_or_none()
+    is_followup = duplicate_prospect is not None
+    
+    # If follow-up, get thread_id from duplicate or create new
+    if is_followup:
+        # Use the duplicate's thread_id, or create one if it doesn't have one
+        thread_id = duplicate_prospect.thread_id
+        if not thread_id:
+            thread_id = duplicate_prospect.id  # Use duplicate's ID as thread_id
+        prospect.thread_id = thread_id
+        
+        # Get sequence_index (increment from duplicate's sequence_index)
+        prospect.sequence_index = (duplicate_prospect.sequence_index or 0) + 1
+        
+        logger.info(f"📌 [COMPOSE] Follow-up detected for {prospect.domain} (thread_id: {thread_id}, sequence: {prospect.sequence_index})")
+    else:
+        # Initial email - use prospect's own ID as thread_id
+        if not prospect.thread_id:
+            prospect.thread_id = prospect.id
+        prospect.sequence_index = 0
+        logger.info(f"📝 [COMPOSE] Initial email for {prospect.domain} (thread_id: {prospect.thread_id})")
     
     # Import Gemini client
     try:
@@ -989,28 +1030,84 @@ async def compose_email(
                 if first_name or last_name:
                     contact_name = f"{first_name or ''} {last_name or ''}".strip()
     
-    # Call Gemini to compose email (use await, not asyncio.run in async function)
-    gemini_result = await client.compose_email(
-        domain=prospect.domain,
-        page_title=prospect.page_title,
-        page_url=prospect.page_url,
-        page_snippet=page_snippet,
-        contact_name=contact_name
-    )
+    # If follow-up, fetch previous emails in thread for Gemini memory
+    if is_followup and prospect.thread_id:
+        # Get all sent emails in this thread (from email_logs)
+        previous_emails_query = await db.execute(
+            select(EmailLog).where(
+                EmailLog.prospect_id.in_(
+                    select(Prospect.id).where(Prospect.thread_id == prospect.thread_id)
+                )
+            ).order_by(EmailLog.sent_at.asc())
+        )
+        previous_logs = previous_emails_query.scalars().all()
+        
+        # Also check prospects with final_body (sent emails)
+        previous_prospects_query = await db.execute(
+            select(Prospect).where(
+                Prospect.thread_id == prospect.thread_id,
+                Prospect.id != prospect_id,
+                Prospect.final_body.isnot(None)
+            ).order_by(Prospect.last_sent.asc())
+        )
+        previous_prospects = previous_prospects_query.scalars().all()
+        
+        # Build previous emails list
+        previous_emails = []
+        for log in previous_logs:
+            previous_emails.append({
+                "subject": log.subject or "No subject",
+                "body": log.body or "",
+                "sent_at": log.sent_at.isoformat() if log.sent_at else "",
+                "sequence_index": 0  # EmailLogs don't have sequence_index, assume 0
+            })
+        
+        for prev_prospect in previous_prospects:
+            previous_emails.append({
+                "subject": prev_prospect.draft_subject or "No subject",
+                "body": prev_prospect.final_body or "",
+                "sent_at": prev_prospect.last_sent.isoformat() if prev_prospect.last_sent else "",
+                "sequence_index": prev_prospect.sequence_index or 0
+            })
+        
+        # Sort by sent_at
+        previous_emails.sort(key=lambda x: x.get("sent_at", ""))
+        
+        # Call Gemini to compose follow-up email with memory
+        gemini_result = await client.compose_followup_email(
+            domain=prospect.domain,
+            previous_emails=previous_emails,
+            page_title=prospect.page_title,
+            page_url=prospect.page_url,
+            page_snippet=page_snippet,
+            contact_name=contact_name
+        )
+    else:
+        # Initial email - use regular compose
+        gemini_result = await client.compose_email(
+            domain=prospect.domain,
+            page_title=prospect.page_title,
+            page_url=prospect.page_url,
+            page_snippet=page_snippet,
+            contact_name=contact_name
+        )
     
     if not gemini_result.get("success"):
         error = gemini_result.get("error", "Unknown error")
         raise HTTPException(status_code=500, detail=f"Failed to compose email: {error}")
     
-    # Save draft to prospect
+    # Save draft to prospect (OVERWRITE if draft already exists, don't duplicate)
     prospect.draft_subject = gemini_result.get("subject")
     prospect.draft_body = gemini_result.get("body")
+    prospect.drafted_at = datetime.now(timezone.utc)
     # Update draft_status to "drafted" so pipeline Drafting card reflects this
     from app.models.prospect import DraftStatus
     prospect.draft_status = DraftStatus.DRAFTED.value
     
     await db.commit()
     await db.refresh(prospect)
+    
+    logger.info(f"✅ [COMPOSE] Draft saved for {prospect.domain} (follow-up: {is_followup}, sequence: {prospect.sequence_index})")
     
     return ComposeResponse(
         prospect_id=prospect.id,
@@ -1027,15 +1124,16 @@ async def send_email(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Send an email to a prospect via Gmail API
+    DISABLED: Individual send endpoint is disabled.
     
-    This will:
-    1. Fetch prospect details
-    2. Use provided subject/body or draft
-    3. Send via Gmail API (will be implemented in Phase 6)
-    4. Create email log entry
-    5. Update prospect status
+    Use POST /api/pipeline/send instead - this is the ONLY endpoint that sends emails.
+    All sending must go through the pipeline to ensure proper follow-up handling,
+    draft-to-final conversion, and sequence tracking.
     """
+    raise HTTPException(
+        status_code=410,  # Gone - endpoint is deprecated
+        detail="Individual send endpoint is disabled. Use POST /api/pipeline/send instead to send emails through the pipeline."
+    )
     result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
     prospect = result.scalar_one_or_none()
     

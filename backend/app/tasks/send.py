@@ -57,10 +57,14 @@ async def process_send_job(job_id: str) -> Dict[str, Any]:
             
             logger.info(f"📥 [SEND] Input - prospect_ids: {prospect_ids}, max_prospects: {max_prospects}, auto_send: {auto_send}")
             
-            # Build query for prospects with emails that haven't been sent
+            # Build query for prospects ready for sending (matches pipeline endpoint criteria)
+            from app.models.prospect import VerificationStatus, SendStatus
             query = select(Prospect).where(
                 Prospect.contact_email.isnot(None),
-                Prospect.outreach_status == "pending"
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.draft_subject.isnot(None),
+                Prospect.draft_body.isnot(None),
+                Prospect.send_status != SendStatus.SENT.value
             )
             
             if prospect_ids:
@@ -194,9 +198,23 @@ async def process_send_job(job_id: str) -> Dict[str, Any]:
                         )
                         db.add(email_log)
                         
-                        # Update prospect
-                        prospect.outreach_status = "sent"
+                        # Update prospect: move draft_body to final_body, set sent_at, update status
+                        from app.models.prospect import SendStatus
+                        prospect.final_body = prospect.draft_body  # Move draft to final
+                        prospect.draft_body = None  # Clear draft after sending
+                        prospect.draft_subject = None  # Clear draft subject
                         prospect.last_sent = datetime.now(timezone.utc)
+                        prospect.send_status = SendStatus.SENT.value
+                        prospect.outreach_status = "sent"  # Legacy field
+                        
+                        # Increment follow-up sequence index if this is a follow-up
+                        if prospect.sequence_index and prospect.sequence_index > 0:
+                            # This is already a follow-up, increment
+                            prospect.sequence_index += 1
+                        elif prospect.thread_id and prospect.thread_id != prospect.id:
+                            # This is a follow-up (thread_id != own id), set sequence_index to 1
+                            prospect.sequence_index = 1
+                        
                         sent_count += 1
                         
                         total_time = (time.time() - prospect_start_time) * 1000

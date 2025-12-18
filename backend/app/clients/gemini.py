@@ -211,4 +211,169 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
             "subject": subject,
             "body": body
         }
+    
+    async def compose_followup_email(
+        self,
+        domain: str,
+        previous_emails: List[Dict[str, Any]],
+        page_title: Optional[str] = None,
+        page_url: Optional[str] = None,
+        page_snippet: Optional[str] = None,
+        contact_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Compose a follow-up email using Gemini API with memory of previous emails
+        
+        Args:
+            domain: Website domain
+            previous_emails: List of previous emails in thread, each with:
+                - subject: str
+                - body: str
+                - sent_at: str (ISO timestamp)
+                - sequence_index: int (0 = initial, 1+ = follow-up)
+            page_title: Page title
+            page_url: Page URL
+            page_snippet: Page description/snippet
+            contact_name: Contact name (if available)
+        
+        Returns:
+            Dictionary with subject and body
+        """
+        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        
+        # Build context for the email
+        context_parts = []
+        if page_title:
+            context_parts.append(f"Website Title: {page_title}")
+        if domain:
+            context_parts.append(f"Domain: {domain}")
+        if page_snippet:
+            context_parts.append(f"Description: {page_snippet}")
+        if page_url:
+            context_parts.append(f"URL: {page_url}")
+        
+        context = "\n".join(context_parts) if context_parts else f"Website: {domain}"
+        
+        # Build previous emails context
+        previous_context = []
+        for idx, prev_email in enumerate(previous_emails, 1):
+            prev_subject = prev_email.get("subject", "No subject")
+            prev_body = prev_email.get("body", "")
+            prev_sent_at = prev_email.get("sent_at", "")
+            seq_idx = prev_email.get("sequence_index", idx - 1)
+            
+            if seq_idx == 0:
+                previous_context.append(f"Initial Email ({prev_sent_at}):\nSubject: {prev_subject}\nBody: {prev_body[:500]}...")
+            else:
+                previous_context.append(f"Follow-up #{seq_idx} ({prev_sent_at}):\nSubject: {prev_subject}\nBody: {prev_body[:500]}...")
+        
+        previous_emails_text = "\n\n".join(previous_context) if previous_context else "No previous emails"
+        followup_count = len(previous_emails)
+        
+        # Create prompt for follow-up email
+        prompt = f"""You are a professional outreach specialist for an art and creative services company.
+
+Your task is to compose a SHORT, WITTY, POLITE follow-up email. This is follow-up #{followup_count} in the thread.
+
+Context about their website:
+{context}
+
+Previous emails in this thread:
+{previous_emails_text}
+
+Requirements:
+1. The email must be SHORT (1-2 paragraphs max)
+2. It should be WITTY and CLEVER (use a humorous hook, but not spammy)
+3. It should be POLITE and professional
+4. Reference the previous attempt SUBTLY (don't be pushy)
+5. It should be memorable and stand out
+6. Keep it concise - people are busy
+
+You MUST return ONLY valid JSON with this exact structure:
+{{
+  "subject": "Email subject line (max 60 characters, witty and attention-grabbing)",
+  "body": "Email body text (1-2 short paragraphs, witty, polite, references previous attempt subtly)"
+}}
+
+Do not include any text before or after the JSON. Return ONLY the JSON object."""
+
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": prompt
+                }]
+            }],
+            "generationConfig": {
+                "temperature": 0.8,  # Higher temperature for more creativity in follow-ups
+                "topK": 40,
+                "topP": 0.95,
+                "maxOutputTokens": 1024,
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                logger.info(f"Calling Gemini API to compose follow-up email #{followup_count} for domain: {domain}")
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                result = response.json()
+                
+                # Extract content from Gemini response (same logic as compose_email)
+                if result.get("candidates") and len(result["candidates"]) > 0:
+                    candidate = result["candidates"][0]
+                    if candidate.get("content") and candidate["content"].get("parts"):
+                        parts = candidate["content"]["parts"]
+                        if parts and isinstance(parts, list) and len(parts) > 0:
+                            text_content = parts[0].get("text", "") if isinstance(parts[0], dict) else ""
+                        else:
+                            text_content = ""
+                        
+                        # Parse JSON response
+                        try:
+                            email_data = json.loads(text_content)
+                            
+                            subject = email_data.get("subject", f"Following up - {domain}")
+                            body = email_data.get("body", f"Hello,\n\nJust wanted to follow up on my previous message...")
+                            
+                            logger.info(f"✅ Gemini composed follow-up email #{followup_count} for {domain}")
+                            
+                            return {
+                                "success": True,
+                                "subject": subject,
+                                "body": body,
+                                "raw_response": result
+                            }
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse Gemini JSON response: {e}")
+                            logger.error(f"Response text: {text_content[:200]}")
+                            return self._extract_from_text(text_content, domain)
+                    else:
+                        return {
+                            "success": False,
+                            "error": "No content in Gemini response",
+                            "domain": domain
+                        }
+                else:
+                    error_msg = result.get("error", {}).get("message", "Unknown error")
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "domain": domain
+                    }
+        
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Gemini API HTTP error for {domain}: {e.response.status_code} - {e.response.text}")
+            return {
+                "success": False,
+                "error": f"HTTP {e.response.status_code}: {e.response.text}",
+                "domain": domain
+            }
+        except Exception as e:
+            logger.error(f"Gemini API call failed for {domain}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "domain": domain
+            }
 

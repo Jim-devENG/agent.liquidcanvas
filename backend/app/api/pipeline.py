@@ -754,11 +754,11 @@ async def send_emails(
     
     # Start sending task in background
     try:
-        from app.tasks.send import send_prospects_async
+        from app.tasks.send import process_send_job
         import asyncio
         from app.task_manager import register_task
         
-        task = asyncio.create_task(send_prospects_async(str(job.id)))
+        task = asyncio.create_task(process_send_job(str(job.id)))
         register_task(str(job.id), task)
         logger.info(f"✅ [PIPELINE STEP 7] Sending job {job.id} started")
     except Exception as e:

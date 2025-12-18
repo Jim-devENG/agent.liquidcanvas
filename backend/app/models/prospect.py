@@ -141,6 +141,11 @@ class Prospect(Base):
     followups_sent = Column(Integer, default=0)
     draft_subject = Column(Text)  # Draft email subject
     draft_body = Column(Text)  # Draft email body
+    drafted_at = Column(DateTime(timezone=True))  # When draft was created
+    final_body = Column(Text)  # Final sent email body (moved from draft_body after sending)
+    thread_id = Column(UUID(as_uuid=True), index=True)  # Thread ID for follow-up emails
+    sequence_index = Column(Integer, default=0)  # Follow-up sequence (0 = initial, 1+ = follow-up)
+    is_manual = Column(String, default="false")  # "true" if manually added, "false" otherwise
     
     # Discovery metadata
     discovery_query_id = Column(UUID(as_uuid=True), ForeignKey("discovery_queries.id"), nullable=True, index=True)
