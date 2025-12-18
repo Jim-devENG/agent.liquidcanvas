@@ -1113,9 +1113,10 @@ export interface PipelineStatus {
   scraped?: number
   email_found?: number  // Prospects with emails found (stage=EMAIL_FOUND)
   leads?: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
-  verified?: number  // verification_status = VERIFIED
+  verified?: number  // Backwards-compatible: verification_status=verified AND email IS NOT NULL
+  verified_email_count?: number  // Data-driven: verification_status=verified AND contact_email IS NOT NULL
   verified_stage?: number  // stage = VERIFIED
-  reviewed?: number  // Same as verified for review step
+  reviewed?: number  // Same as verified_email_count for review step
   drafted?: number  // Optional - may not be in response
   sent?: number  // Optional - may not be in response
   discovered_for_scraping?: number  // Legacy field - aliased to scrape_ready_count
@@ -1130,7 +1131,8 @@ export interface NormalizedPipelineStatus {
   scraped: number
   email_found: number  // Prospects with emails found (stage=EMAIL_FOUND)
   leads: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
-  verified: number  // verification_status = VERIFIED
+  verified: number  // Backwards-compatible: verification_status=verified AND email IS NOT NULL
+  verified_email_count: number  // Data-driven: verification_status=verified AND contact_email IS NOT NULL
   verified_stage: number  // stage = VERIFIED
   reviewed: number
   drafted: number
@@ -1161,7 +1163,8 @@ export function normalizePipelineStatus(rawStatus: Partial<PipelineStatus> | nul
     scraped: typeof rawStatus?.scraped === 'number' ? rawStatus.scraped : 0,
     email_found: typeof rawStatus?.email_found === 'number' ? rawStatus.email_found : 0,  // Prospects with emails found (stage=EMAIL_FOUND)
     leads: typeof rawStatus?.leads === 'number' ? rawStatus.leads : 0,  // Explicitly promoted leads (stage=LEAD)
-    verified: typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0,  // verification_status = VERIFIED
+    verified: typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0),  // Use verified_email_count if available, fallback to verified
+    verified_email_count: typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0),  // Data-driven: verification_status=verified AND contact_email IS NOT NULL
     verified_stage: typeof rawStatus?.verified_stage === 'number' ? rawStatus.verified_stage : 0,  // stage = VERIFIED
     reviewed: typeof rawStatus?.reviewed === 'number' ? rawStatus.reviewed : 0,
     drafted: typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : 0,
