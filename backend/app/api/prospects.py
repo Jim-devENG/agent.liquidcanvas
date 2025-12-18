@@ -590,6 +590,131 @@ async def list_websites(
     }
 
 
+@router.post("/{prospect_id}/promote")
+async def promote_to_lead(
+    prospect_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Explicitly promote a prospect to LEAD stage
+    
+    Requirements:
+    - Prospect must have stage = EMAIL_FOUND (has email but not yet promoted)
+    - Sets stage = LEAD (ready for outreach)
+    """
+    from sqlalchemy import text
+    from app.models.prospect import ProspectStage
+    
+    # Get prospect
+    result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
+    prospect = result.scalar_one_or_none()
+    
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospect not found")
+    
+    # Check if stage column exists
+    try:
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'stage'
+            """)
+        )
+        if not column_check.fetchone():
+            raise HTTPException(status_code=400, detail="Stage column not available. Migration required.")
+        
+        # Check current stage
+        if prospect.stage == ProspectStage.LEAD.value:
+            return {"success": True, "message": "Prospect is already a LEAD", "stage": prospect.stage}
+        
+        if prospect.stage != ProspectStage.EMAIL_FOUND.value:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Prospect must be in EMAIL_FOUND stage to promote. Current stage: {prospect.stage}"
+            )
+        
+        # Promote to LEAD
+        prospect.stage = ProspectStage.LEAD.value
+        await db.commit()
+        await db.refresh(prospect)
+        
+        logger.info(f"✅ Promoted prospect {prospect_id} to LEAD stage")
+        return {"success": True, "message": "Prospect promoted to LEAD", "stage": prospect.stage}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error promoting prospect to LEAD: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to promote prospect: {str(e)}")
+
+
+@router.get("/leads")
+async def list_leads(
+    skip: int = 0,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    List ONLY prospects with stage = LEAD (explicitly promoted leads)
+    
+    This endpoint returns ONLY prospects that have been explicitly promoted to LEAD stage.
+    Prospects with emails but not yet promoted (EMAIL_FOUND) are NOT included.
+    """
+    from sqlalchemy import text
+    from app.models.prospect import ProspectStage
+    
+    try:
+        # Check if stage column exists
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'stage'
+            """)
+        )
+        if not column_check.fetchone():
+            # Column doesn't exist - return empty (can't determine leads without stage)
+            logger.warning("⚠️  stage column not found, returning empty leads list")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit
+            }
+        
+        # Query ONLY stage = LEAD
+        query = select(Prospect).where(
+            Prospect.stage == ProspectStage.LEAD.value
+        ).order_by(Prospect.created_at.desc())
+        
+        # Get total count
+        count_query = select(func.count(Prospect.id)).where(
+            Prospect.stage == ProspectStage.LEAD.value
+        )
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Get paginated results
+        result = await db.execute(query.offset(skip).limit(limit))
+        prospects = result.scalars().all()
+        
+        return {
+            "data": [ProspectResponse.from_orm(p).dict() for p in prospects],
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error listing leads: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list leads: {str(e)}")
+
+
 @router.get("")
 async def list_prospects(
     skip: Optional[int] = None,

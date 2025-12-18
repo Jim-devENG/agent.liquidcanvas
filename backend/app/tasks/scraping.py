@@ -93,12 +93,12 @@ async def scrape_prospects_async(job_id: str):
                             source_url = url
                     
                     if all_emails:
-                        # Emails found - update prospect state and promote to LEAD stage
+                        # Emails found - update prospect state and set EMAIL_FOUND stage
                         prospect.contact_email = all_emails[0]  # Primary email
                         prospect.scrape_source_url = source_url
                         prospect.scrape_payload = emails_by_page
                         prospect.scrape_status = ScrapeStatus.SCRAPED.value
-                        # Promote to LEAD stage - ready for verification (defensive: check if column exists)
+                        # Set stage to EMAIL_FOUND (explicit promotion to LEAD happens separately)
                         try:
                             # Check if stage column exists in database
                             column_check = await db.execute(
@@ -111,8 +111,8 @@ async def scrape_prospects_async(job_id: str):
                             )
                             if column_check.fetchone():
                                 # Column exists - safe to set stage
-                                prospect.stage = ProspectStage.LEAD.value
-                                logger.debug(f"✅ [SCRAPING] Set stage=LEAD for prospect {prospect.id}")
+                                prospect.stage = ProspectStage.EMAIL_FOUND.value
+                                logger.debug(f"✅ [SCRAPING] Set stage=EMAIL_FOUND for prospect {prospect.id}")
                             else:
                                 # Column doesn't exist yet - will be set by migration
                                 logger.debug(f"⚠️  stage column not available yet, skipping stage update for {prospect.id}")
@@ -121,7 +121,7 @@ async def scrape_prospects_async(job_id: str):
                             logger.warning(f"⚠️  Could not check/set stage column: {stage_err}, will be backfilled by migration")
                         scraped_count += 1
                         logger.info(f"✅ [SCRAPING] Found {len(all_emails)} email(s) for {prospect.domain}: {all_emails[0]}")
-                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, contact_email={all_emails[0]}")
+                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, stage=EMAIL_FOUND, contact_email={all_emails[0]}")
                     else:
                         # No emails found - update prospect state (remain at SCRAPED stage, not promoted to LEAD)
                         prospect.scrape_status = ScrapeStatus.NO_EMAIL_FOUND.value

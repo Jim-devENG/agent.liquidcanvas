@@ -59,9 +59,10 @@ class ProspectStage(str, Enum):
     """Canonical pipeline stage - single source of truth for prospect progression."""
     
     DISCOVERED = "DISCOVERED"  # Step 1: Website discovered
-    SCRAPED = "SCRAPED"  # Step 3: Scraping completed (may or may not have email)
-    LEAD = "LEAD"  # Step 3.5: Scraped with email - ready to become a lead
+    SCRAPED = "SCRAPED"  # Step 3: Scraping completed (no email found)
+    EMAIL_FOUND = "EMAIL_FOUND"  # Step 3: Scraping completed (email found, not yet promoted to lead)
     VERIFIED = "VERIFIED"  # Step 4: Email verified
+    LEAD = "LEAD"  # Explicitly promoted to lead (ready for outreach)
     DRAFTED = "DRAFTED"  # Step 6: Email drafted
     SENT = "SENT"  # Step 7: Email sent
 

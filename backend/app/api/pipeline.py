@@ -759,10 +759,11 @@ async def get_pipeline_status(
     )
     scrape_ready_count = scrape_ready.scalar() or 0
     
-    # Step 3.5: LEAD (stage = "LEAD" - scraped prospects with emails, ready for verification)
-    # This is the canonical count for verification readiness
-    # Defensive: Check if stage column exists before querying (use raw SQL to avoid ORM errors)
+    # Stage-based counts (defensive: check if stage column exists)
+    email_found_count = 0
     leads_count = 0
+    verified_stage_count = 0
+    
     try:
         # Check if stage column exists using raw SQL
         column_check = await db.execute(
@@ -775,6 +776,18 @@ async def get_pipeline_status(
         )
         if column_check.fetchone():
             # Column exists - use raw SQL to query safely
+            # EMAIL_FOUND: prospects with emails found but not yet promoted to LEAD
+            email_found_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE stage = :stage_value
+                """),
+                {"stage_value": ProspectStage.EMAIL_FOUND.value}
+            )
+            email_found_count = email_found_result.scalar() or 0
+            
+            # LEAD: explicitly promoted leads (ready for outreach)
             leads_result = await db.execute(
                 text("""
                     SELECT COUNT(*) 
@@ -784,29 +797,43 @@ async def get_pipeline_status(
                 {"stage_value": ProspectStage.LEAD.value}
             )
             leads_count = leads_result.scalar() or 0
+            
+            # VERIFIED: prospects with verified emails
+            verified_stage_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE stage = :stage_value
+                """),
+                {"stage_value": ProspectStage.VERIFIED.value}
+            )
+            verified_stage_count = verified_stage_result.scalar() or 0
         else:
             # Column doesn't exist yet - fallback to scrape_status + email
-            logger.warning("⚠️  stage column not found, using fallback logic for leads count")
-            leads = await db.execute(
+            logger.warning("⚠️  stage column not found, using fallback logic for stage counts")
+            # Fallback: count prospects with emails as EMAIL_FOUND
+            email_found_fallback = await db.execute(
                 select(func.count(Prospect.id)).where(
                     Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
                     Prospect.contact_email.isnot(None)
                 )
             )
-            leads_count = leads.scalar() or 0
+            email_found_count = email_found_fallback.scalar() or 0
+            leads_count = 0  # No leads without stage column
     except Exception as e:
-        logger.error(f"❌ Error counting leads: {e}", exc_info=True)
+        logger.error(f"❌ Error counting stage-based prospects: {e}", exc_info=True)
         # Fallback to scrape_status + email if stage query fails
         try:
-            leads = await db.execute(
+            email_found_fallback = await db.execute(
                 select(func.count(Prospect.id)).where(
                     Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
                     Prospect.contact_email.isnot(None)
                 )
             )
-            leads_count = leads.scalar() or 0
+            email_found_count = email_found_fallback.scalar() or 0
         except Exception as fallback_err:
-            logger.error(f"❌ Fallback leads count also failed: {fallback_err}", exc_info=True)
+            logger.error(f"❌ Fallback stage count also failed: {fallback_err}", exc_info=True)
+            email_found_count = 0
             leads_count = 0
     
     # Step 4: VERIFIED (verification_status = "verified")
@@ -818,7 +845,7 @@ async def get_pipeline_status(
     verified_count = verified.scalar() or 0
     
     # Return pipeline status counts
-    # Stage lifecycle: DISCOVERED → SCRAPED → LEAD → VERIFIED → DRAFTED → SENT
+    # Stage lifecycle: DISCOVERED → SCRAPED/EMAIL_FOUND → LEAD → VERIFIED → DRAFTED → SENT
     # All queries are defensive and return 0 if no rows exist
     return {
         "discovered": discovered_count,
@@ -828,8 +855,10 @@ async def get_pipeline_status(
         "discovered_for_scraping": scrape_ready_count,
         # New explicit field used by the pipeline UI to unlock scraping
         "scrape_ready_count": scrape_ready_count,
-        "leads": leads_count,  # Canonical count: prospects with stage=LEAD (ready for verification)
-        "verified": verified_count,
+        "email_found": email_found_count,  # Prospects with emails found (stage=EMAIL_FOUND)
+        "leads": leads_count,  # Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
+        "verified": verified_count,  # verification_status = VERIFIED
+        "verified_stage": verified_stage_count,  # stage = VERIFIED
         "reviewed": verified_count,  # Same as verified for review step
     }
 
