@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2 } from 'lucide-react'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users } from 'lucide-react'
 import { listProspects, composeEmail, sendEmail, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
