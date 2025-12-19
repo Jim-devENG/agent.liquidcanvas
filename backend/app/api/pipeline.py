@@ -1027,38 +1027,58 @@ async def get_websites(
     Returns prospects with discovery_status = "DISCOVERED"
     These are websites found during discovery, not yet scraped
     """
-    result = await db.execute(
-        select(Prospect).where(
-            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+    try:
+        result = await db.execute(
+            select(Prospect).where(
+                Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+            )
+            .order_by(Prospect.created_at.desc())
+            .offset(skip)
+            .limit(limit)
         )
-        .order_by(Prospect.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    websites = result.scalars().all()
-    
-    total_result = await db.execute(
-        select(func.count(Prospect.id)).where(
-            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+        websites = result.scalars().all()
+        
+        total_result = await db.execute(
+            select(func.count(Prospect.id)).where(
+                Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+            )
         )
-    )
-    total = total_result.scalar() or 0
-    
-    return {
-        "data": [{
-            "id": str(p.id),
-            "domain": p.domain,
-            "url": p.page_url or f"https://{p.domain}",
-            "title": p.page_title or p.domain,
-            "category": p.discovery_category or "Unknown",
-            "location": p.discovery_location or "Unknown",
-            "discovery_job_id": str(p.discovery_query_id) if p.discovery_query_id else None,
-            "discovered_at": p.created_at.isoformat() if p.created_at else None,
-            "scrape_status": p.scrape_status or "DISCOVERED",
-            "approval_status": p.approval_status or "PENDING",
-        } for p in websites],
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+        total = total_result.scalar() or 0
+        
+        # Safely build response data with error handling
+        data = []
+        for p in websites:
+            try:
+                data.append({
+                    "id": str(p.id) if p.id else "",
+                    "domain": p.domain or "",
+                    "url": p.page_url or (f"https://{p.domain}" if p.domain else ""),
+                    "title": p.page_title or p.domain or "",
+                    "category": p.discovery_category or "Unknown",
+                    "location": p.discovery_location or "Unknown",
+                    "discovery_job_id": str(p.discovery_query_id) if p.discovery_query_id else None,
+                    "discovered_at": p.created_at.isoformat() if p.created_at else None,
+                    "scrape_status": p.scrape_status or "DISCOVERED",
+                    "approval_status": p.approval_status or "PENDING",
+                })
+            except Exception as e:
+                logger.error(f"❌ Error processing website {getattr(p, 'id', 'unknown')}: {e}", exc_info=True)
+                # Skip this prospect but continue with others
+                continue
+        
+        return {
+            "data": data,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"❌ Error in get_websites endpoint: {e}", exc_info=True)
+        # Return empty result instead of 500 error
+        return {
+            "data": [],
+            "total": 0,
+            "skip": skip,
+            "limit": limit
+        }
 
