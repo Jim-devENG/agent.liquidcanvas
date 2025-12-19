@@ -1026,25 +1026,34 @@ async def list_scraped_emails(
         
         logger.info(f"✅ [SCRAPED EMAILS] Returning {len(prospect_responses)} scraped emails (total: {total})")
         
-        return {
+        response = {
             "data": [p.dict() for p in prospect_responses],
             "total": total,
             "skip": skip,
             "limit": limit
         }
         
+        # CRITICAL: Guard against data integrity violation
+        from app.utils.response_guard import validate_list_response
+        response = validate_list_response(response, "list_scraped_emails")
+        
+        return response
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (already handled)
+        raise
     except Exception as e:
-        logger.error(f"❌ Error listing scraped emails: {e}", exc_info=True)
+        # CRITICAL: Do NOT return empty array - raise error instead
+        logger.error(f"❌ [SCRAPED EMAILS] Unexpected error: {e}", exc_info=True)
         try:
             await db.rollback()  # Rollback on exception to prevent transaction poisoning
         except Exception as rollback_err:
             logger.error(f"❌ Error during rollback: {rollback_err}", exc_info=True)
-        return {
-            "data": [],
-            "total": 0,
-            "skip": skip,
-            "limit": limit
-        }
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}. Check logs for details."
+        )
 
 
 @router.get("")
