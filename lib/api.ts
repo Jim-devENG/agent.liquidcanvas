@@ -133,6 +133,19 @@ export interface Prospect {
   hunter_payload?: any
   created_at: string
   updated_at: string
+  // Pipeline status fields
+  discovery_status?: string
+  approval_status?: string
+  scrape_status?: string
+  verification_status?: string
+  draft_status?: string
+  send_status?: string
+  stage?: string  // Canonical pipeline stage: DISCOVERED, SCRAPED, LEAD, VERIFIED, DRAFTED, SENT
+  discovery_category?: string
+  discovery_location?: string
+  discovery_keywords?: string
+  scrape_source_url?: string
+  verification_confidence?: number
 }
 
 export interface Job {
@@ -502,8 +515,8 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
       }
       // Try other possible keys
       const jobs = data.jobs || data.items || []
-      if (Array.isArray(jobs)) {
-        return jobs
+        if (Array.isArray(jobs)) {
+          return jobs
       }
       console.warn('⚠️ listJobs: Response is not an array. Got:', typeof data, data)
       return []
@@ -511,7 +524,7 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
     
     // If it's already an array, return it
     if (Array.isArray(data)) {
-      return data
+    return data
     }
     
     return []
@@ -523,6 +536,105 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 }
 
 // Prospects API
+export async function listLeads(
+  skip = 0,
+  limit = 50
+): Promise<ProspectListResponse> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
+  params.append('_t', Date.now().toString())
+  
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/prospects/leads?${params}`)
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to list leads' }))
+      throw new Error(error.detail || `Failed to list leads: ${res.status} ${res.statusText}`)
+    }
+    const result: any = await res.json()
+    
+    // Normalize to PaginatedResponse<Prospect>
+    let prospectsData: Prospect[] = []
+    let total = 0
+    
+    if (result.data && Array.isArray(result.data)) {
+      prospectsData = result.data
+      total = result.total ?? prospectsData.length
+    } else if (Array.isArray(result)) {
+      prospectsData = result
+      total = prospectsData.length
+    }
+    
+    console.log(`📊 listLeads: Found ${prospectsData.length} leads (total: ${total})`)
+    
+    return {
+      data: prospectsData,
+      total: total,
+      skip,
+      limit,
+    }
+  } catch (error: any) {
+    console.error('listLeads API error:', error)
+    throw new Error(error.message || 'Failed to list leads. Check if backend is running.')
+  }
+}
+
+export async function listScrapedEmails(
+  skip = 0,
+  limit = 50
+): Promise<ProspectListResponse> {
+  const params = new URLSearchParams({
+    skip: skip.toString(),
+    limit: limit.toString(),
+  })
+  params.append('_t', Date.now().toString())
+  
+  try {
+    const res = await authenticatedFetch(`${API_BASE}/prospects/scraped-emails?${params}`)
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to list scraped emails' }))
+      throw new Error(error.detail || `Failed to list scraped emails: ${res.status} ${res.statusText}`)
+    }
+    const result: any = await res.json()
+    
+    // Normalize to PaginatedResponse<Prospect>
+    let prospectsData: Prospect[] = []
+    let total = 0
+    
+    if (result.data && Array.isArray(result.data)) {
+      prospectsData = result.data
+      total = result.total ?? prospectsData.length
+    } else if (Array.isArray(result)) {
+      prospectsData = result
+      total = prospectsData.length
+    }
+    
+    console.log(`📊 listScrapedEmails: Found ${prospectsData.length} scraped emails (total: ${total})`)
+    
+    return {
+      data: prospectsData,
+      total: total,
+      skip,
+      limit,
+    }
+  } catch (error: any) {
+    console.error('listScrapedEmails API error:', error)
+    throw new Error(error.message || 'Failed to list scraped emails. Check if backend is running.')
+  }
+}
+
+export async function promoteToLead(prospectId: string): Promise<{ success: boolean; message: string; stage: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/promote`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to promote prospect' }))
+    throw new Error(error.detail || 'Failed to promote prospect')
+  }
+  return res.json()
+}
+
 export async function listProspects(
   skip = 0,
   limit = 50,
@@ -541,14 +653,14 @@ export async function listProspects(
   params.append('_t', Date.now().toString())
   
   try {
-    const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
+  const res = await authenticatedFetch(`${API_BASE}/prospects?${params}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to list prospects' }))
       throw new Error(error.detail || `Failed to list prospects: ${res.status} ${res.statusText}`)
-    }
-    const result: any = await res.json()
-    
-    // Normalize to PaginatedResponse<Prospect>
+  }
+  const result: any = await res.json()
+  
+  // Normalize to PaginatedResponse<Prospect>
     // Backend returns: {success: true, data: {data: [...], prospects: [...], total: ...}}
     // Handle nested structure
     let prospectsData: Prospect[] = []
@@ -578,11 +690,11 @@ export async function listProspects(
     
     console.log(`📊 listProspects: Found ${prospectsData.length} prospects (total: ${total})`)
     
-    return {
+  return {
       data: prospectsData,
       total: total,
-      skip,
-      limit,
+    skip,
+    limit,
     }
   } catch (error: any) {
     console.error('listProspects API error:', error)
@@ -848,6 +960,371 @@ export async function getAPIKeysStatus(): Promise<Record<string, boolean>> {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to get API keys status' }))
     throw new Error(error.detail || 'Failed to get API keys status')
+  }
+  return res.json()
+}
+
+// ============================================
+// PIPELINE API - Strict Step-by-Step Pipeline
+// ============================================
+
+export interface PipelineDiscoveryRequest {
+  categories: string[]
+  locations: string[]
+  keywords?: string
+  max_results?: number
+}
+
+export interface PipelineDiscoveryResponse {
+  success: boolean
+  job_id: string
+  message: string
+  prospects_count: number
+}
+
+export async function pipelineDiscover(request: PipelineDiscoveryRequest): Promise<PipelineDiscoveryResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/discover`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to start discovery' }))
+    throw new Error(error.detail || 'Failed to start discovery')
+  }
+  return res.json()
+}
+
+export interface PipelineApprovalRequest {
+  prospect_ids: string[]
+  action: 'approve' | 'reject' | 'delete'
+}
+
+export interface PipelineApprovalResponse {
+  success: boolean
+  approved_count: number
+  rejected_count: number
+  deleted_count: number
+  message: string
+}
+
+export async function pipelineApprove(request: PipelineApprovalRequest): Promise<PipelineApprovalResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/approve`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to approve prospects' }))
+    throw new Error(error.detail || 'Failed to approve prospects')
+  }
+  return res.json()
+}
+
+export async function pipelineApproveAll(): Promise<PipelineApprovalResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/approve_all`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to approve all prospects' }))
+    throw new Error(error.detail || 'Failed to approve all prospects')
+  }
+  return res.json()
+}
+
+export interface PipelineScrapeRequest {
+  prospect_ids?: string[]
+}
+
+export interface PipelineScrapeResponse {
+  success: boolean
+  job_id: string
+  message: string
+  prospects_count: number
+}
+
+export async function pipelineScrape(request?: PipelineScrapeRequest): Promise<PipelineScrapeResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/scrape`, {
+    method: 'POST',
+    body: JSON.stringify(request || {}),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to start scraping' }))
+    throw new Error(error.detail || 'Failed to start scraping')
+  }
+  return res.json()
+}
+
+export interface PipelineVerifyRequest {
+  prospect_ids?: string[]
+}
+
+export interface PipelineVerifyResponse {
+  success: boolean
+  job_id: string
+  message: string
+  prospects_count: number
+}
+
+export async function pipelineVerify(request?: PipelineVerifyRequest): Promise<PipelineVerifyResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/verify`, {
+    method: 'POST',
+    body: JSON.stringify(request || {}),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to start verification' }))
+    throw new Error(error.detail || 'Failed to start verification')
+  }
+  return res.json()
+}
+
+export interface PipelineReviewProspect {
+  id: string
+  domain: string
+  contact_email: string
+  scrape_source_url?: string
+  verification_status?: string
+  verification_confidence?: number
+  email_type?: string
+}
+
+export interface PipelineReviewResponse {
+  data: PipelineReviewProspect[]
+  total: number
+  skip: number
+  limit: number
+}
+
+export async function pipelineReview(): Promise<PipelineReviewResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/review`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get review prospects' }))
+    throw new Error(error.detail || 'Failed to get review prospects')
+  }
+  return res.json()
+}
+
+export interface PipelineDraftRequest {
+  prospect_ids?: string[]
+  outreach_intent?: string
+}
+
+export interface PipelineDraftResponse {
+  success: boolean
+  job_id: string
+  message: string
+  prospects_count: number
+}
+
+export async function pipelineDraft(request?: PipelineDraftRequest): Promise<PipelineDraftResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/draft`, {
+    method: 'POST',
+    body: JSON.stringify(request || {}),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to start drafting' }))
+    throw new Error(error.detail || 'Failed to start drafting')
+  }
+  return res.json()
+}
+
+export interface PipelineSendRequest {
+  prospect_ids?: string[]
+}
+
+export interface PipelineSendResponse {
+  success: boolean
+  job_id: string
+  message: string
+  prospects_count: number
+}
+
+export async function pipelineSend(request?: PipelineSendRequest): Promise<PipelineSendResponse> {
+  // If no prospect_ids provided, send empty object to trigger automatic selection of all send-ready prospects
+  const payload = request?.prospect_ids && request.prospect_ids.length > 0 
+    ? request 
+    : { prospect_ids: null }  // Send null to trigger automatic query
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/send`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to start sending' }))
+    throw new Error(error.detail || 'Failed to start sending')
+  }
+  return res.json()
+}
+
+// Raw API response - fields may be missing
+export interface PipelineStatus {
+  discovered?: number
+  approved?: number
+  scraped?: number
+  email_found?: number  // Prospects with emails found (stage=EMAIL_FOUND)
+  emails_found?: number  // All prospects with emails (contact_email IS NOT NULL)
+  leads?: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
+  verified?: number  // Backwards-compatible: verification_status=verified AND email IS NOT NULL
+  verified_email_count?: number  // Backwards-compatible alias
+  verified_count?: number  // Data-driven: contact_email IS NOT NULL AND verification_status = 'verified'
+  emails_verified?: number  // Data-driven: verification_status=verified AND contact_email IS NOT NULL (matches Leads page)
+  verified_stage?: number  // stage = VERIFIED
+  reviewed?: number  // Same as emails_verified for review step
+  drafted?: number  // Data-driven: draft_subject IS NOT NULL AND draft_body IS NOT NULL
+  drafted_count?: number  // Explicit count of drafted prospects
+  sent?: number  // Optional - may not be in response
+  send_ready?: number  // Data-driven: verified + drafted + not sent
+  send_ready_count?: number  // Explicit count of send-ready prospects
+  discovered_for_scraping?: number  // Legacy field - aliased to scrape_ready_count
+  scrape_ready_count?: number       // New canonical field for scraping unlock
+  drafting_ready?: number  // Data-driven: stage=LEAD, email IS NOT NULL, verification_status=verified
+  drafting_ready_count?: number  // Backwards-compatible alias
+}
+
+// Normalized pipeline status - ALL fields are guaranteed to be numbers
+export interface NormalizedPipelineStatus {
+  discovered: number
+  approved: number
+  scraped: number
+  email_found: number  // Prospects with emails found (stage=EMAIL_FOUND)
+  emails_found: number  // All prospects with emails (contact_email IS NOT NULL)
+  leads: number  // Explicitly promoted leads (stage=LEAD) - ONLY these are shown in Leads page
+  verified: number  // Backwards-compatible: verification_status=verified AND email IS NOT NULL
+  verified_email_count: number  // Backwards-compatible alias
+  verified_count: number  // Data-driven: contact_email IS NOT NULL AND verification_status = 'verified'
+  emails_verified: number  // Data-driven: verification_status=verified AND contact_email IS NOT NULL (matches Leads page)
+  verified_stage: number  // stage = VERIFIED
+  reviewed: number
+  drafted: number  // Data-driven: draft_subject IS NOT NULL AND draft_body IS NOT NULL
+  drafted_count: number  // Explicit count of drafted prospects
+  sent: number
+  send_ready: number  // Data-driven: verified + drafted + not sent
+  send_ready_count: number  // Explicit count of send-ready prospects
+  discovered_for_scraping: number
+  scrape_ready_count: number
+  drafting_ready: number  // Data-driven: stage=LEAD, email IS NOT NULL, verification_status=verified
+  drafting_ready_count: number  // Backwards-compatible alias
+}
+
+/**
+ * Normalizes a partial pipeline status from the API into a complete status object.
+ * All missing fields default to 0, ensuring type safety throughout the application.
+ * 
+ * @param rawStatus - Partial status object from API (may have missing fields)
+ * @returns Complete normalized status with all fields as numbers
+ */
+export function normalizePipelineStatus(rawStatus: Partial<PipelineStatus> | null | undefined): NormalizedPipelineStatus {
+  const discoveredForScraping =
+    typeof rawStatus?.scrape_ready_count === 'number'
+      ? rawStatus.scrape_ready_count
+      : typeof rawStatus?.discovered_for_scraping === 'number'
+      ? rawStatus.discovered_for_scraping
+      : 0
+
+  return {
+    discovered: typeof rawStatus?.discovered === 'number' ? rawStatus.discovered : 0,
+    approved: typeof rawStatus?.approved === 'number' ? rawStatus.approved : 0,
+    scraped: typeof rawStatus?.scraped === 'number' ? rawStatus.scraped : 0,
+    email_found: typeof rawStatus?.email_found === 'number' ? rawStatus.email_found : 0,  // Prospects with emails found (stage=EMAIL_FOUND)
+    emails_found: typeof rawStatus?.emails_found === 'number' ? rawStatus.emails_found : 0,  // All prospects with emails (contact_email IS NOT NULL)
+    leads: typeof rawStatus?.leads === 'number' ? rawStatus.leads : 0,  // Explicitly promoted leads (stage=LEAD)
+    verified: typeof rawStatus?.emails_verified === 'number' ? rawStatus.emails_verified : (typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0)),  // Use emails_verified if available, fallback to verified_email_count or verified
+    verified_email_count: typeof rawStatus?.emails_verified === 'number' ? rawStatus.emails_verified : (typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0)),  // Backwards-compatible alias
+    verified_count: typeof rawStatus?.verified_count === 'number' ? rawStatus.verified_count : (typeof rawStatus?.emails_verified === 'number' ? rawStatus.emails_verified : (typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0))),  // Data-driven: contact_email IS NOT NULL AND verification_status = 'verified'
+    emails_verified: typeof rawStatus?.emails_verified === 'number' ? rawStatus.emails_verified : (typeof rawStatus?.verified_email_count === 'number' ? rawStatus.verified_email_count : (typeof rawStatus?.verified === 'number' ? rawStatus.verified : 0)),  // Data-driven: verification_status=verified AND contact_email IS NOT NULL (matches Leads page)
+    verified_stage: typeof rawStatus?.verified_stage === 'number' ? rawStatus.verified_stage : 0,  // stage = VERIFIED
+    reviewed: typeof rawStatus?.emails_verified === 'number' ? rawStatus.emails_verified : (typeof rawStatus?.reviewed === 'number' ? rawStatus.reviewed : 0),  // Same as emails_verified
+    drafted: typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : (typeof rawStatus?.drafted_count === 'number' ? rawStatus.drafted_count : 0),  // Data-driven: draft_subject IS NOT NULL AND draft_body IS NOT NULL
+    drafted_count: typeof rawStatus?.drafted_count === 'number' ? rawStatus.drafted_count : (typeof rawStatus?.drafted === 'number' ? rawStatus.drafted : 0),  // Explicit count of drafted prospects
+    sent: typeof rawStatus?.sent === 'number' ? rawStatus.sent : 0,
+    send_ready: typeof rawStatus?.send_ready === 'number' ? rawStatus.send_ready : (typeof rawStatus?.send_ready_count === 'number' ? rawStatus.send_ready_count : 0),  // Data-driven: verified + drafted + not sent
+    send_ready_count: typeof rawStatus?.send_ready_count === 'number' ? rawStatus.send_ready_count : (typeof rawStatus?.send_ready === 'number' ? rawStatus.send_ready : 0),  // Explicit count of send-ready prospects
+    discovered_for_scraping: discoveredForScraping,
+    scrape_ready_count: discoveredForScraping,
+    drafting_ready: typeof rawStatus?.drafting_ready === 'number' ? rawStatus.drafting_ready : (typeof rawStatus?.drafting_ready_count === 'number' ? rawStatus.drafting_ready_count : 0),  // Data-driven: stage=LEAD, email IS NOT NULL, verification_status=verified
+    drafting_ready_count: typeof rawStatus?.drafting_ready === 'number' ? rawStatus.drafting_ready : (typeof rawStatus?.drafting_ready_count === 'number' ? rawStatus.drafting_ready_count : 0),  // Backwards-compatible alias
+  }
+}
+
+export async function listWebsites(skip: number = 0, limit: number = 50): Promise<{
+  data: Array<{
+    id: string
+    domain: string
+    url: string
+    title: string
+    category: string
+    location: string
+    discovery_job_id: string | null
+    discovered_at: string | null
+    scrape_status: string
+    approval_status: string
+  }>
+  total: number
+  skip: number
+  limit: number
+}> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/websites?skip=${skip}&limit=${limit}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to fetch websites' }))
+    throw new Error(error.detail || 'Failed to fetch websites')
+  }
+  return res.json()
+}
+
+export async function pipelineStatus(): Promise<PipelineStatus> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/status`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get pipeline status' }))
+    throw new Error(error.detail || 'Failed to get pipeline status')
+  }
+  return res.json()
+}
+
+// ============================================
+// MANUAL INPUT ENDPOINTS
+// ============================================
+
+export interface ManualScrapeRequest {
+  website_url: string
+}
+
+export interface ManualScrapeResponse {
+  success: boolean
+  prospect_id: string
+  message: string
+  is_followup: boolean
+}
+
+export async function manualScrape(request: ManualScrapeRequest): Promise<ManualScrapeResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/manual/scrape`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to scrape website' }))
+    throw new Error(error.detail || 'Failed to scrape website')
+  }
+  return res.json()
+}
+
+export interface ManualVerifyRequest {
+  email: string
+}
+
+export interface ManualVerifyResponse {
+  success: boolean
+  prospect_id: string
+  message: string
+  verification_status: string
+  is_followup: boolean
+}
+
+export async function manualVerify(request: ManualVerifyRequest): Promise<ManualVerifyResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/manual/verify`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to verify email' }))
+    throw new Error(error.detail || 'Failed to verify email')
   }
   return res.json()
 }

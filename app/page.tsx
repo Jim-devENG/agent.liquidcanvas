@@ -14,6 +14,7 @@ import ManualScrape from '@/components/ManualScrape'
 import WebsitesTable from '@/components/WebsitesTable'
 import SystemStatus from '@/components/SystemStatus'
 import Sidebar from '@/components/Sidebar'
+import Pipeline from '@/components/Pipeline'
 import { getStats, listJobs } from '@/lib/api'
 import type { Stats, Job } from '@/lib/api'
 import { 
@@ -36,9 +37,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
-  >('overview')
-  
+    'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
+  >('pipeline')  // Pipeline-first: default to Pipeline tab
+
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
 
@@ -130,9 +131,20 @@ export default function Dashboard() {
       loadData(false) // Don't set loading state on periodic refreshes
     }, 30000)
     
+    // Listen for tab change events from Pipeline component
+    const handleTabChange = (e: CustomEvent) => {
+      const tabId = e.detail as string
+      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
+        setActiveTab(tabId as any)
+      }
+    }
+    
+    window.addEventListener('change-tab', handleTabChange as EventListener)
+    
     return () => {
       clearInterval(interval)
       clearTimeout(loadTimeout)
+      window.removeEventListener('change-tab', handleTabChange as EventListener)
     }
   }, [router, loadData])
 
@@ -146,6 +158,7 @@ export default function Dashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'pipeline', label: 'Pipeline', icon: Activity },
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
     { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
@@ -201,7 +214,7 @@ export default function Dashboard() {
                 <LogOutIcon className="w-4 h-4" />
                 <span>Logout</span>
               </button>
-            </div>
+          </div>
         </div>
       </header>
 
@@ -258,6 +271,12 @@ export default function Dashboard() {
               )}
               <ActivityFeed limit={15} autoRefresh={true} />
             </div>
+          </div>
+        )}
+
+        {activeTab === 'pipeline' && (
+          <div className="max-w-7xl mx-auto">
+            <Pipeline />
           </div>
         )}
 
