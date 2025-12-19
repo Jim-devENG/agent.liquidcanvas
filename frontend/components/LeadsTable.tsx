@@ -87,7 +87,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       // Debounce: wait 500ms before making request
       debounceTimeout = setTimeout(() => {
-        loadProspects()
+    loadProspects()
       }, 500)
     }
     
@@ -247,14 +247,14 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
             <Globe className="w-4 h-4" />
             <span>Manual Actions</span>
           </button>
-          <button
-            onClick={loadProspects}
-            className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-        </div>
+        <button
+          onClick={loadProspects}
+          className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+        </button>
+      </div>
       </div>
 
       {/* Manual Actions Panel */}
@@ -545,7 +545,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   }}
                   className="flex items-center space-x-2 px-4 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
                 >
-                  <Send className="w-4 h-4" />
+                      <Send className="w-4 h-4" />
                   <span>Go to Pipeline to Send</span>
                 </button>
               </div>
