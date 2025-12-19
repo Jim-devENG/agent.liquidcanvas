@@ -792,6 +792,9 @@ async def get_pipeline_status(
     """
     logger.info("📊 [PIPELINE STATUS] Computing data-driven counts from Prospect table")
     
+    # Wrap entire endpoint in try-catch to handle transaction errors
+    try:
+    
     # Step 1: DISCOVERED (canonical status for discovered websites)
     discovered = await db.execute(
         select(func.count(Prospect.id)).where(
@@ -947,16 +950,40 @@ async def get_pipeline_status(
     # Step 6: DRAFTED = Prospects where drafted_at IS NOT NULL
     # USER RULE: Drafted count = Prospects where drafted_at IS NOT NULL
     # This indicates a draft has been created (regardless of draft_subject/draft_body)
+    # Defensive: Check if drafted_at column exists before querying
+    drafted_count = 0
     try:
-        drafted = await db.execute(
-            select(func.count(Prospect.id)).where(
-                Prospect.drafted_at.isnot(None)
-            )
+        from sqlalchemy import text
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'drafted_at'
+            """)
         )
-        drafted_count = drafted.scalar() or 0
+        if column_check.fetchone():
+            # Column exists - use raw SQL to query safely
+            drafted_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE drafted_at IS NOT NULL
+                """)
+            )
+            drafted_count = drafted_result.scalar() or 0
+        else:
+            # Column doesn't exist - fallback to draft_subject
+            logger.warning("⚠️  drafted_at column not found, using draft_subject fallback")
+            drafted = await db.execute(
+                select(func.count(Prospect.id)).where(
+                    Prospect.draft_subject.isnot(None)
+                )
+            )
+            drafted_count = drafted.scalar() or 0
     except Exception as e:
-        # Fallback to draft_subject if drafted_at column doesn't exist yet
-        logger.warning(f"⚠️  drafted_at column may not exist, using draft_subject fallback: {e}")
+        # If anything fails, try draft_subject as fallback
+        logger.warning(f"⚠️  Error checking drafted_at, using draft_subject fallback: {e}")
         try:
             drafted = await db.execute(
                 select(func.count(Prospect.id)).where(
@@ -970,23 +997,66 @@ async def get_pipeline_status(
     
     # Step 7: SENT = Prospects where last_sent IS NOT NULL
     # USER RULE: Sent count = Prospects where last_sent IS NOT NULL
-    sent = await db.execute(
-        select(func.count(Prospect.id)).where(
-            Prospect.last_sent.isnot(None)
+    # Defensive: Use raw SQL to avoid transaction errors
+    sent_count = 0
+    try:
+        sent_result = await db.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM prospects 
+                WHERE last_sent IS NOT NULL
+            """)
         )
-    )
-    sent_count = sent.scalar() or 0
+        sent_count = sent_result.scalar() or 0
+    except Exception as e:
+        logger.error(f"❌ Error counting sent prospects: {e}", exc_info=True)
+        sent_count = 0
     
     # SEND READY = verified + drafted + not sent
-    send_ready = await db.execute(
-        select(func.count(Prospect.id)).where(
-            Prospect.contact_email.isnot(None),
-            Prospect.verification_status == VerificationStatus.VERIFIED.value,
-            Prospect.draft_subject.isnot(None),
-            Prospect.last_sent.is_(None)  # Not yet sent
+    # Defensive: Use raw SQL to avoid transaction errors
+    send_ready_count = 0
+    try:
+        # Check if drafted_at column exists
+        column_check = await db.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'drafted_at'
+            """)
         )
-    )
-    send_ready_count = send_ready.scalar() or 0
+        has_drafted_at = column_check.fetchone() is not None
+        
+        if has_drafted_at:
+            # Use drafted_at if available
+            send_ready_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE contact_email IS NOT NULL
+                    AND verification_status = :verified_status
+                    AND drafted_at IS NOT NULL
+                    AND last_sent IS NULL
+                """),
+                {"verified_status": VerificationStatus.VERIFIED.value}
+            )
+        else:
+            # Fallback to draft_subject
+            send_ready_result = await db.execute(
+                text("""
+                    SELECT COUNT(*) 
+                    FROM prospects 
+                    WHERE contact_email IS NOT NULL
+                    AND verification_status = :verified_status
+                    AND draft_subject IS NOT NULL
+                    AND last_sent IS NULL
+                """),
+                {"verified_status": VerificationStatus.VERIFIED.value}
+            )
+        send_ready_count = send_ready_result.scalar() or 0
+    except Exception as e:
+        logger.error(f"❌ Error counting send-ready prospects: {e}", exc_info=True)
+        send_ready_count = 0
     
     # Defensive logging: Log all counts for debugging
     logger.info(f"📊 [PIPELINE STATUS] Counts computed: discovered={discovered_count}, approved={approved_count}, "
@@ -1022,6 +1092,34 @@ async def get_pipeline_status(
         "send_ready": send_ready_count,  # verified + drafted + not sent
         "send_ready_count": send_ready_count,  # Primary: send-ready count
     }
+    except Exception as e:
+        # Rollback transaction on error to prevent "transaction aborted" errors
+        await db.rollback()
+        logger.error(f"❌ [PIPELINE STATUS] Error computing pipeline status: {e}", exc_info=True)
+        # Return safe defaults instead of 500 error
+        return {
+            "discovered": 0,
+            "approved": 0,
+            "scraped": 0,
+            "discovered_for_scraping": 0,
+            "scrape_ready_count": 0,
+            "email_found": 0,
+            "emails_found": 0,
+            "leads": 0,
+            "verified": 0,
+            "verified_email_count": 0,
+            "verified_count": 0,
+            "emails_verified": 0,
+            "verified_stage": 0,
+            "reviewed": 0,
+            "drafting_ready": 0,
+            "drafting_ready_count": 0,
+            "drafted": 0,
+            "drafted_count": 0,
+            "sent": 0,
+            "send_ready": 0,
+            "send_ready_count": 0,
+        }
 
 
 # ============================================
