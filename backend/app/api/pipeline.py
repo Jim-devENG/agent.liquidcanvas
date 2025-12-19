@@ -892,17 +892,17 @@ async def get_pipeline_status(
             logger.error(f"❌ Error counting stage-based prospects: {e}", exc_info=True)
             # Fallback to scrape_status + email if stage query fails
             try:
-            email_found_fallback = await db.execute(
-                select(func.count(Prospect.id)).where(
-                    Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
-                    Prospect.contact_email.isnot(None)
+                email_found_fallback = await db.execute(
+                    select(func.count(Prospect.id)).where(
+                        Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                        Prospect.contact_email.isnot(None)
+                    )
                 )
-            )
-            email_found_count = email_found_fallback.scalar() or 0
-        except Exception as fallback_err:
-            logger.error(f"❌ Fallback stage count also failed: {fallback_err}", exc_info=True)
-            email_found_count = 0
-            leads_count = 0
+                email_found_count = email_found_fallback.scalar() or 0
+            except Exception as fallback_err:
+                logger.error(f"❌ Fallback stage count also failed: {fallback_err}", exc_info=True)
+                email_found_count = 0
+                leads_count = 0
         
         # Step 3.5: EMAILS FOUND (contact_email IS NOT NULL)
         # Count all prospects with emails (regardless of verification status)
