@@ -994,41 +994,41 @@ async def get_pipeline_status(
         except Exception as e:
             logger.error(f"❌ Error counting send-ready prospects: {e}", exc_info=True)
             send_ready_count = 0
-        
-        # Defensive logging: Log all counts for debugging
-        logger.info(f"📊 [PIPELINE STATUS] Counts computed: discovered={discovered_count}, approved={approved_count}, "
-                    f"scraped={scraped_count}, verified={verified_count}, draft_ready={draft_ready_count}, "
-                    f"drafted={drafted_count}, sent={sent_count}, send_ready={send_ready_count}")
+    
+    # Defensive logging: Log all counts for debugging
+    logger.info(f"📊 [PIPELINE STATUS] Counts computed: discovered={discovered_count}, approved={approved_count}, "
+                f"scraped={scraped_count}, verified={verified_count}, draft_ready={draft_ready_count}, "
+                f"drafted={drafted_count}, sent={sent_count}, send_ready={send_ready_count}")
     
     # Return pipeline status counts
-        # DATA-DRIVEN: All counts derived from Prospect state only, NOT from jobs
-        # Unlock logic:
-        # - Verification card is COMPLETE if verified_count > 0
-        # - Drafting card is UNLOCKED if verified_count > 0 (draft_ready_count > 0)
-        # - Sending card is UNLOCKED if drafted_count > 0
+    # DATA-DRIVEN: All counts derived from Prospect state only, NOT from jobs
+    # Unlock logic:
+    # - Verification card is COMPLETE if verified_count > 0
+    # - Drafting card is UNLOCKED if verified_count > 0 (draft_ready_count > 0)
+    # - Sending card is UNLOCKED if drafted_count > 0
     return {
         "discovered": discovered_count,
         "approved": approved_count,
-            "scraped": scraped_count,  # USER RULE: Prospects where email IS NOT NULL
-            "discovered_for_scraping": scrape_ready_count,
-            "scrape_ready_count": scrape_ready_count,
-            "email_found": email_found_count,  # Backwards-compatible (stage-based)
-            "emails_found": emails_found_count,  # All prospects with emails (contact_email IS NOT NULL)
-            "leads": leads_count,  # Backwards-compatible (stage-based)
-            "verified": verified_count,  # USER RULE: Prospects where verification_status == "verified"
-            "verified_email_count": emails_verified_count,  # Backwards-compatible: verified AND email IS NOT NULL
-            "verified_count": verified_count,  # Primary: verification_status == "verified"
-            "emails_verified": emails_verified_count,  # Backwards-compatible: verified AND email IS NOT NULL
-            "verified_stage": verified_stage_count,  # Backwards-compatible (stage-based)
-            "reviewed": emails_verified_count,  # Backwards-compatible
-            "drafting_ready": draft_ready_count,  # USER RULE: verified AND email IS NOT NULL
-            "drafting_ready_count": draft_ready_count,  # Primary: draft-ready count
-            "drafted": drafted_count,  # USER RULE: Prospects where draft_subject IS NOT NULL
-            "drafted_count": drafted_count,  # Primary: drafted count
-            "sent": sent_count,  # USER RULE: Prospects where last_sent IS NOT NULL
-            "send_ready": send_ready_count,  # verified + drafted + not sent
-            "send_ready_count": send_ready_count,  # Primary: send-ready count
-        }
+        "scraped": scraped_count,  # USER RULE: Prospects where email IS NOT NULL
+        "discovered_for_scraping": scrape_ready_count,
+        "scrape_ready_count": scrape_ready_count,
+        "email_found": email_found_count,  # Backwards-compatible (stage-based)
+        "emails_found": emails_found_count,  # All prospects with emails (contact_email IS NOT NULL)
+        "leads": leads_count,  # Backwards-compatible (stage-based)
+        "verified": verified_count,  # USER RULE: Prospects where verification_status == "verified"
+        "verified_email_count": emails_verified_count,  # Backwards-compatible: verified AND email IS NOT NULL
+        "verified_count": verified_count,  # Primary: verification_status == "verified"
+        "emails_verified": emails_verified_count,  # Backwards-compatible: verified AND email IS NOT NULL
+        "verified_stage": verified_stage_count,  # Backwards-compatible (stage-based)
+        "reviewed": emails_verified_count,  # Backwards-compatible
+        "drafting_ready": draft_ready_count,  # USER RULE: verified AND email IS NOT NULL
+        "drafting_ready_count": draft_ready_count,  # Primary: draft-ready count
+        "drafted": drafted_count,  # USER RULE: Prospects where draft_subject IS NOT NULL
+        "drafted_count": drafted_count,  # Primary: drafted count
+        "sent": sent_count,  # USER RULE: Prospects where last_sent IS NOT NULL
+        "send_ready": send_ready_count,  # verified + drafted + not sent
+        "send_ready_count": send_ready_count,  # Primary: send-ready count
+    }
     except Exception as e:
         # Rollback transaction on error to prevent "transaction aborted" errors
         await db.rollback()
