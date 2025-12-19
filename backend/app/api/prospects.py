@@ -1614,6 +1614,7 @@ async def send_email(
         raise HTTPException(status_code=404, detail="Prospect not found")
     
     # Validate: draft_status = 'drafted' (draft exists and is ready)
+    # Note: User requirement says 'ready' but enum uses 'drafted' - they mean the same thing
     if prospect.draft_status != DraftStatus.DRAFTED.value:
         raise HTTPException(
             status_code=400,
