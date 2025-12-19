@@ -962,24 +962,24 @@ async def get_pipeline_status(
                 """)
             )
             if column_check.fetchone():
-            # Column exists - use raw SQL to query safely
-            drafted_result = await db.execute(
-                text("""
-                    SELECT COUNT(*) 
-                    FROM prospects 
-                    WHERE drafted_at IS NOT NULL
-                """)
-            )
-            drafted_count = drafted_result.scalar() or 0
-        else:
-            # Column doesn't exist - fallback to draft_subject
-            logger.warning("⚠️  drafted_at column not found, using draft_subject fallback")
-            drafted = await db.execute(
-                select(func.count(Prospect.id)).where(
-                    Prospect.draft_subject.isnot(None)
+                # Column exists - use raw SQL to query safely
+                drafted_result = await db.execute(
+                    text("""
+                        SELECT COUNT(*) 
+                        FROM prospects 
+                        WHERE drafted_at IS NOT NULL
+                    """)
                 )
-            )
-            drafted_count = drafted.scalar() or 0
+                drafted_count = drafted_result.scalar() or 0
+            else:
+                # Column doesn't exist - fallback to draft_subject
+                logger.warning("⚠️  drafted_at column not found, using draft_subject fallback")
+                drafted = await db.execute(
+                    select(func.count(Prospect.id)).where(
+                        Prospect.draft_subject.isnot(None)
+                    )
+                )
+                drafted_count = drafted.scalar() or 0
     except Exception as e:
         # If anything fails, try draft_subject as fallback
         logger.warning(f"⚠️  Error checking drafted_at, using draft_subject fallback: {e}")
