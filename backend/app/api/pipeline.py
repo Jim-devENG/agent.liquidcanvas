@@ -545,7 +545,8 @@ async def draft_emails(
     If prospect_ids empty or not provided, query all draft-ready prospects automatically.
     """
     # DATA-DRIVEN: Query draft-ready prospects directly from database
-    # Draft-ready = verified + email + not drafted
+    # Draft-ready = verified + email + (draft_status = 'pending' OR draft_status IS NULL)
+    # Accept NULL for existing prospects created before draft_status column was added
     prospects = []  # Initialize prospects list
     
     if request.prospect_ids is not None and len(request.prospect_ids) > 0:
@@ -555,7 +556,10 @@ async def draft_emails(
                 Prospect.id.in_(request.prospect_ids),
                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
                 Prospect.contact_email.isnot(None),
-                Prospect.draft_status == DraftStatus.PENDING.value
+                or_(
+                    Prospect.draft_status == DraftStatus.PENDING.value,
+                    Prospect.draft_status.is_(None)
+                )
             )
         )
         prospects = result.scalars().all()
@@ -563,7 +567,7 @@ async def draft_emails(
         if len(prospects) != len(request.prospect_ids):
             raise HTTPException(
                 status_code=422,
-                detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending'."
+                detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending' or NULL."
             )
     else:
         # Automatic: query all draft-ready prospects
@@ -571,7 +575,10 @@ async def draft_emails(
             select(Prospect).where(
                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
                 Prospect.contact_email.isnot(None),
-                Prospect.draft_status == DraftStatus.PENDING.value
+                or_(
+                    Prospect.draft_status == DraftStatus.PENDING.value,
+                    Prospect.draft_status.is_(None)
+                )
             )
         )
         prospects = result.scalars().all()
@@ -579,7 +586,7 @@ async def draft_emails(
         if len(prospects) == 0:
             raise HTTPException(
                 status_code=422,
-                detail="No prospects ready for drafting. Ensure prospects have verified email and draft_status is 'pending'."
+                detail="No prospects ready for drafting. Ensure prospects have verified email and draft_status is 'pending' or NULL."
             )
     
     logger.info(f"✍️  [PIPELINE STEP 6] Drafting emails for {len(prospects)} verified prospects")
