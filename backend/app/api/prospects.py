@@ -962,6 +962,10 @@ async def list_prospects(
             logger.info(f"🔍 Main query executed successfully, found {len(prospects)} prospects")
         except Exception as db_err:
             logger.error(f"🔴 Error executing main query: {db_err}", exc_info=True)
+            try:
+                await db.rollback()  # Rollback on exception to prevent transaction poisoning
+            except Exception as rollback_err:
+                logger.error(f"❌ Error during rollback: {rollback_err}", exc_info=True)
             error_str = str(db_err).lower()
             if "discovery_query_id" in error_str and ("column" in error_str or "does not exist" in error_str):
                 logger.error(f"🔴 Database schema error: discovery_query_id column missing")
@@ -1012,6 +1016,10 @@ async def list_prospects(
         logger.error(f"🔴 Error message: {str(err)}")
         import traceback
         logger.error(f"🔴 Full traceback: {traceback.format_exc()}")
+        try:
+            await db.rollback()  # Rollback on exception to prevent transaction poisoning
+        except Exception as rollback_err:
+            logger.error(f"❌ Error during rollback: {rollback_err}", exc_info=True)
         response_data["error"] = f"Internal server error: {str(err)}"
         total_pages = 0
         page = 1
