@@ -702,7 +702,36 @@ async def list_leads(
                 # Use model_validate which handles NULL values better than from_orm
                 # If final_body column doesn't exist, model_validate will fail
                 # Catch and handle gracefully
-                prospect_responses.append(ProspectResponse.model_validate(p))
+                # Use manual dict construction to avoid final_body errors
+                response_dict = {
+                    "id": p.id,
+                    "domain": p.domain or "",
+                    "page_url": getattr(p, 'page_url', None),
+                    "page_title": getattr(p, 'page_title', None),
+                    "contact_email": getattr(p, 'contact_email', None),
+                    "contact_method": getattr(p, 'contact_method', None),
+                    "da_est": getattr(p, 'da_est', None),
+                    "score": getattr(p, 'score', None),
+                    "outreach_status": getattr(p, 'outreach_status', 'pending'),
+                    "last_sent": getattr(p, 'last_sent', None).isoformat() if getattr(p, 'last_sent', None) else None,
+                    "followups_sent": getattr(p, 'followups_sent', 0) or 0,
+                    "draft_subject": getattr(p, 'draft_subject', None),
+                    "draft_body": getattr(p, 'draft_body', None),
+                    # final_body is commented out in schema, so don't include it
+                    "thread_id": getattr(p, 'thread_id', None),
+                    "sequence_index": getattr(p, 'sequence_index', None) or 0,
+                    "is_manual": getattr(p, 'is_manual', None) or False,
+                    "discovery_status": getattr(p, 'discovery_status', None),
+                    "approval_status": getattr(p, 'approval_status', None),
+                    "scrape_status": getattr(p, 'scrape_status', None),
+                    "verification_status": getattr(p, 'verification_status', None),
+                    "draft_status": getattr(p, 'draft_status', None),
+                    "send_status": getattr(p, 'send_status', None),
+                    "stage": getattr(p, 'stage', None),
+                    "created_at": getattr(p, 'created_at', None).isoformat() if getattr(p, 'created_at', None) else None,
+                    "updated_at": getattr(p, 'updated_at', None).isoformat() if getattr(p, 'updated_at', None) else None,
+                }
+                prospect_responses.append(ProspectResponse(**response_dict))
             except Exception as e:
                 error_msg = str(e).lower()
                 if 'final_body' in error_msg or 'column' in error_msg:
@@ -1099,17 +1128,50 @@ async def list_prospects(
             response_data["data"] = {"data": [], "prospects": [], "total": total, "page": page, "totalPages": total_pages, "skip": skip, "limit": limit}
             return response_data
         
-        # Convert to response models
+        # Convert to response models using manual dict construction to avoid final_body issues
         logger.info(f"🔍 Converting {len(prospects)} prospects to response format...")
         prospect_responses = []
+        conversion_errors = 0
         for idx, p in enumerate(prospects):
             try:
-                prospect_responses.append(ProspectResponse.model_validate(p))
+                # Use manual dict construction instead of model_validate to avoid final_body errors
+                response_dict = {
+                    "id": p.id,
+                    "domain": p.domain or "",
+                    "page_url": getattr(p, 'page_url', None),
+                    "page_title": getattr(p, 'page_title', None),
+                    "contact_email": getattr(p, 'contact_email', None),
+                    "contact_method": getattr(p, 'contact_method', None),
+                    "da_est": getattr(p, 'da_est', None),
+                    "score": getattr(p, 'score', None),
+                    "outreach_status": getattr(p, 'outreach_status', 'pending'),
+                    "last_sent": getattr(p, 'last_sent', None).isoformat() if getattr(p, 'last_sent', None) else None,
+                    "followups_sent": getattr(p, 'followups_sent', 0) or 0,
+                    "draft_subject": getattr(p, 'draft_subject', None),
+                    "draft_body": getattr(p, 'draft_body', None),
+                    # final_body is commented out in schema, so don't include it
+                    "thread_id": getattr(p, 'thread_id', None),
+                    "sequence_index": getattr(p, 'sequence_index', None) or 0,
+                    "is_manual": getattr(p, 'is_manual', None) or False,
+                    "discovery_status": getattr(p, 'discovery_status', None),
+                    "approval_status": getattr(p, 'approval_status', None),
+                    "scrape_status": getattr(p, 'scrape_status', None),
+                    "verification_status": getattr(p, 'verification_status', None),
+                    "draft_status": getattr(p, 'draft_status', None),
+                    "send_status": getattr(p, 'send_status', None),
+                    "stage": getattr(p, 'stage', None),
+                    "created_at": getattr(p, 'created_at', None).isoformat() if getattr(p, 'created_at', None) else None,
+                    "updated_at": getattr(p, 'updated_at', None).isoformat() if getattr(p, 'updated_at', None) else None,
+                }
+                prospect_responses.append(ProspectResponse(**response_dict))
             except Exception as e:
+                conversion_errors += 1
                 logger.error(f"🔴 Error validating prospect {idx+1}/{len(prospects)} (id={getattr(p, 'id', 'unknown')}): {e}", exc_info=True)
                 # Continue processing other prospects instead of failing completely
                 continue
         
+        if conversion_errors > 0:
+            logger.warning(f"⚠️  [LIST PROSPECTS] Had {conversion_errors} conversion errors, but {len(prospect_responses)} prospects converted successfully")
         logger.info(f"✅ Successfully converted {len(prospect_responses)} prospects")
         
         # Calculate total pages
@@ -1164,7 +1226,36 @@ async def get_prospect(
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospect not found")
     
-    return ProspectResponse.model_validate(prospect)
+    # Use manual dict construction to avoid final_body errors
+    response_dict = {
+        "id": prospect.id,
+        "domain": prospect.domain or "",
+        "page_url": getattr(prospect, 'page_url', None),
+        "page_title": getattr(prospect, 'page_title', None),
+        "contact_email": getattr(prospect, 'contact_email', None),
+        "contact_method": getattr(prospect, 'contact_method', None),
+        "da_est": getattr(prospect, 'da_est', None),
+        "score": getattr(prospect, 'score', None),
+        "outreach_status": getattr(prospect, 'outreach_status', 'pending'),
+        "last_sent": getattr(prospect, 'last_sent', None).isoformat() if getattr(prospect, 'last_sent', None) else None,
+        "followups_sent": getattr(prospect, 'followups_sent', 0) or 0,
+        "draft_subject": getattr(prospect, 'draft_subject', None),
+        "draft_body": getattr(prospect, 'draft_body', None),
+        # final_body is commented out in schema, so don't include it
+        "thread_id": getattr(prospect, 'thread_id', None),
+        "sequence_index": getattr(prospect, 'sequence_index', None) or 0,
+        "is_manual": getattr(prospect, 'is_manual', None) or False,
+        "discovery_status": getattr(prospect, 'discovery_status', None),
+        "approval_status": getattr(prospect, 'approval_status', None),
+        "scrape_status": getattr(prospect, 'scrape_status', None),
+        "verification_status": getattr(prospect, 'verification_status', None),
+        "draft_status": getattr(prospect, 'draft_status', None),
+        "send_status": getattr(prospect, 'send_status', None),
+        "stage": getattr(prospect, 'stage', None),
+        "created_at": getattr(prospect, 'created_at', None).isoformat() if getattr(prospect, 'created_at', None) else None,
+        "updated_at": getattr(prospect, 'updated_at', None).isoformat() if getattr(prospect, 'updated_at', None) else None,
+    }
+    return ProspectResponse(**response_dict)
 
 
 @router.post("/{prospect_id}/compose", response_model=ComposeResponse)
