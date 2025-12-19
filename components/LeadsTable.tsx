@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2 } from 'lucide-react'
-import { listProspects, composeEmail, sendEmail, type Prospect } from '@/lib/api'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle } from 'lucide-react'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, manualScrape, manualVerify, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
 interface LeadsTableProps {
@@ -22,28 +22,48 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [isComposing, setIsComposing] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
+  // Manual actions state
+  const [showManualActions, setShowManualActions] = useState(false)
+  const [manualWebsiteUrl, setManualWebsiteUrl] = useState('')
+  const [manualEmail, setManualEmail] = useState('')
+  const [isManualScraping, setIsManualScraping] = useState(false)
+  const [isManualVerifying, setIsManualVerifying] = useState(false)
+  const [manualSuccess, setManualSuccess] = useState<string | null>(null)
+
   const [error, setError] = useState<string | null>(null)
 
   const loadProspects = async () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await listProspects(
-        skip,
-        limit,
-        undefined,
-        undefined,
-        emailsOnly ? true : undefined
-      )
-      // Ensure data is always an array
-      const prospectsData = Array.isArray(response?.data) ? response.data : []
-      setProspects(prospectsData)
-      setTotal(response?.total ?? 0)
+      // Use different endpoints based on emailsOnly prop
+      // Leads tab: prospects with scrape_status IN (SCRAPED, ENRICHED) - matches pipeline "Scraped" count
+      // Scraped Emails tab: same as leads (for now, both show scraped emails)
+      const response = emailsOnly 
+        ? await listScrapedEmails(skip, limit)
+        : await listLeads(skip, limit)
+      
+      console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] API Response:`, { 
+        dataLength: response?.data?.length, 
+        total: response?.total,
+        hasData: !!response?.data,
+        isArray: Array.isArray(response?.data)
+      })
+      
+      const leads = Array.isArray(response?.data) ? response.data : []
+      if (leads.length > 0 || response?.total > 0) {
+        console.log(`✅ [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Setting prospects:`, leads.length, 'total:', response?.total)
+      } else {
+        console.warn(`⚠️ [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Empty response - data:`, response?.data, 'total:', response?.total)
+      }
+      
+      setProspects(leads)
+      setTotal(response.total ?? leads.length)
       // Clear error if we successfully got data (even if empty)
       // Empty data is not an error, it's a valid state
     } catch (error: any) {
-      console.error('Failed to load prospects:', error)
-      const errorMessage = error?.message || 'Failed to load leads. Check if backend is running.'
+      console.error(`❌ [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Failed to load:`, error)
+      const errorMessage = error?.message || `Failed to load ${emailsOnly ? 'scraped emails' : 'leads'}. Check if backend is running.`
       setError(errorMessage)
       setProspects([])
       setTotal(0)
@@ -53,15 +73,36 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   useEffect(() => {
-    loadProspects()
-    // Debounced refresh every 30 seconds (increased from 15s to prevent loops)
+    let abortController = new AbortController()
+    let debounceTimeout: NodeJS.Timeout | null = null
+    
+    const loadProspectsDebounced = () => {
+      // Cancel previous request if still in flight
+      abortController.abort()
+      abortController = new AbortController()
+      
+      // Clear existing debounce timeout
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
+      
+      // Debounce: wait 500ms before making request
+      debounceTimeout = setTimeout(() => {
+        loadProspects()
+      }, 500)
+    }
+    
+    // Initial load
+    loadProspectsDebounced()
+    
+    // Debounced refresh every 30 seconds
     const interval = setInterval(() => {
-      loadProspects()
+      loadProspectsDebounced()
     }, 30000)
     
     const handleJobCompleted = () => {
       console.log('🔄 Job completed event received, refreshing leads table...')
-      loadProspects()
+      loadProspectsDebounced()
     }
     
     if (typeof window !== 'undefined') {
@@ -69,6 +110,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
     
     return () => {
+      abortController.abort()
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout)
+      }
       clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('jobsCompleted', handleJobCompleted)
@@ -98,6 +143,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       setActiveProspect({ ...prospect, draft_subject: draftSub, draft_body: draftBdy })
       setDraftSubject(draftSub)
       setDraftBody(draftBdy)
+      
+      // Trigger pipeline status refresh so Drafting card updates
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+      }
     } catch (error: any) {
       console.error('Failed to compose email:', error)
       alert(error.message || 'Failed to compose email')
@@ -137,20 +187,171 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
   }
 
+  const handleManualScrape = async () => {
+    if (!manualWebsiteUrl.trim()) {
+      setError('Please enter a website URL')
+      return
+    }
+
+    try {
+      setIsManualScraping(true)
+      setError(null)
+      setManualSuccess(null)
+      const result = await manualScrape({ website_url: manualWebsiteUrl.trim() })
+      setManualSuccess(result.is_followup 
+        ? `✅ Website already exists - marked as follow-up candidate. ${result.message}`
+        : `✅ Website scraped successfully! ${result.message}`)
+      setManualWebsiteUrl('')
+      // Reload prospects after scraping
+      setTimeout(() => {
+        loadProspects()
+      }, 1000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to scrape website')
+    } finally {
+      setIsManualScraping(false)
+    }
+  }
+
+  const handleManualVerify = async () => {
+    if (!manualEmail.trim()) {
+      setError('Please enter an email address')
+      return
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(manualEmail.trim())) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    try {
+      setIsManualVerifying(true)
+      setError(null)
+      setManualSuccess(null)
+      const result = await manualVerify({ email: manualEmail.trim() })
+      setManualSuccess(result.is_followup
+        ? `✅ Email already exists - verified. Status: ${result.verification_status}`
+        : `✅ Email verified! Status: ${result.verification_status}`)
+      setManualEmail('')
+      // Reload prospects after verification
+      setTimeout(() => {
+        loadProspects()
+      }, 1000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to verify email')
+    } finally {
+      setIsManualVerifying(false)
+    }
+  }
+
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-gray-900">
           {emailsOnly ? 'Scraped Emails' : 'Leads'}
         </h2>
-        <button
-          onClick={loadProspects}
-          className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
-        >
-          <RefreshCw className="w-4 h-4" />
-          <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowManualActions(!showManualActions)}
+            className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+          >
+            <Globe className="w-4 h-4" />
+            <span>Manual Actions</span>
+          </button>
+          <button
+            onClick={loadProspects}
+            className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Manual Actions Panel */}
+      {showManualActions && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Manual Input</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Manual Scrape */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Globe className="w-4 h-4 inline mr-1" />
+                Scrape Website
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={manualWebsiteUrl}
+                  onChange={(e) => setManualWebsiteUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-olive-500 focus:border-olive-500"
+                  disabled={isManualScraping}
+                />
+                <button
+                  onClick={handleManualScrape}
+                  disabled={isManualScraping || !manualWebsiteUrl.trim()}
+                  className="px-4 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {isManualScraping ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Scraping...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="w-4 h-4" />
+                      <span>Scrape</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Manual Verify */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <CheckCircle className="w-4 h-4 inline mr-1" />
+                Verify Email
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="email"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-olive-500 focus:border-olive-500"
+                  disabled={isManualVerifying}
+                />
+                <button
+                  onClick={handleManualVerify}
+                  disabled={isManualVerifying || !manualEmail.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {isManualVerifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Verify</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          {manualSuccess && (
+            <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded text-green-700 text-sm">
+              {manualSuccess}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading && prospects.length === 0 ? (
         <div className="text-center py-8">
@@ -169,12 +370,20 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </button>
         </div>
       ) : prospects.length === 0 && !loading ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500 mb-2">No {emailsOnly ? 'emails' : 'leads'} found</p>
-          <p className="text-gray-400 text-sm">
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 font-medium mb-2">
+            No {emailsOnly ? 'prospects with emails' : 'prospects'} yet
+          </p>
+          <p className="text-gray-500 text-sm mb-4">
             {emailsOnly 
-              ? 'Enrich prospects from the Websites tab to get email addresses.'
-              : 'Run a discovery job from the Overview tab to find leads.'}
+              ? 'No prospects with emails yet. Scrape discovered websites to extract contact information.'
+              : 'No prospects yet. Scrape discovered websites to create prospects.'}
+          </p>
+          <p className="text-gray-400 text-xs">
+            {emailsOnly 
+              ? 'Prospects appear here after scraping finds emails. Go to the Websites tab to approve and scrape websites.'
+              : 'Prospects are created after scraping. Go to the Websites tab to approve websites, then use the Pipeline tab to scrape them.'}
           </p>
         </div>
       ) : (
