@@ -571,6 +571,42 @@ async def draft_emails(
             )
     else:
         # Automatic: query all draft-ready prospects
+        # First, let's check what we have in the database for debugging
+        debug_verified = await db.execute(
+            select(func.count(Prospect.id)).where(
+                Prospect.verification_status == VerificationStatus.VERIFIED.value
+            )
+        )
+        verified_total = debug_verified.scalar() or 0
+        
+        debug_with_email = await db.execute(
+            select(func.count(Prospect.id)).where(
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.contact_email.isnot(None)
+            )
+        )
+        verified_with_email = debug_with_email.scalar() or 0
+        
+        debug_draft_status = await db.execute(
+            select(func.count(Prospect.id)).where(
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.contact_email.isnot(None),
+                Prospect.draft_status == DraftStatus.PENDING.value
+            )
+        )
+        verified_pending = debug_draft_status.scalar() or 0
+        
+        debug_draft_null = await db.execute(
+            select(func.count(Prospect.id)).where(
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.contact_email.isnot(None),
+                Prospect.draft_status.is_(None)
+            )
+        )
+        verified_null = debug_draft_null.scalar() or 0
+        
+        logger.info(f"🔍 [DRAFT DEBUG] Verified total: {verified_total}, With email: {verified_with_email}, Draft pending: {verified_pending}, Draft NULL: {verified_null}")
+        
         result = await db.execute(
             select(Prospect).where(
                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
@@ -584,9 +620,17 @@ async def draft_emails(
         prospects = result.scalars().all()
         
         if len(prospects) == 0:
+            error_detail = (
+                f"No prospects ready for drafting. "
+                f"Debug: verified_total={verified_total}, verified_with_email={verified_with_email}, "
+                f"draft_pending={verified_pending}, draft_null={verified_null}. "
+                f"Ensure prospects have verification_status='verified', contact_email IS NOT NULL, "
+                f"and draft_status is 'pending' or NULL."
+            )
+            logger.warning(f"⚠️  [DRAFT] {error_detail}")
             raise HTTPException(
                 status_code=422,
-                detail="No prospects ready for drafting. Ensure prospects have verified email and draft_status is 'pending' or NULL."
+                detail=error_detail
             )
     
     logger.info(f"✍️  [PIPELINE STEP 6] Drafting emails for {len(prospects)} verified prospects")
