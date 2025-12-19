@@ -104,9 +104,9 @@ async def discover_websites(
         logger.error(f"❌ [PIPELINE STEP 1] Failed to start discovery job: {e}", exc_info=True)
         try:
             await db.rollback()  # Rollback on exception to prevent transaction poisoning
-        job.status = "failed"
-        job.error_message = str(e)
-        await db.commit()
+            job.status = "failed"
+            job.error_message = str(e)
+            await db.commit()
         except Exception as rollback_err:
             logger.error(f"❌ [PIPELINE STEP 1] Error during rollback: {rollback_err}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to start discovery job: {str(e)}")
@@ -389,16 +389,16 @@ async def verify_emails(
     # REMOVED: Hard stage filtering (stage = LEAD)
     # Use status flags instead: scraped + email + pending verification
     try:
-    query = select(Prospect).where(
+        query = select(Prospect).where(
             Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
             Prospect.contact_email.isnot(None),
-        Prospect.verification_status == VerificationStatus.PENDING.value,
-    )
-    if request.prospect_ids:
-        query = query.where(Prospect.id.in_(request.prospect_ids))
-    
-    result = await db.execute(query)
-    prospects = result.scalars().all()
+            Prospect.verification_status == VerificationStatus.PENDING.value,
+        )
+        if request.prospect_ids:
+            query = query.where(Prospect.id.in_(request.prospect_ids))
+        
+        result = await db.execute(query)
+        prospects = result.scalars().all()
     except Exception as e:
         logger.error(f"❌ [PIPELINE STEP 4] Query error: {e}", exc_info=True)
         await db.rollback()  # Rollback on query failure
@@ -423,9 +423,9 @@ async def verify_emails(
     )
     
     try:
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
     except Exception as commit_err:
         logger.error(f"❌ [PIPELINE STEP 4] Commit error: {commit_err}", exc_info=True)
         await db.rollback()  # Rollback on commit failure
