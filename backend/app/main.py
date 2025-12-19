@@ -165,16 +165,29 @@ async def startup():
             from alembic import command
             
             logger.info("🔄 Running database migrations on startup (CRITICAL: must run before queries)...")
+            logger.info("=" * 60)
             
             # Get the backend directory path
             import os
             backend_dir = os.path.dirname(os.path.dirname(__file__))
             alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
             
+            # Get database URL and set in config
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                # Convert asyncpg URL to psycopg2 for Alembic
+                if database_url.startswith("postgresql+asyncpg://"):
+                    sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+                    alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
+                    logger.info("✅ Converted asyncpg URL to psycopg2 format for Alembic")
+            
             # Run migrations FIRST
             try:
+                logger.info("🚀 Executing: alembic upgrade head")
                 command.upgrade(alembic_cfg, "head")
+                logger.info("=" * 60)
                 logger.info("✅ Database migrations completed successfully")
+                logger.info("=" * 60)
                 
                 # CRITICAL: Validate schema after migrations
                 # FAIL FAST if schema doesn't match model
