@@ -605,7 +605,17 @@ async def draft_emails(
         )
         verified_null = debug_draft_null.scalar() or 0
         
+        # Check what draft_status values actually exist
+        debug_draft_statuses = await db.execute(
+            select(Prospect.draft_status, func.count(Prospect.id)).where(
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.contact_email.isnot(None)
+            ).group_by(Prospect.draft_status)
+        )
+        draft_status_counts = {row[0]: row[1] for row in debug_draft_statuses.fetchall()}
+        
         logger.info(f"🔍 [DRAFT DEBUG] Verified total: {verified_total}, With email: {verified_with_email}, Draft pending: {verified_pending}, Draft NULL: {verified_null}")
+        logger.info(f"🔍 [DRAFT DEBUG] Draft status breakdown: {draft_status_counts}")
         
         result = await db.execute(
             select(Prospect).where(
