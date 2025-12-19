@@ -10,6 +10,7 @@ from app.db.database import get_db, engine, Base
 from app.utils.schema_validator import validate_prospect_schema
 from typing import Dict, Any
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -59,4 +60,59 @@ async def schema_health_check():
             status_code=500,
             detail=f"Schema health check failed: {str(e)}"
         )
+
+
+@router.get("/gmail")
+async def gmail_health_check():
+    """
+    Gmail configuration health check
+    
+    Checks if Gmail API credentials are configured.
+    Returns status and configuration details (without exposing secrets).
+    """
+    logger.info("🔍 Checking Gmail configuration...")
+    
+    access_token = os.getenv("GMAIL_ACCESS_TOKEN")
+    refresh_token = os.getenv("GMAIL_REFRESH_TOKEN")
+    client_id = os.getenv("GMAIL_CLIENT_ID")
+    client_secret = os.getenv("GMAIL_CLIENT_SECRET")
+    
+    has_access_token = bool(access_token)
+    has_refresh_token = bool(refresh_token)
+    has_client_id = bool(client_id)
+    has_client_secret = bool(client_secret)
+    
+    # Check if we have minimum required credentials
+    is_configured = has_access_token or (has_refresh_token and has_client_id and has_client_secret)
+    
+    status = "configured" if is_configured else "not_configured"
+    
+    details = {
+        "status": status,
+        "has_access_token": has_access_token,
+        "has_refresh_token": has_refresh_token,
+        "has_client_id": has_client_id,
+        "has_client_secret": has_client_secret,
+    }
+    
+    if not is_configured:
+        details["message"] = (
+            "Gmail is not configured. To enable email sending, set one of the following:\n"
+            "Option 1: Set GMAIL_ACCESS_TOKEN (temporary, expires)\n"
+            "Option 2: Set GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET (recommended, auto-refreshes)"
+        )
+        details["instructions"] = {
+            "option_1": "Set GMAIL_ACCESS_TOKEN environment variable",
+            "option_2": "Set GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, and GMAIL_CLIENT_SECRET environment variables"
+        }
+    else:
+        details["message"] = "Gmail is configured and ready to send emails."
+        if has_refresh_token:
+            details["auth_method"] = "refresh_token (recommended - auto-refreshes)"
+        else:
+            details["auth_method"] = "access_token (may expire)"
+    
+    logger.info(f"📧 Gmail configuration check: {status}")
+    
+    return details
 
