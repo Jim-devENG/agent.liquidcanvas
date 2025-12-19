@@ -980,19 +980,19 @@ async def get_pipeline_status(
                     )
                 )
                 drafted_count = drafted.scalar() or 0
-    except Exception as e:
-        # If anything fails, try draft_subject as fallback
-        logger.warning(f"⚠️  Error checking drafted_at, using draft_subject fallback: {e}")
-        try:
-            drafted = await db.execute(
-                select(func.count(Prospect.id)).where(
-                    Prospect.draft_subject.isnot(None)
+        except Exception as e:
+            # If anything fails, try draft_subject as fallback
+            logger.warning(f"⚠️  Error checking drafted_at, using draft_subject fallback: {e}")
+            try:
+                drafted = await db.execute(
+                    select(func.count(Prospect.id)).where(
+                        Prospect.draft_subject.isnot(None)
+                    )
                 )
-            )
-            drafted_count = drafted.scalar() or 0
-        except Exception as fallback_err:
-            logger.error(f"❌ Both drafted_at and draft_subject queries failed: {fallback_err}", exc_info=True)
-            drafted_count = 0
+                drafted_count = drafted.scalar() or 0
+            except Exception as fallback_err:
+                logger.error(f"❌ Both drafted_at and draft_subject queries failed: {fallback_err}", exc_info=True)
+                drafted_count = 0
         
         # Step 7: SENT = Prospects where last_sent IS NOT NULL
         # USER RULE: Sent count = Prospects where last_sent IS NOT NULL
