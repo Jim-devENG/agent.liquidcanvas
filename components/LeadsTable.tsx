@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle } from 'lucide-react'
-import { listLeads, listScrapedEmails, promoteToLead, composeEmail, manualScrape, manualVerify, type Prospect } from '@/lib/api'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2 } from 'lucide-react'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, manualScrape, manualVerify, type Prospect } from '@/lib/api'
 import { safeToFixed } from '@/lib/safe-utils'
 
 interface LeadsTableProps {
@@ -20,6 +20,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [draftSubject, setDraftSubject] = useState('')
   const [draftBody, setDraftBody] = useState('')
   const [isComposing, setIsComposing] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
 
   // Manual actions state
   const [showManualActions, setShowManualActions] = useState(false)
@@ -87,7 +89,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       // Debounce: wait 500ms before making request
       debounceTimeout = setTimeout(() => {
-        loadProspects()
+    loadProspects()
       }, 500)
     }
     
@@ -161,9 +163,39 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     setDraftBody('')
   }
 
-  // REMOVED: handleSend function
-  // Compose is DRAFT-ONLY. Sending must happen via Pipeline Send card.
-  // Individual send endpoint is disabled (410 Gone).
+  const handleSendNow = async () => {
+    if (!activeProspect) return
+    
+    // Validate draft exists
+    if (!activeProspect.draft_subject || !activeProspect.draft_body) {
+      alert('No draft email found. Please compose email first.')
+      return
+    }
+    
+    setIsSending(true)
+    try {
+      await sendEmail(activeProspect.id)
+      
+      // Success - close modal, refresh data, show confirmation
+      closeComposeModal()
+      
+      // Refresh prospects list
+      await loadProspects()
+      
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+      }
+      
+      alert('Email sent successfully!')
+    } catch (error: any) {
+      console.error('Failed to send email:', error)
+      // Error messages are already specific from API (400, 409, 500)
+      alert(error.message || 'Failed to send email')
+    } finally {
+      setIsSending(false)
+    }
+  }
   // Use pipelineSend() from the Pipeline page instead.
 
   const handleManualScrape = async () => {
@@ -247,14 +279,14 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
             <Globe className="w-4 h-4" />
             <span>Manual Actions</span>
           </button>
-          <button
-            onClick={loadProspects}
-            className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-        </div>
+        <button
+          onClick={loadProspects}
+          className="flex items-center space-x-2 px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+        </button>
+      </div>
       </div>
 
       {/* Manual Actions Panel */}
@@ -416,38 +448,19 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex flex-col space-y-1">
-                        {/* Show verification_status (primary) */}
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
-                            prospect.verification_status === 'verified'
-                              ? 'bg-green-100 text-green-800'
-                              : prospect.verification_status === 'unverified' || prospect.verification_status === 'UNVERIFIED'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : prospect.verification_status === 'pending' || prospect.verification_status === 'PENDING'
-                              ? 'bg-blue-100 text-blue-800'
-                              : prospect.verification_status === 'failed'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {prospect.verification_status || 'pending'}
-                        </span>
-                        {/* Show outreach_status (secondary, for sent/replied) */}
-                        {prospect.outreach_status && prospect.outreach_status !== 'pending' && (
-                          <span
-                            className={`px-2 py-1 rounded text-xs font-medium ${
-                              prospect.outreach_status === 'sent'
-                                ? 'bg-green-100 text-green-800'
-                                : prospect.outreach_status === 'replied'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {prospect.outreach_status}
-                          </span>
-                        )}
-                      </div>
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          prospect.outreach_status === 'sent'
+                            ? 'bg-green-100 text-green-800'
+                            : prospect.outreach_status === 'replied'
+                            ? 'bg-blue-100 text-blue-800'
+                            : prospect.outreach_status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {prospect.outreach_status}
+                      </span>
                     </td>
                     <td className="py-3 px-4">
                       <span className="text-gray-900">{safeToFixed(prospect.score, 2)}</span>
@@ -500,7 +513,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       {/* Compose / Review Modal */}
       {activeProspect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-height-[80vh] max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-height-[85vh] max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
@@ -518,35 +531,123 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Subject
-                </label>
-                <input
-                  type="text"
-                  value={draftSubject}
-                  onChange={(e) => setDraftSubject(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-olive-500 text-sm"
-                  placeholder="Email subject"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Message
-                </label>
-                <textarea
-                  value={draftBody}
-                  onChange={(e) => setDraftBody(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-olive-500 text-sm h-48 resize-vertical"
-                  placeholder="Your email message will appear here. You can edit it before sending."
-                />
-              </div>
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setActiveTab('edit')}
+                className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'edit'
+                    ? 'text-olive-600 border-b-2 border-olive-600 bg-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Edit2 className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('preview')}
+                className={`flex items-center space-x-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'preview'
+                    ? 'text-olive-600 border-b-2 border-olive-600 bg-white'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Eye className="w-4 h-4" />
+                <span>Preview</span>
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="flex-1 overflow-y-auto">
+              {activeTab === 'edit' ? (
+                <div className="p-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Subject
+                    </label>
+                    <input
+                      type="text"
+                      value={draftSubject}
+                      onChange={(e) => setDraftSubject(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-olive-500 text-sm"
+                      placeholder="Email subject"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Message
+                    </label>
+                    <textarea
+                      value={draftBody}
+                      onChange={(e) => setDraftBody(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-olive-500 text-sm h-64 resize-vertical"
+                      placeholder="Your email message will appear here. You can edit it before sending."
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4">
+                  {/* Email Preview - styled like Gmail */}
+                  <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                    {/* Email Header */}
+                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="text-sm font-semibold text-gray-900 mb-1">
+                            {draftSubject || '(No subject)'}
+                          </div>
+                          <div className="text-xs text-gray-600 space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium">From:</span>
+                              <span>Your Email (via Gmail)</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium">To:</span>
+                              <span>{activeProspect.contact_email}</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium">Date:</span>
+                              <span>{new Date().toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Email Body */}
+                    <div className="px-4 py-6">
+                      <div className="prose prose-sm max-w-none">
+                        <div 
+                          className="text-gray-900 whitespace-pre-wrap leading-relaxed"
+                          style={{ 
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                            lineHeight: '1.6'
+                          }}
+                        >
+                          {draftBody || (
+                            <span className="text-gray-400 italic">No message content yet. Switch to Edit tab to compose.</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Preview Info */}
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-xs text-blue-800">
+                      <strong>Preview:</strong> This is how your email will appear to the recipient. 
+                      The actual email will be sent via Gmail API.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
               <p className="text-xs text-gray-500">
-                This is a DRAFT ONLY. To send emails, use the Pipeline → Send card.
+                {activeProspect.draft_subject && activeProspect.draft_body
+                  ? 'Review and send your drafted email, or send via Pipeline.'
+                  : 'This is a DRAFT ONLY. To send emails, use the Pipeline → Send card.'}
               </p>
               <div className="flex items-center space-x-2">
                 <button
@@ -555,6 +656,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 >
                   Close
                 </button>
+                {activeProspect.draft_subject && activeProspect.draft_body && (
+                  <button
+                    onClick={handleSendNow}
+                    disabled={isSending}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>{isSending ? 'Sending...' : 'Send Now'}</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     // Navigate to Pipeline tab to use Send card

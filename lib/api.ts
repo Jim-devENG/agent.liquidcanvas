@@ -729,9 +729,7 @@ export async function composeEmail(prospectId: string): Promise<{
 }
 
 export async function sendEmail(
-  prospectId: string,
-  subject?: string,
-  body?: string
+  prospectId: string
 ): Promise<{
   prospect_id: string
   email_log_id: string
@@ -739,15 +737,23 @@ export async function sendEmail(
   success: boolean
   message_id?: string
 }> {
+  // Manual send endpoint - sends existing draft (no body content in request)
+  // Email content comes ONLY from database (draft_subject, draft_body)
   const res = await authenticatedFetch(`${API_BASE}/prospects/${prospectId}/send`, {
     method: 'POST',
-    body: JSON.stringify({
-      subject,
-      body,
-    }),
+    // No body - endpoint uses draft from database
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to send email' }))
+    const status = res.status
+    // Map HTTP status codes to specific error messages
+    if (status === 400) {
+      throw new Error(error.detail || 'Prospect is not ready for sending. Ensure draft exists and email is verified.')
+    } else if (status === 409) {
+      throw new Error(error.detail || 'Email already sent for this prospect.')
+    } else if (status === 500) {
+      throw new Error(error.detail || 'Failed to send email. Please try again.')
+    }
     throw new Error(error.detail || 'Failed to send email')
   }
   return res.json()
@@ -1065,30 +1071,13 @@ export interface PipelineVerifyResponse {
   prospects_count: number
 }
 
-/**
- * BACKEND AUTHORITY: /api/pipeline/verify
- * 
- * Backend Requirements:
- * - scrape_status IN ('SCRAPED','ENRICHED')
- * - contact_email IS NOT NULL
- * - verification_status != 'verified'
- * 
- * Backend returns 400 if no eligible prospects found.
- * Frontend MUST check verify-ready count before calling.
- */
 export async function pipelineVerify(request?: PipelineVerifyRequest): Promise<PipelineVerifyResponse> {
-  // Backend schema: VerifyRequest { prospect_ids?: List[UUID] }
-  // Send empty object to trigger automatic selection of all verify-ready prospects
-  const payload = request || {}
-  
   const res = await authenticatedFetch(`${API_BASE}/pipeline/verify`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(request || {}),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to start verification' }))
-    // Backend returns 400 with specific message when no eligible prospects
-    // Preserve backend's exact error message for user display
     throw new Error(error.detail || 'Failed to start verification')
   }
   return res.json()
@@ -1132,35 +1121,13 @@ export interface PipelineDraftResponse {
   prospects_count: number
 }
 
-/**
- * BACKEND AUTHORITY: /api/pipeline/draft
- * 
- * Backend Requirements:
- * - verification_status = 'verified'
- * - contact_email IS NOT NULL
- * - draft_status = 'pending' (not already drafted)
- * 
- * Backend Schema: DraftRequest { prospect_ids?: Optional[List[UUID]] }
- * - If prospect_ids is None or empty, backend auto-selects all draft-ready prospects
- * - If prospect_ids provided, backend validates they meet requirements
- * 
- * Backend returns 422 if requirements not met.
- * Frontend MUST check drafting_ready_count before calling.
- */
 export async function pipelineDraft(request?: PipelineDraftRequest): Promise<PipelineDraftResponse> {
-  // Backend schema: DraftRequest { prospect_ids?: Optional[List[UUID]] }
-  // Send empty object (or request with prospect_ids) to match backend schema exactly
-  // Empty object means prospect_ids is undefined, triggering auto-selection
-  const payload = request || {}
-  
   const res = await authenticatedFetch(`${API_BASE}/pipeline/draft`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(request || {}),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to start drafting' }))
-    // Backend returns 422 with specific message when requirements not met
-    // Preserve backend's exact error message for user display
     throw new Error(error.detail || 'Failed to start drafting')
   }
   return res.json()
@@ -1177,35 +1144,17 @@ export interface PipelineSendResponse {
   prospects_count: number
 }
 
-/**
- * BACKEND AUTHORITY: /api/pipeline/send
- * 
- * Backend Requirements:
- * - verification_status = 'verified'
- * - draft_status = 'drafted'
- * - send_status != 'sent'
- * 
- * Backend Schema: SendRequest { prospect_ids?: Optional[List[UUID]] }
- * - If prospect_ids is None or empty, backend auto-selects all send-ready prospects
- * - If prospect_ids provided, backend validates they meet requirements
- * 
- * Backend returns 422 if requirements not met.
- * Frontend MUST check send_ready_count before calling.
- */
 export async function pipelineSend(request?: PipelineSendRequest): Promise<PipelineSendResponse> {
-  // Backend schema: SendRequest { prospect_ids?: Optional[List[UUID]] }
-  // Send empty object (or request with prospect_ids) to match backend schema exactly
-  // Empty object means prospect_ids is undefined, triggering auto-selection
-  const payload = request || {}
-  
+  // If no prospect_ids provided, send empty object to trigger automatic selection of all send-ready prospects
+  const payload = request?.prospect_ids && request.prospect_ids.length > 0 
+    ? request 
+    : { prospect_ids: null }  // Send null to trigger automatic query
   const res = await authenticatedFetch(`${API_BASE}/pipeline/send`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to start sending' }))
-    // Backend returns 422 with specific message when requirements not met
-    // Preserve backend's exact error message for user display
     throw new Error(error.detail || 'Failed to start sending')
   }
   return res.json()
@@ -1326,17 +1275,6 @@ export async function listWebsites(skip: number = 0, limit: number = 50): Promis
   return res.json()
 }
 
-/**
- * BACKEND AUTHORITY: /api/pipeline/status
- * 
- * This endpoint is the SINGLE SOURCE OF TRUTH for pipeline state.
- * 
- * All UI button enable/disable logic MUST derive from this response.
- * Frontend MUST NOT guess or cache pipeline state - always query this endpoint.
- * 
- * The backend computes counts directly from database state, ensuring accuracy.
- * Frontend derives all UI state (button locks, counts, status) from this response.
- */
 export async function pipelineStatus(): Promise<PipelineStatus> {
   const res = await authenticatedFetch(`${API_BASE}/pipeline/status`)
   if (!res.ok) {
