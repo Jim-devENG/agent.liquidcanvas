@@ -907,6 +907,10 @@ async def list_prospects(
                     logger.info(f"🔍 Added has_email filter: False (contact_email IS NULL)")
         except Exception as e:
             logger.error(f"🔴 Error building query filters: {e}", exc_info=True)
+            try:
+                await db.rollback()  # Rollback on exception to prevent transaction poisoning
+            except Exception as rollback_err:
+                logger.error(f"❌ Error during rollback: {rollback_err}", exc_info=True)
             response_data["error"] = f"Error building query: {str(e)}"
             response_data["data"] = {"data": [], "prospects": [], "total": 0, "page": page, "totalPages": 0, "skip": skip, "limit": limit}
             return response_data
