@@ -187,11 +187,27 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
       }
       
-      alert('Email sent successfully!')
+      // Success - show inline success message instead of alert
+      setError(null)
+      // Show success message briefly
+      const successMsg = 'Email sent successfully!'
+      setError(successMsg)
+      setTimeout(() => setError(null), 3000)
     } catch (error: any) {
       console.error('Failed to send email:', error)
-      // Error messages are already specific from API (400, 409, 500)
-      alert(error.message || 'Failed to send email')
+      // Parse error message - API returns detailed errors
+      const errorMsg = error?.message || 'Failed to send email'
+      
+      // Check for specific error types
+      if (errorMsg.includes('Gmail') || errorMsg.includes('access token') || errorMsg.includes('refresh token')) {
+        setError(`Gmail Configuration Error: ${errorMsg}. Check /api/health/gmail for details.`)
+      } else if (errorMsg.includes('not ready') || errorMsg.includes('draft')) {
+        setError(`Draft Error: ${errorMsg}`)
+      } else if (errorMsg.includes('already sent')) {
+        setError(`Already Sent: ${errorMsg}`)
+      } else {
+        setError(`Send Failed: ${errorMsg}`)
+      }
     } finally {
       setIsSending(false)
     }
@@ -288,6 +304,17 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         </button>
       </div>
       </div>
+
+      {/* Error/Success Message Display */}
+      {error && (
+        <div className={`mb-4 p-3 rounded-md ${
+          error.includes('successfully') || error.includes('✅')
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      )}
 
       {/* Manual Actions Panel */}
       {showManualActions && (
