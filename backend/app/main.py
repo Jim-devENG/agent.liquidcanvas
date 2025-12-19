@@ -189,13 +189,29 @@ async def startup():
                         """))
                         if not result.fetchone():
                             logger.warning("⚠️  final_body column missing after migrations - adding manually...")
-                            await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS final_body TEXT"))
-                            await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS thread_id UUID"))
-                            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_thread_id ON prospects(thread_id)"))
-                            await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS sequence_index INTEGER"))
-                            await conn.execute(text("UPDATE prospects SET sequence_index = 0 WHERE sequence_index IS NULL"))
-                            await conn.execute(text("ALTER TABLE prospects ALTER COLUMN sequence_index SET NOT NULL"))
-                            await conn.execute(text("ALTER TABLE prospects ALTER COLUMN sequence_index SET DEFAULT 0"))
+                            try:
+                                await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS final_body TEXT"))
+                                logger.info("✅ Added final_body column")
+                            except Exception as e:
+                                logger.error(f"❌ Error adding final_body: {e}")
+                            
+                            try:
+                                await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS thread_id UUID"))
+                                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_thread_id ON prospects(thread_id)"))
+                                logger.info("✅ Added thread_id column with index")
+                            except Exception as e:
+                                logger.error(f"❌ Error adding thread_id: {e}")
+                            
+                            try:
+                                await conn.execute(text("ALTER TABLE prospects ADD COLUMN IF NOT EXISTS sequence_index INTEGER"))
+                                await conn.execute(text("UPDATE prospects SET sequence_index = 0 WHERE sequence_index IS NULL"))
+                                await conn.execute(text("ALTER TABLE prospects ALTER COLUMN sequence_index SET NOT NULL"))
+                                await conn.execute(text("ALTER TABLE prospects ALTER COLUMN sequence_index SET DEFAULT 0"))
+                                logger.info("✅ Added sequence_index column")
+                            except Exception as e:
+                                logger.error(f"❌ Error adding sequence_index: {e}")
+                            
+                            await conn.commit()
                             logger.info("✅ Manually added missing columns (final_body, thread_id, sequence_index)")
                         else:
                             logger.info("✅ final_body column exists - schema is correct")
