@@ -165,65 +165,65 @@ async def verify_prospects_async(job_id: str):
                             should_verify = True
                         
                         if should_verify:
-                        # Verify existing scraped email
-                        logger.debug(f"🔍 [VERIFICATION] Calling Snov.io domain_search for {prospect.domain}...")
-                        snov_result = await snov_client.domain_search(prospect.domain)
-                        logger.debug(f"🔍 [VERIFICATION] Snov.io response for {prospect.domain}: success={snov_result.get('success')}, emails_count={len(snov_result.get('emails', []))}")
-                        
-                        scraped_email = prospect.contact_email.lower().strip()
-                        verified = False
-                        confidence = 0.0
-                        
-                        # Try to find exact match in Snov results (for confidence score)
-                        if snov_result.get("success") and snov_result.get("emails"):
-                            snov_emails = snov_result.get("emails", [])
-                            logger.info(f"🔍 [VERIFICATION] Snov returned {len(snov_emails)} emails for {prospect.domain}. Looking for exact match: '{scraped_email}'")
+                            # Verify existing scraped email
+                            logger.debug(f"🔍 [VERIFICATION] Calling Snov.io domain_search for {prospect.domain}...")
+                            snov_result = await snov_client.domain_search(prospect.domain)
+                            logger.debug(f"🔍 [VERIFICATION] Snov.io response for {prospect.domain}: success={snov_result.get('success')}, emails_count={len(snov_result.get('emails', []))}")
                             
-                            # Try multiple email field names (Snov.io might use different field names)
-                            for email_data in snov_emails:
-                                if not isinstance(email_data, dict):
-                                    logger.debug(f"🔍 [VERIFICATION] Skipping non-dict email_data: {type(email_data)}")
-                                    continue
-                                
-                                # Try different field names for email
-                                email_value = (
-                                    email_data.get("value") or 
-                                    email_data.get("email") or 
-                                    email_data.get("address") or
-                                    email_data.get("email_address") or
-                                    ""
-                                )
-                                
-                                if not email_value:
-                                    logger.debug(f"🔍 [VERIFICATION] Email data has no value field: {email_data.keys()}")
-                                    continue
-                                
-                                email_value = str(email_value).lower().strip()
-                                
-                                logger.debug(f"🔍 [VERIFICATION] Comparing: scraped='{scraped_email}' vs snov='{email_value}'")
-                                
-                                if email_value == scraped_email:
-                                    # Found exact match in Snov - use Snov's confidence score
-                                    verified = True
-                                    confidence = float(email_data.get("confidence_score", 0) or email_data.get("confidence", 0) or 0)
-                                    source = email_data.get("source", "unknown")
-                                    logger.info(f"✅ [VERIFICATION] Exact email match found in Snov results for {prospect.domain}: {email_value} (source={source}, confidence={confidence})")
-                                    break
+                            scraped_email = prospect.contact_email.lower().strip()
+                            verified = False
+                            confidence = 0.0
                             
-                            # Log what emails Snov returned if no match found
-                            if not verified and len(snov_emails) > 0:
-                                snov_email_list = [str(e.get("value") or e.get("email") or e.get("address") or "unknown") for e in snov_emails[:5]]
-                                logger.info(f"ℹ️  [VERIFICATION] Exact email '{scraped_email}' not found in Snov results for {prospect.domain}")
-                                logger.info(f"ℹ️  [VERIFICATION] Snov returned {len(snov_emails)} emails: {snov_email_list}")
-                        
-                        # VERIFICATION LOGIC: If we scraped the email from the website, it's verified
-                        # Snov.io not having it doesn't mean it's invalid - we already found it on the website
-                        if not verified:
-                            # Email not in Snov results, but we scraped it from the website, so verify it anyway
-                            verified = True
-                            confidence = 0.5  # Lower confidence since not confirmed by Snov
-                            logger.info(f"✅ [VERIFICATION] Email '{scraped_email}' not in Snov results, but verified because it was scraped from {prospect.domain} website")
-                        
+                            # Try to find exact match in Snov results (for confidence score)
+                            if snov_result.get("success") and snov_result.get("emails"):
+                                snov_emails = snov_result.get("emails", [])
+                                logger.info(f"🔍 [VERIFICATION] Snov returned {len(snov_emails)} emails for {prospect.domain}. Looking for exact match: '{scraped_email}'")
+                                
+                                # Try multiple email field names (Snov.io might use different field names)
+                                for email_data in snov_emails:
+                                    if not isinstance(email_data, dict):
+                                        logger.debug(f"🔍 [VERIFICATION] Skipping non-dict email_data: {type(email_data)}")
+                                        continue
+                                    
+                                    # Try different field names for email
+                                    email_value = (
+                                        email_data.get("value") or 
+                                        email_data.get("email") or 
+                                        email_data.get("address") or
+                                        email_data.get("email_address") or
+                                        ""
+                                    )
+                                    
+                                    if not email_value:
+                                        logger.debug(f"🔍 [VERIFICATION] Email data has no value field: {email_data.keys()}")
+                                        continue
+                                    
+                                    email_value = str(email_value).lower().strip()
+                                    
+                                    logger.debug(f"🔍 [VERIFICATION] Comparing: scraped='{scraped_email}' vs snov='{email_value}'")
+                                    
+                                    if email_value == scraped_email:
+                                        # Found exact match in Snov - use Snov's confidence score
+                                        verified = True
+                                        confidence = float(email_data.get("confidence_score", 0) or email_data.get("confidence", 0) or 0)
+                                        source = email_data.get("source", "unknown")
+                                        logger.info(f"✅ [VERIFICATION] Exact email match found in Snov results for {prospect.domain}: {email_value} (source={source}, confidence={confidence})")
+                                        break
+                                
+                                # Log what emails Snov returned if no match found
+                                if not verified and len(snov_emails) > 0:
+                                    snov_email_list = [str(e.get("value") or e.get("email") or e.get("address") or "unknown") for e in snov_emails[:5]]
+                                    logger.info(f"ℹ️  [VERIFICATION] Exact email '{scraped_email}' not found in Snov results for {prospect.domain}")
+                                    logger.info(f"ℹ️  [VERIFICATION] Snov returned {len(snov_emails)} emails: {snov_email_list}")
+                            
+                            # VERIFICATION LOGIC: If we scraped the email from the website, it's verified
+                            # Snov.io not having it doesn't mean it's invalid - we already found it on the website
+                            if not verified:
+                                # Email not in Snov results, but we scraped it from the website, so verify it anyway
+                                verified = True
+                                confidence = 0.5  # Lower confidence since not confirmed by Snov
+                                logger.info(f"✅ [VERIFICATION] Email '{scraped_email}' not in Snov results, but verified because it was scraped from {prospect.domain} website")
+                            
                             # Always verify scraped emails (we found them on the website, so they're valid)
                             prospect.verification_status = VerificationStatus.VERIFIED.value
                             prospect.verification_confidence = confidence
@@ -236,8 +236,8 @@ async def verify_prospects_async(job_id: str):
                             await db.commit()
                             await db.refresh(prospect)
                             logger.debug(f"💾 [VERIFICATION] Committed verification for prospect {prospect.id}, verification_status is now: {prospect.verification_status}")
-                        else:
-                            logger.warning(f"⚠️  [VERIFICATION] Skipping prospect {prospect.id} - no email or invalid scrape_status")
+                    else:
+                        logger.warning(f"⚠️  [VERIFICATION] Skipping prospect {prospect.id} - no email")
                     
                     elif (
                         prospect.scrape_status == ScrapeStatus.NO_EMAIL_FOUND.value
