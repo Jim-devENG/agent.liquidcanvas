@@ -265,8 +265,10 @@ async def verify_prospects_async(job_id: str):
                             unverified_count += 1
                             logger.warning(f"⚠️  [VERIFICATION] Snov returned no results for {prospect.domain}")
                     
-                    await db.commit()
-                    await db.refresh(prospect)
+                    # Commit for NO_EMAIL_FOUND cases (scraped emails already committed above)
+                    if prospect.scrape_status == ScrapeStatus.NO_EMAIL_FOUND.value:
+                        await db.commit()
+                        await db.refresh(prospect)
                     
                     # Rate limiting
                     await asyncio.sleep(1)
