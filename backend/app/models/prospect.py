@@ -141,7 +141,7 @@ class Prospect(Base):
     followups_sent = Column(Integer, default=0)
     draft_subject = Column(Text)  # Draft email subject
     draft_body = Column(Text)  # Draft email body
-    drafted_at = Column(DateTime(timezone=True))  # When draft was created
+    # drafted_at = Column(DateTime(timezone=True))  # REMOVED: Column doesn't exist in database
     final_body = Column(Text)  # Final sent email body (moved from draft_body after sending)
     thread_id = Column(UUID(as_uuid=True), index=True)  # Thread ID for follow-up emails
     sequence_index = Column(Integer, default=0)  # Follow-up sequence (0 = initial, 1+ = follow-up)

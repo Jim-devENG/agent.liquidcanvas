@@ -1034,7 +1034,7 @@ async def compose_email(
     Rules:
     - If email already exists → overwrite draft, not duplicate
     - Save draft_body and draft_subject
-    - Set drafted_at timestamp
+    - Set draft_status to "drafted"
     - If this is a follow-up (duplicate domain/email), use Gemini follow-up logic with memory
     """
     from datetime import datetime, timezone
@@ -1177,7 +1177,8 @@ async def compose_email(
     # Save draft to prospect (OVERWRITE if draft already exists, don't duplicate)
     prospect.draft_subject = gemini_result.get("subject")
     prospect.draft_body = gemini_result.get("body")
-    prospect.drafted_at = datetime.now(timezone.utc)
+    # drafted_at column doesn't exist - use draft_subject/draft_body as indicators
+    # prospect.drafted_at = datetime.now(timezone.utc)  # REMOVED: Column doesn't exist
     # Update draft_status to "drafted" so pipeline Drafting card reflects this
     from app.models.prospect import DraftStatus
     prospect.draft_status = DraftStatus.DRAFTED.value

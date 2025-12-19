@@ -946,53 +946,21 @@ async def get_pipeline_status(
         drafting_ready = draft_ready_count
         drafting_ready_count = draft_ready_count
         
-        # Step 6: DRAFTED = Prospects where drafted_at IS NOT NULL
-        # USER RULE: Drafted count = Prospects where drafted_at IS NOT NULL
-        # This indicates a draft has been created (regardless of draft_subject/draft_body)
-        # Defensive: Check if drafted_at column exists before querying
+        # Step 6: DRAFTED = Prospects where draft_subject IS NOT NULL
+        # USER RULE: Drafted count = Prospects where draft_subject IS NOT NULL
+        # Use draft_subject as indicator (draft exists if subject exists)
+        # REMOVED: drafted_at column doesn't exist in database
         drafted_count = 0
         try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'drafted_at'
-                """)
+            drafted = await db.execute(
+                select(func.count(Prospect.id)).where(
+                    Prospect.draft_subject.isnot(None)
+                )
             )
-            if column_check.fetchone():
-                # Column exists - use raw SQL to query safely
-                drafted_result = await db.execute(
-                    text("""
-                        SELECT COUNT(*) 
-                        FROM prospects 
-                        WHERE drafted_at IS NOT NULL
-                    """)
-                )
-                drafted_count = drafted_result.scalar() or 0
-            else:
-                # Column doesn't exist - fallback to draft_subject
-                logger.warning("⚠️  drafted_at column not found, using draft_subject fallback")
-                drafted = await db.execute(
-                    select(func.count(Prospect.id)).where(
-                        Prospect.draft_subject.isnot(None)
-                    )
-                )
-                drafted_count = drafted.scalar() or 0
+            drafted_count = drafted.scalar() or 0
         except Exception as e:
-            # If anything fails, try draft_subject as fallback
-            logger.warning(f"⚠️  Error checking drafted_at, using draft_subject fallback: {e}")
-            try:
-                drafted = await db.execute(
-                    select(func.count(Prospect.id)).where(
-                        Prospect.draft_subject.isnot(None)
-                    )
-                )
-                drafted_count = drafted.scalar() or 0
-            except Exception as fallback_err:
-                logger.error(f"❌ Both drafted_at and draft_subject queries failed: {fallback_err}", exc_info=True)
-                drafted_count = 0
+            logger.error(f"❌ Error counting drafted prospects: {e}", exc_info=True)
+            drafted_count = 0
         
         # Step 7: SENT = Prospects where last_sent IS NOT NULL
         # USER RULE: Sent count = Prospects where last_sent IS NOT NULL

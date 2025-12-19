@@ -23,7 +23,7 @@ class ProspectResponse(BaseModel):
     followups_sent: int
     draft_subject: Optional[str] = None
     draft_body: Optional[str] = None
-    drafted_at: Optional[datetime] = None  # When draft was created
+    # drafted_at: Optional[datetime] = None  # REMOVED: Column doesn't exist in database
     final_body: Optional[str] = None  # Final sent email body (moved from draft_body after sending)
     thread_id: Optional[UUID] = None  # Thread ID for follow-up emails
     sequence_index: Optional[int] = None  # Follow-up sequence (0 = initial, 1+ = follow-up)
