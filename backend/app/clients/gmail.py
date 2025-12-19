@@ -132,12 +132,24 @@ class GmailClient:
         Returns:
             Dictionary with send result
         """
-        # Ensure we have a valid access token
+        # CRITICAL: Ensure we have a valid access token before attempting to send
+        # Try to refresh if we don't have one or if it might be expired
         if not self.access_token:
+            logger.warning("⚠️  No access token available, attempting refresh...")
             if not await self.refresh_access_token():
+                error_detail = (
+                    "Gmail access token is missing and refresh failed. "
+                    "Please check:\n"
+                    "1. GMAIL_REFRESH_TOKEN is set in environment variables\n"
+                    "2. GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET are set\n"
+                    "3. Refresh token is valid and not revoked\n"
+                    "4. OAuth consent screen is properly configured"
+                )
+                logger.error(f"❌ {error_detail}")
                 return {
                     "success": False,
-                    "error": "Failed to obtain Gmail access token"
+                    "error": "Failed to obtain Gmail access token",
+                    "error_detail": error_detail
                 }
         
         # Create email message
@@ -191,17 +203,38 @@ class GmailClient:
         
         except httpx.HTTPStatusError as e:
             error_text = e.response.text
-            logger.error(f"Gmail API HTTP error: {e.response.status_code} - {error_text}")
+            status_code = e.response.status_code
+            logger.error(f"❌ Gmail API HTTP error: {status_code} - {error_text}")
+            
+            # Provide specific error messages for common status codes
+            if status_code == 403:
+                error_detail = (
+                    "Gmail API returned 403 Forbidden. "
+                    "This usually means:\n"
+                    "1. OAuth scope 'https://www.googleapis.com/auth/gmail.send' is not granted\n"
+                    "2. App is not verified (if in production)\n"
+                    "3. User has not granted permission to send emails"
+                )
+            elif status_code == 400:
+                error_detail = (
+                    "Gmail API returned 400 Bad Request. "
+                    "Check email format and message structure."
+                )
+            else:
+                error_detail = f"HTTP {status_code}: {error_text}"
+            
             return {
                 "success": False,
-                "error": f"HTTP {e.response.status_code}: {error_text}",
-                "status_code": e.response.status_code
+                "error": f"Gmail API error: HTTP {status_code}",
+                "error_detail": error_detail,
+                "status_code": status_code
             }
         except Exception as e:
-            logger.error(f"Gmail API call failed: {str(e)}")
+            logger.error(f"❌ Gmail API call failed: {str(e)}", exc_info=True)
             return {
                 "success": False,
-                "error": str(e)
+                "error": f"Gmail API error: {str(e)}",
+                "error_detail": "An unexpected error occurred while calling Gmail API. Check logs for details."
             }
     
     async def get_user_profile(self) -> Dict[str, Any]:

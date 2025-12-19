@@ -57,17 +57,33 @@ async def send_prospect_email(
     # Initialize Gmail client if not provided
     if not gmail_client:
         try:
+            logger.info("🔧 [SEND] Initializing Gmail client...")
             gmail_client = GmailClient()
+            
+            # Verify client is properly configured
+            if not gmail_client.is_configured():
+                raise ValueError(
+                    "Gmail client is not properly configured. "
+                    "Set GMAIL_ACCESS_TOKEN or (GMAIL_REFRESH_TOKEN + GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET) environment variables."
+                )
+            
+            # If using refresh token, test that it works
+            if gmail_client.refresh_token and not gmail_client.access_token:
+                logger.info("🔄 [SEND] Testing refresh token...")
+                if not await gmail_client.refresh_access_token():
+                    raise ValueError(
+                        "Gmail refresh token is invalid or expired. "
+                        "Please generate a new refresh token from Google OAuth Playground or re-authenticate."
+                    )
+            
+            logger.info("✅ [SEND] Gmail client initialized successfully")
         except ValueError as e:
             error_msg = str(e)
             logger.error(f"❌ [SEND] Gmail client initialization failed: {error_msg}")
-            # Provide more helpful error message
-            if "not configured" in error_msg.lower():
-                raise ValueError(
-                    "Gmail is not configured. Please set GMAIL_ACCESS_TOKEN or GMAIL_REFRESH_TOKEN environment variables. "
-                    "If using refresh token, also set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET."
-                )
-            raise ValueError(f"Gmail configuration error: {error_msg}")
+            raise ValueError(error_msg)
+        except Exception as e:
+            logger.error(f"❌ [SEND] Unexpected error initializing Gmail client: {e}", exc_info=True)
+            raise ValueError(f"Gmail configuration error: {str(e)}")
     
     # Send email via Gmail API
     logger.info(f"📧 [SEND] Sending email to {prospect.contact_email} (prospect_id: {prospect.id})...")
@@ -84,8 +100,19 @@ async def send_prospect_email(
     
     if not send_result.get("success"):
         error_msg = send_result.get('error', 'Unknown error')
+        error_detail = send_result.get('error_detail', error_msg)
+        status_code = send_result.get('status_code')
+        
         logger.error(f"❌ [SEND] Gmail returned error: {error_msg}")
-        raise Exception(f"Gmail API error: {error_msg}")
+        if error_detail and error_detail != error_msg:
+            logger.error(f"❌ [SEND] Error details: {error_detail}")
+        
+        # Provide structured error message
+        full_error = f"Gmail API error: {error_msg}"
+        if error_detail and error_detail != error_msg:
+            full_error += f"\n\n{error_detail}"
+        
+        raise Exception(full_error)
     
     # Create email log
     email_log = EmailLog(

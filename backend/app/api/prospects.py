@@ -1651,14 +1651,34 @@ async def send_email(
     
     # Send email using shared service (same logic as pipeline)
     try:
+        logger.info(f"📧 [MANUAL SEND] Attempting to send email for prospect {prospect_id}...")
         send_result = await send_prospect_email(prospect, db)
+        logger.info(f"✅ [MANUAL SEND] Email sent successfully for prospect {prospect_id}")
     except ValueError as e:
-        # Validation errors (400)
-        raise HTTPException(status_code=400, detail=str(e))
+        # Validation errors (400) - prospect not sendable
+        error_msg = str(e)
+        logger.warning(f"⚠️  [MANUAL SEND] Validation error for prospect {prospect_id}: {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        # Gmail API errors (500)
-        logger.error(f"❌ [MANUAL SEND] Failed to send email for prospect {prospect_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+        # Gmail API errors (500) - backend failure
+        error_msg = str(e)
+        logger.error(f"❌ [MANUAL SEND] Failed to send email for prospect {prospect_id}: {error_msg}", exc_info=True)
+        
+        # Check if error contains Gmail-specific issues
+        if "Gmail" in error_msg or "access token" in error_msg.lower() or "refresh token" in error_msg.lower():
+            # Provide more helpful error message for Gmail auth issues
+            detail = (
+                f"Gmail sending failed: {error_msg}\n\n"
+                "This usually means:\n"
+                "1. Gmail OAuth credentials are missing or invalid\n"
+                "2. Refresh token expired or revoked\n"
+                "3. Required OAuth scopes not granted\n"
+                "Check /api/health/gmail for configuration status."
+            )
+        else:
+            detail = f"Failed to send email: {error_msg}"
+        
+        raise HTTPException(status_code=500, detail=detail)
     
     # Get the email log that was created
     email_log_result = await db.execute(
