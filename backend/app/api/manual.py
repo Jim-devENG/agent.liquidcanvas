@@ -117,7 +117,7 @@ async def manual_scrape(
             page_url=request.website_url if "://" in request.website_url else f"https://{domain}",
             discovery_status=DiscoveryStatus.DISCOVERED.value,
             scrape_status=ScrapeStatus.DISCOVERED.value,
-            is_manual="true",
+            is_manual=True,
             stage=ProspectStage.DISCOVERED.value,
         )
         db.add(prospect)
@@ -216,7 +216,7 @@ async def manual_verify(
             discovery_status=DiscoveryStatus.DISCOVERED.value,
             scrape_status=ScrapeStatus.ENRICHED.value,  # Manually added = already "enriched"
             verification_status=VerificationStatus.PENDING.value,
-            is_manual="true",
+            is_manual=True,
             stage=ProspectStage.EMAIL_FOUND.value,
         )
         db.add(prospect)
