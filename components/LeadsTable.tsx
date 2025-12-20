@@ -163,11 +163,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     setDraftBody('')
   }
 
-<<<<<<< HEAD
-  // REMOVED: handleSend function
-  // Compose is DRAFT-ONLY. Sending must happen via Pipeline Send card.
-  // Individual send endpoint is disabled (410 Gone).
-=======
   const handleSendNow = async () => {
     if (!activeProspect) return
     
@@ -217,8 +212,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       setIsSending(false)
     }
   }
->>>>>>> bee01fa (Update frontend components and styling)
-  // Use pipelineSend() from the Pipeline page instead.
 
   const handleManualScrape = async () => {
     if (!manualWebsiteUrl.trim()) {
@@ -483,25 +476,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                         <span className="text-gray-400 italic">No email</span>
                       )}
                     </td>
-<<<<<<< HEAD
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col space-y-1">
-                        {/* Show verification_status (primary) */}
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
-                            prospect.verification_status === 'verified'
-                              ? 'bg-green-100 text-green-800'
-                              : prospect.verification_status === 'unverified' || prospect.verification_status === 'UNVERIFIED'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : prospect.verification_status === 'pending' || prospect.verification_status === 'PENDING'
-                              ? 'bg-blue-100 text-blue-800'
-                              : prospect.verification_status === 'failed'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {prospect.verification_status || 'pending'}
-=======
                     <td className="py-4 px-6">
                       <div className="flex flex-col space-y-1">
                         <span
@@ -516,26 +490,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           }`}
                         >
                           {prospect.verification_status || 'PENDING'}
->>>>>>> bee01fa (Update frontend components and styling)
                         </span>
                         {/* Show outreach_status (secondary, for sent/replied) */}
                         {prospect.outreach_status && prospect.outreach_status !== 'pending' && (
                           <span
-<<<<<<< HEAD
-                            className={`px-2 py-1 rounded text-xs font-medium ${
-                              prospect.outreach_status === 'sent'
-                                ? 'bg-green-100 text-green-800'
-                                : prospect.outreach_status === 'replied'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-gray-100 text-gray-800'
-=======
                             className={`px-3 py-1 rounded-lg text-xs font-semibold shadow-sm ${
                               prospect.outreach_status === 'sent'
                                 ? 'bg-gradient-to-r from-blue-500 to-cyan-600 text-white'
                                 : prospect.outreach_status === 'replied'
                                 ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white'
                                 : 'bg-gray-200 text-gray-700'
->>>>>>> bee01fa (Update frontend components and styling)
                             }`}
                           >
                             {prospect.outreach_status}
@@ -597,11 +561,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           <div className="glass rounded-3xl shadow-2xl w-full max-w-4xl max-height-[85vh] max-h-[85vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-liquid-50/50 to-purple-50/30">
               <div>
-<<<<<<< HEAD
-                <h3 className="text-lg font-semibold text-gray-900">
-=======
                 <h3 className="text-xl font-bold liquid-gradient-text">
->>>>>>> bee01fa (Update frontend components and styling)
                   Review Draft Email
                 </h3>
                 <p className="text-xs text-gray-600 mt-1 font-medium">
@@ -642,11 +602,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </button>
             </div>
 
-<<<<<<< HEAD
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-              <p className="text-xs text-gray-500">
-                This is a DRAFT ONLY. To send emails, use the Pipeline → Send card.
-=======
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto">
               {activeTab === 'edit' ? (
@@ -738,16 +693,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 {activeProspect.draft_subject && activeProspect.draft_body
                   ? '✨ Review and send your drafted email, or send via Pipeline.'
                   : '📝 This is a DRAFT ONLY. To send emails, use the Pipeline → Send card.'}
->>>>>>> bee01fa (Update frontend components and styling)
               </p>
               <div className="flex items-center space-x-3">
                 <button
                   onClick={closeComposeModal}
-<<<<<<< HEAD
-                  className="px-3 py-2 text-sm text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-=======
                   className="px-4 py-2 text-sm font-medium text-gray-700 glass hover:bg-white/80 rounded-xl transition-all duration-200 hover:shadow-md"
->>>>>>> bee01fa (Update frontend components and styling)
                 >
                   Close
                 </button>
@@ -768,17 +718,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                     window.dispatchEvent(event)
                     closeComposeModal()
                   }}
-<<<<<<< HEAD
-                  className="flex items-center space-x-2 px-4 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Go to Pipeline to Send</span>
-=======
                   className="flex items-center space-x-2 px-5 py-2 liquid-gradient text-white rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-200 font-semibold shadow-lg"
                 >
                   <Send className="w-4 h-4" />
                   <span>Go to Pipeline</span>
->>>>>>> bee01fa (Update frontend components and styling)
                 </button>
               </div>
             </div>
