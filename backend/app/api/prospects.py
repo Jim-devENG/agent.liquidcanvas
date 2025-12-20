@@ -1401,19 +1401,16 @@ async def compose_email(
         raise HTTPException(status_code=404, detail="Prospect not found")
     
     # Check for duplicates (same domain OR same email) = follow-up
-    # If duplicate exists, this is a follow-up
-    # CRITICAL: Check for duplicates even if not sent yet (for manual entries)
-    # A duplicate is any prospect with same domain OR same email, regardless of send status
+    # If duplicate exists and has been sent, this is a follow-up
+    # Only consider prospects that have actually been sent (last_sent is not None)
     duplicate_check = await db.execute(
         select(Prospect).where(
             Prospect.id != prospect_id,
             or_(
                 Prospect.domain == prospect.domain,
                 Prospect.contact_email == prospect.contact_email
-            )
-            # REMOVED: Prospect.last_sent.isnot(None) restriction
-            # Now detects duplicates even if they haven't been sent yet
-            # This ensures manual entries trigger follow-up flow correctly
+            ),
+            Prospect.last_sent.isnot(None)
         )
     )
     duplicate_prospect = duplicate_check.scalar_one_or_none()
