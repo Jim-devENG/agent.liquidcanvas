@@ -187,7 +187,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 flex">
+    <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />
 
