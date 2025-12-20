@@ -221,8 +221,9 @@ export default function Dashboard() {
                 <LogOutIcon className="w-4 h-4" />
                 <span>Logout</span>
               </button>
+            </div>
           </div>
-        </div>
+        </header>
 
       {/* Connection Error Banner */}
       {connectionError && (
