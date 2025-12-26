@@ -479,8 +479,8 @@ export async function cancelJob(jobId: string): Promise<{ success: boolean; mess
   }
   
   try {
-    const res = await authenticatedFetch(`${API_BASE}/jobs/${jobId}/cancel`, {
-      method: 'PATCH',
+    const res = await authenticatedFetch(`${API_BASE}/jobs/cancel/${jobId}`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
