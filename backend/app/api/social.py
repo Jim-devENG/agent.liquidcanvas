@@ -255,8 +255,57 @@ async def list_profiles(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {error_msg}", exc_info=True)
+        
+        # Check if it's a table doesn't exist error
+        if "does not exist" in error_msg.lower() or "relation" in error_msg.lower() or "f405" in error_msg.lower() or "UndefinedTableError" in error_msg:
+            logger.warning("⚠️  [SOCIAL PROFILES] Social tables do not exist. Attempting to create them...")
+            
+            # Try to create tables on-the-fly as a fallback
+            try:
+                from sqlalchemy import create_engine
+                from app.models.social import SocialProfile, SocialDiscoveryJob, SocialDraft, SocialMessage
+                from app.db.database import Base
+                import os
+                
+                # Get sync database URL
+                database_url = os.getenv("DATABASE_URL")
+                if database_url:
+                    # Convert to sync URL
+                    if database_url.startswith("postgresql+asyncpg://"):
+                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+                    elif database_url.startswith("postgresql://"):
+                        sync_url = database_url
+                    else:
+                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+                    
+                    # Create sync engine and create tables
+                    sync_engine = create_engine(sync_url)
+                    Base.metadata.create_all(sync_engine)
+                    sync_engine.dispose()
+                    logger.info("✅ [SOCIAL PROFILES] Social tables created successfully on-the-fly")
+                    
+                    # Return empty result for now - user can retry
+                    return {
+                        "data": [],
+                        "total": 0,
+                        "skip": skip,
+                        "limit": limit
+                    }
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Social outreach tables do not exist and DATABASE_URL is not set. Please run database migrations: alembic upgrade head"
+                    )
+            except Exception as create_err:
+                logger.error(f"❌ [SOCIAL PROFILES] Failed to create tables on-the-fly: {create_err}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail="Social outreach tables do not exist. Please restart the backend to trigger automatic table creation, or run: alembic upgrade head"
+                )
+        
+        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {error_msg}")
 
 
 # ============================================
