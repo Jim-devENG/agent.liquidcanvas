@@ -281,9 +281,33 @@ async def list_profiles(
         raise
     except Exception as e:
         error_msg = str(e)
+        error_type = type(e).__name__
         logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {error_msg}", exc_info=True)
         
-        # Log the error but return a user-friendly message
+        # Check if this is a database schema error (table/column missing)
+        is_schema_error = (
+            "does not exist" in error_msg.lower() or
+            "relation" in error_msg.lower() or
+            "f405" in error_msg.lower() or
+            "UndefinedTableError" in error_type or
+            "ProgrammingError" in error_type or
+            "table" in error_msg.lower() and "not exist" in error_msg.lower()
+        )
+        
+        if is_schema_error:
+            # Schema error - return 200 with empty data and inactive status (not 500)
+            logger.warning(f"⚠️  [SOCIAL PROFILES] Database schema error detected: {error_msg}")
+            logger.warning("⚠️  Returning empty data with inactive status instead of 500 error")
+            return SocialProfilesListResponse(
+                data=[],
+                total=0,
+                skip=skip,
+                limit=limit,
+                status="inactive",
+                reason="database schema error"
+            )
+        
+        # Other errors - return 500 (but never for schema issues)
         raise HTTPException(status_code=500, detail=f"Failed to list profiles: {error_msg}")
 
 
