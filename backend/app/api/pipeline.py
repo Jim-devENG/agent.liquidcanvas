@@ -1338,6 +1338,89 @@ async def update_prospect_category(
     )
 
 
+class AutoCategorizeResponse(BaseModel):
+    success: bool
+    categorized_count: int
+    message: str
+
+
+def auto_categorize_prospect(prospect: Prospect) -> Optional[str]:
+    """
+    Automatically determine category for a prospect based on domain, title, and other metadata.
+    Returns the category name or None if no match found.
+    """
+    # Get text to analyze
+    domain_lower = (prospect.domain or '').lower()
+    title_lower = (prospect.page_title or '').lower()
+    url_lower = (prospect.page_url or '').lower()
+    combined_text = f"{domain_lower} {title_lower} {url_lower}"
+    
+    # Category detection patterns
+    category_patterns = {
+        'Art Gallery': ['gallery', 'art gallery', 'contemporary art', 'fine art gallery'],
+        'Museums': ['museum', 'museums', 'art museum', 'gallery museum'],
+        'Art Studio': ['studio', 'art studio', 'artist studio', 'creative studio'],
+        'Art School': ['school', 'art school', 'academy', 'art academy', 'institute', 'art institute'],
+        'Art Fair': ['fair', 'art fair', 'exhibition', 'art exhibition', 'art show'],
+        'Art Dealer': ['dealer', 'art dealer', 'art broker', 'art trader'],
+        'Art Consultant': ['consultant', 'art consultant', 'art advisor', 'art advisory'],
+        'Art Publisher': ['publisher', 'art publisher', 'publishing', 'art press'],
+        'Art Magazine': ['magazine', 'art magazine', 'publication', 'art publication', 'art journal']
+    }
+    
+    # Check each category pattern
+    for category, patterns in category_patterns.items():
+        for pattern in patterns:
+            if pattern in combined_text:
+                return category
+    
+    return None
+
+
+@router.post("/auto_categorize", response_model=AutoCategorizeResponse)
+async def auto_categorize_all(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Automatically categorize all prospects that don't have a category.
+    Uses heuristics based on domain, title, and URL to determine category.
+    """
+    logger.info("🤖 [AUTO CATEGORIZE] Starting automatic categorization of all uncategorized prospects")
+    
+    # Get all prospects without categories
+    result = await db.execute(
+        select(Prospect).where(
+            or_(
+                Prospect.discovery_category.is_(None),
+                Prospect.discovery_category == '',
+                Prospect.discovery_category == 'N/A',
+                Prospect.discovery_category == 'Unknown'
+            )
+        )
+    )
+    prospects = result.scalars().all()
+    
+    logger.info(f"📊 [AUTO CATEGORIZE] Found {len(prospects)} uncategorized prospects")
+    
+    categorized_count = 0
+    for prospect in prospects:
+        category = auto_categorize_prospect(prospect)
+        if category:
+            prospect.discovery_category = category
+            categorized_count += 1
+    
+    await db.commit()
+    
+    logger.info(f"✅ [AUTO CATEGORIZE] Automatically categorized {categorized_count} of {len(prospects)} prospects")
+    
+    return AutoCategorizeResponse(
+        success=True,
+        categorized_count=categorized_count,
+        message=f"Successfully auto-categorized {categorized_count} prospect(s) based on their content"
+    )
+
+
 @router.get("/debug/counts")
 async def debug_counts(
     db: AsyncSession = Depends(get_db),

@@ -300,7 +300,6 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                     if not query_category:
                         category_keywords = {
                             "Art Gallery": ["art gallery", "gallery", "art exhibition"],
-                            "Museum": ["museum", "museums", "art museum"],
                             "Museums": ["museum", "museums", "art museum"],
                             "Art Studio": ["art studio", "studio", "artist studio"],
                             "Art School": ["art school", "art academy", "art institute"],
