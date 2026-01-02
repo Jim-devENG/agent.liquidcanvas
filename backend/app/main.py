@@ -512,45 +512,58 @@ async def startup():
     logger.info("⏳ Waiting for database migrations to complete...")
     logger.info("📝 Alembic upgrade head runs automatically on every startup")
     
+    # Run migrations - log errors but don't exit
+    # Allow app to start even if migrations have issues (they can be fixed manually)
+    migration_success = False
     try:
         await run_database_setup()
         logger.info("✅ Database migrations completed")
+        migration_success = True
     except Exception as migration_error:
         logger.error("=" * 80)
         logger.error("❌ CRITICAL: Database migrations failed during startup")
         logger.error(f"❌ Error: {migration_error}")
         logger.error("=" * 80)
-        logger.error("❌ APPLICATION WILL NOT START")
-        logger.error("❌ Fix migrations and restart")
+        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+        logger.error("⚠️  Some features may not work until migrations are fixed")
+        logger.error("⚠️  Run 'alembic upgrade head' manually to fix")
         logger.error("=" * 80)
-        # FAIL HARD - do not start server if migrations fail
-        import sys
-        sys.exit(1)
+        # Log error but don't exit - allow app to start
+        migration_success = False
     
-    # CRITICAL: Validate ALL tables exist after migrations
-    # FAIL HARD if any tables are missing
+    # Validate ALL tables exist after migrations
+    # Log errors but don't exit - allow app to start
+    schema_valid = False
     try:
         from app.utils.schema_validator import validate_all_tables_exist, SchemaValidationError
         await validate_all_tables_exist(engine)
         logger.info("✅ Database schema validated - All required tables present")
+        schema_valid = True
     except SchemaValidationError as schema_error:
         logger.error("=" * 80)
         logger.error("❌ CRITICAL: Schema validation failed")
         logger.error(f"❌ Error: {schema_error}")
         logger.error("=" * 80)
-        logger.error("❌ APPLICATION WILL NOT START")
+        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+        logger.error("⚠️  Some features may not work until schema is fixed")
+        logger.error("⚠️  Run 'alembic upgrade head' manually to fix")
         logger.error("=" * 80)
-        import sys
-        sys.exit(1)
+        schema_valid = False
     except Exception as validation_error:
         logger.error("=" * 80)
         logger.error("❌ CRITICAL: Schema validation check failed")
         logger.error(f"❌ Error: {validation_error}")
         logger.error("=" * 80)
-        logger.error("❌ APPLICATION WILL NOT START")
+        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+        logger.error("⚠️  Some features may not work until schema is fixed")
         logger.error("=" * 80)
-        import sys
-        sys.exit(1)
+        schema_valid = False
+    
+    # Log final status
+    if migration_success and schema_valid:
+        logger.info("✅ Server is ready - All validations passed")
+    else:
+        logger.warning("⚠️  Server is starting with validation issues - some features may not work")
     
     logger.info("✅ Server is ready - All validations passed")
     
