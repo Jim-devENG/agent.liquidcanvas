@@ -286,7 +286,10 @@ async def startup():
                     except Exception as fix_err:
                         logger.error(f"❌ Failed to fix schema: {fix_err}", exc_info=True)
             except Exception as migration_error:
+                logger.error("=" * 80)
                 logger.error(f"❌ Migration failed: {migration_error}", exc_info=True)
+                logger.error("❌ alembic upgrade head failed - this should not happen in production")
+                logger.error("=" * 80)
                 # CRITICAL: Even if migrations fail, try to fix schema
                 logger.warning("⚠️  Migrations failed, attempting to fix schema directly...")
                 try:
@@ -602,8 +605,10 @@ async def startup():
             logger.error(f"Failed to check/add discovery_status column: {e}", exc_info=True)
     
     # Run database setup in background (non-blocking)
+    # CRITICAL: Migrations run automatically via alembic upgrade head on every startup
     asyncio.create_task(run_database_setup())
-    logger.info("✅ Database setup started in background (server will start even if DB is unavailable)")
+    logger.info("✅ Database setup started in background")
+    logger.info("📝 Alembic upgrade head runs automatically on every startup")
     
     # Start scheduler for periodic tasks (always start - scraper check runs every minute)
     try:
