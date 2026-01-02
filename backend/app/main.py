@@ -97,7 +97,7 @@ app.add_middleware(
 )
 
 # Include routers
-from app.api import auth, settings, scraper, pipeline, manual, health
+from app.api import auth, settings, scraper, pipeline, manual, health, social
 # To use Supabase Auth instead, replace the line below with:
 # from app.api import auth_supabase
 # app.include_router(auth_supabase.router, prefix="/api/auth", tags=["auth"])
