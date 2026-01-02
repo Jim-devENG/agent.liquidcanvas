@@ -158,14 +158,16 @@ async def discover_profiles(
 class SocialProfileResponse(BaseModel):
     id: UUID
     platform: str
-    handle: str
+    username: str
+    full_name: Optional[str]
     profile_url: str
-    display_name: Optional[str]
     bio: Optional[str]
     followers_count: int
     location: Optional[str]
-    is_business: bool
-    qualification_status: str
+    category: Optional[str]
+    engagement_score: float
+    discovery_status: str
+    outreach_status: str
     created_at: str
 
 
@@ -220,12 +222,12 @@ async def list_profiles(
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
         
-        if qualification_status:
+        if discovery_status:
             try:
-                status_enum = QualificationStatus(qualification_status.lower())
-                query = query.where(SocialProfile.qualification_status == status_enum)
+                status_enum = DiscoveryStatus(discovery_status.lower())
+                query = query.where(SocialProfile.discovery_status == status_enum)
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid qualification status: {qualification_status}")
+                raise HTTPException(status_code=400, detail=f"Invalid discovery status: {discovery_status}")
         
         # Get total count
         count_query = select(func.count(SocialProfile.id))
@@ -390,11 +392,11 @@ async def create_drafts(
             next_sequence = (max_sequence.scalar() or 0) + 1
             
             # TODO: Generate follow-up using Gemini (humorous, clever, non-repetitive)
-            draft_body = f"Follow-up message for {profile.handle} (sequence {next_sequence})"
+            draft_body = f"Follow-up message for {profile.username} (sequence {next_sequence})"
         else:
             # Initial message
             # TODO: Generate initial draft using Gemini
-            draft_body = f"Initial outreach message for {profile.handle}"
+            draft_body = f"Initial outreach message for {profile.username}"
             next_sequence = 0
         
         # Create draft
@@ -570,7 +572,7 @@ async def create_followups(
         
         # TODO: Generate follow-up using Gemini
         # Tone: humorous, clever, non-repetitive
-        draft_body = f"Follow-up message #{next_sequence} for {profile.handle}"
+        draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
         
         draft = SocialDraft(
             profile_id=profile.id,
