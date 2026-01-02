@@ -154,11 +154,12 @@ async def startup():
     logger.info("🚀 Server starting up...")
     logger.info(f"📡 Server will listen on port {os.getenv('PORT', '8000')}")
     
-    # All database operations run in background to avoid blocking server startup
+    # CRITICAL: Run migrations BEFORE server accepts requests
+    # This ensures schema is correct before any API calls
     import asyncio
     
     async def run_database_setup():
-        """Run all database setup operations in background"""
+        """Run all database setup operations - BLOCKING until complete"""
         # CRITICAL: Run migrations FIRST before any queries
         # This ensures schema is correct before SELECT queries run
         try:
