@@ -152,11 +152,35 @@ async def manual_scrape(
             prospect.scrape_payload = emails_by_page
             prospect.scrape_status = ScrapeStatus.SCRAPED.value
             prospect.stage = ProspectStage.EMAIL_FOUND.value
+            
+            # CRITICAL: Auto-categorize based on domain during manual scraping
+            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                try:
+                    from app.api.pipeline import auto_categorize_prospect
+                    category = await auto_categorize_prospect(prospect, db)
+                    if category:
+                        prospect.discovery_category = category
+                        logger.info(f"🏷️  [MANUAL SCRAPE] Auto-categorized {domain} as '{category}' during scraping")
+                except Exception as cat_err:
+                    logger.warning(f"⚠️  [MANUAL SCRAPE] Error during auto-categorization: {cat_err}")
+            
             logger.info(f"✅ [MANUAL SCRAPE] Found {len(all_emails)} emails for {domain}")
         else:
             # No emails found
             prospect.scrape_status = ScrapeStatus.NO_EMAIL_FOUND.value
             prospect.stage = ProspectStage.SCRAPED.value
+            
+            # CRITICAL: Auto-categorize based on domain even if no email found
+            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                try:
+                    from app.api.pipeline import auto_categorize_prospect
+                    category = await auto_categorize_prospect(prospect, db)
+                    if category:
+                        prospect.discovery_category = category
+                        logger.info(f"🏷️  [MANUAL SCRAPE] Auto-categorized {domain} as '{category}' (no email found)")
+                except Exception as cat_err:
+                    logger.warning(f"⚠️  [MANUAL SCRAPE] Error during auto-categorization: {cat_err}")
+            
             logger.info(f"⚠️  [MANUAL SCRAPE] No emails found for {domain}")
         
         await db.commit()

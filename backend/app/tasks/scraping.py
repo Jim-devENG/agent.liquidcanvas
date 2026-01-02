@@ -14,6 +14,7 @@ from app.db.database import AsyncSessionLocal
 from app.models.prospect import Prospect, ScrapeStatus, ProspectStage
 from app.models.job import Job
 from app.services.enrichment import _scrape_emails_from_domain
+from app.api.pipeline import auto_categorize_prospect
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,19 @@ async def scrape_prospects_async(job_id: str):
                         prospect.scrape_source_url = source_url
                         prospect.scrape_payload = emails_by_page
                         prospect.scrape_status = ScrapeStatus.SCRAPED.value
+                        
+                        # CRITICAL: Auto-categorize based on domain during scraping
+                        if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                            try:
+                                category = await auto_categorize_prospect(prospect, db)
+                                if category:
+                                    prospect.discovery_category = category
+                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' during scraping")
+                                else:
+                                    logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
+                            except Exception as cat_err:
+                                logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                        
                         # Set stage to EMAIL_FOUND (explicit promotion to LEAD happens separately)
                         try:
                             # Check if stage column exists in database
@@ -121,11 +135,24 @@ async def scrape_prospects_async(job_id: str):
                             logger.warning(f"⚠️  Could not check/set stage column: {stage_err}, will be backfilled by migration")
                         scraped_count += 1
                         logger.info(f"✅ [SCRAPING] Found {len(all_emails)} email(s) for {prospect.domain}: {all_emails[0]}")
-                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, stage=EMAIL_FOUND, contact_email={all_emails[0]}")
+                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=SCRAPED, stage=EMAIL_FOUND, contact_email={all_emails[0]}, category={prospect.discovery_category}")
                     else:
                         # No emails found - update prospect state (remain at SCRAPED stage, not promoted to LEAD)
                         prospect.scrape_status = ScrapeStatus.NO_EMAIL_FOUND.value
                         prospect.scrape_payload = {}
+                        
+                        # CRITICAL: Auto-categorize based on domain even if no email found
+                        if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                            try:
+                                category = await auto_categorize_prospect(prospect, db)
+                                if category:
+                                    prospect.discovery_category = category
+                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' (no email found)")
+                                else:
+                                    logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
+                            except Exception as cat_err:
+                                logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                        
                         # Set stage to SCRAPED (not LEAD, since no email found)
                         try:
                             # Check if stage column exists in database
@@ -149,7 +176,7 @@ async def scrape_prospects_async(job_id: str):
                             logger.warning(f"⚠️  Could not check/set stage column: {stage_err}, will be backfilled by migration")
                         no_email_count += 1
                         logger.warning(f"⚠️  [SCRAPING] No emails found for {prospect.domain}")
-                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=NO_EMAIL_FOUND, stage=SCRAPED")
+                        logger.info(f"📝 [SCRAPING] Updated prospect {prospect.id} - scrape_status=NO_EMAIL_FOUND, stage=SCRAPED, category={prospect.discovery_category}")
                     
                     # CRITICAL: Commit state update immediately
                     await db.commit()
