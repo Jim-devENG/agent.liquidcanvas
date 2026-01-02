@@ -91,73 +91,19 @@ async def discover_profiles(
         error_msg = str(e)
         logger.error(f"❌ [SOCIAL DISCOVERY] Error creating discovery job: {error_msg}", exc_info=True)
         
-        # Check if it's a table doesn't exist error
+        # Check if it's a table doesn't exist error - FAIL FAST
         if "does not exist" in error_msg.lower() or "relation" in error_msg.lower() or "f405" in error_msg.lower() or "UndefinedTableError" in error_msg:
-            logger.warning("⚠️  [SOCIAL DISCOVERY] Social tables do not exist. Attempting to create them...")
-            
-            # Try to create tables on-the-fly as a fallback
-            try:
-                from sqlalchemy import create_engine
-                from app.db.database import Base
-                import os
-                
-                # Import social models to register them with Base.metadata
-                # This must happen before create_all
-                # Note: Models are already imported at top, but we import again to ensure they're registered
-                from app.models.social import (
-                    SocialProfile,
-                    SocialDraft,
-                    SocialMessage
+            logger.error("=" * 80)
+            logger.error("❌ [SOCIAL DISCOVERY] CRITICAL: Social outreach tables do not exist")
+            logger.error("❌ [SOCIAL DISCOVERY] Database schema is incomplete - migrations have not been applied")
+            logger.error("=" * 80)
+            raise HTTPException(
+                status_code=503,  # Service Unavailable - schema not ready
+                detail=(
+                    "Social outreach tables do not exist. Database migrations have not been applied. "
+                    "Please run: alembic upgrade head"
                 )
-                # SocialDiscoveryJob is already imported at module level, just ensure it's registered
-                # by importing the module
-                import app.models.social as social_models
-                
-                # Get sync database URL
-                database_url = os.getenv("DATABASE_URL")
-                if database_url:
-                    # Convert to sync URL
-                    if database_url.startswith("postgresql+asyncpg://"):
-                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                    elif database_url.startswith("postgresql://"):
-                        sync_url = database_url
-                    else:
-                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                    
-                    # Create sync engine and create tables
-                    sync_engine = create_engine(sync_url)
-                    Base.metadata.create_all(sync_engine)
-                    sync_engine.dispose()
-                    logger.info("✅ [SOCIAL DISCOVERY] Social tables created successfully on-the-fly")
-                    
-                    # Retry the operation - use SocialDiscoveryJob from module-level import
-                    retry_job = SocialDiscoveryJob(
-                        platform=platform,
-                        filters=request.filters,
-                        status="pending",
-                        results_count=0
-                    )
-                    db.add(retry_job)
-                    await db.commit()
-                    await db.refresh(retry_job)
-                    
-                    return SocialDiscoveryResponse(
-                        success=True,
-                        job_id=retry_job.id,
-                        message=f"Discovery job created for {platform.value}",
-                        profiles_count=0
-                    )
-                else:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Social outreach tables do not exist and DATABASE_URL is not set. Please run database migrations: alembic upgrade head"
-                    )
-            except Exception as create_err:
-                logger.error(f"❌ [SOCIAL DISCOVERY] Failed to create tables on-the-fly: {create_err}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail="Social outreach tables do not exist. Please restart the backend to trigger automatic table creation, or run: alembic upgrade head"
-                )
+            )
         
         raise HTTPException(
             status_code=500,
@@ -269,52 +215,19 @@ async def list_profiles(
         error_msg = str(e)
         logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {error_msg}", exc_info=True)
         
-        # Check if it's a table doesn't exist error
+        # Check if it's a table doesn't exist error - FAIL FAST
         if "does not exist" in error_msg.lower() or "relation" in error_msg.lower() or "f405" in error_msg.lower() or "UndefinedTableError" in error_msg:
-            logger.warning("⚠️  [SOCIAL PROFILES] Social tables do not exist. Attempting to create them...")
-            
-            # Try to create tables on-the-fly as a fallback
-            try:
-                from sqlalchemy import create_engine
-                from app.models.social import SocialProfile, SocialDiscoveryJob, SocialDraft, SocialMessage
-                from app.db.database import Base
-                import os
-                
-                # Get sync database URL
-                database_url = os.getenv("DATABASE_URL")
-                if database_url:
-                    # Convert to sync URL
-                    if database_url.startswith("postgresql+asyncpg://"):
-                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                    elif database_url.startswith("postgresql://"):
-                        sync_url = database_url
-                    else:
-                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                    
-                    # Create sync engine and create tables
-                    sync_engine = create_engine(sync_url)
-                    Base.metadata.create_all(sync_engine)
-                    sync_engine.dispose()
-                    logger.info("✅ [SOCIAL PROFILES] Social tables created successfully on-the-fly")
-                    
-                    # Return empty result for now - user can retry
-                    return {
-                        "data": [],
-                        "total": 0,
-                        "skip": skip,
-                        "limit": limit
-                    }
-                else:
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Social outreach tables do not exist and DATABASE_URL is not set. Please run database migrations: alembic upgrade head"
-                    )
-            except Exception as create_err:
-                logger.error(f"❌ [SOCIAL PROFILES] Failed to create tables on-the-fly: {create_err}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail="Social outreach tables do not exist. Please restart the backend to trigger automatic table creation, or run: alembic upgrade head"
+            logger.error("=" * 80)
+            logger.error("❌ [SOCIAL PROFILES] CRITICAL: Social outreach tables do not exist")
+            logger.error("❌ [SOCIAL PROFILES] Database schema is incomplete - migrations have not been applied")
+            logger.error("=" * 80)
+            raise HTTPException(
+                status_code=503,  # Service Unavailable - schema not ready
+                detail=(
+                    "Social outreach tables do not exist. Database migrations have not been applied. "
+                    "Please run: alembic upgrade head"
                 )
+            )
         
         raise HTTPException(status_code=500, detail=f"Failed to list profiles: {error_msg}")
 

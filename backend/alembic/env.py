@@ -15,7 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # Import Base and models
 from app.db.database import Base
-from app.models import Prospect, Job, EmailLog, Settings, DiscoveryQuery  # Import all models
+# Import all models so Alembic can detect them for migrations
+from app.models import Prospect, Job, EmailLog, Settings, DiscoveryQuery, ScraperHistory
+# Import social outreach models (separate system)
+from app.models.social import SocialProfile, SocialDiscoveryJob, SocialDraft, SocialMessage
 
 # this is the Alembic Config object
 config = context.config

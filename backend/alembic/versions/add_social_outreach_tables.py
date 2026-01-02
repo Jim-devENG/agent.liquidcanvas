@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'add_social_tables'
-down_revision = '999_final_schema_repair'  # Update to latest revision
+down_revision = 'final_schema_repair'  # Chain after final_schema_repair migration
 branch_labels = None
 depends_on = None
 

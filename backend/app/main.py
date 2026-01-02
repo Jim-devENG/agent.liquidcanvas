@@ -248,53 +248,17 @@ async def startup():
                         missing_tables = required_tables - existing_tables
                         
                         if missing_tables:
-                            logger.warning(f"⚠️  Social tables missing: {missing_tables}")
-                            logger.info("📝 Attempting to create missing social tables using Base.metadata...")
-                            
-                            # Try to create social tables directly using SQLAlchemy metadata
-                            try:
-                                # CRITICAL: Import social models to register them with Base.metadata
-                                # This must happen BEFORE calling create_all
-                                from app.models.social import (
-                                    SocialProfile,
-                                    SocialDiscoveryJob,
-                                    SocialDraft,
-                                    SocialMessage
-                                )
-                                logger.info("✅ Social models imported successfully")
-                                
-                                # Now create tables - Base.metadata will include social models
-                                # We need to use a sync connection for create_all
-                                from sqlalchemy import create_engine, text
-                                import os
-                                
-                                # Get sync database URL
-                                database_url = os.getenv("DATABASE_URL")
-                                if database_url:
-                                    # Convert to sync URL
-                                    if database_url.startswith("postgresql+asyncpg://"):
-                                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                                    elif database_url.startswith("postgresql://"):
-                                        sync_url = database_url
-                                    else:
-                                        sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-                                    
-                                    # Create sync engine for table creation
-                                    sync_engine = create_engine(sync_url)
-                                    Base.metadata.create_all(sync_engine)
-                                    sync_engine.dispose()
-                                    logger.info("✅ Social tables created successfully")
-                                else:
-                                    logger.error("❌ DATABASE_URL not set, cannot create tables")
-                            except Exception as create_err:
-                                logger.error(f"❌ Failed to create social tables: {create_err}", exc_info=True)
-                                logger.warning("⚠️  Social tables will need to be created manually via: alembic upgrade head")
-                                # Don't raise - allow app to continue
-                            except Exception as create_err:
-                                logger.error(f"❌ Failed to create social tables: {create_err}", exc_info=True)
-                                logger.warning("⚠️  Social tables will need to be created manually via: alembic upgrade head")
-                                # Don't raise - allow app to continue
-                                logger.warning("⚠️  Or restart the backend to trigger automatic migration")
+                            logger.error("=" * 80)
+                            logger.error(f"❌ CRITICAL: Social tables missing: {missing_tables}")
+                            logger.error("❌ Database migrations have not been applied correctly")
+                            logger.error("=" * 80)
+                            logger.error("⚠️  Social outreach tables are missing after migrations")
+                            logger.error("⚠️  This indicates the migration 'add_social_tables' may not have run")
+                            logger.error("⚠️  Please verify migrations ran successfully and check migration chain")
+                            logger.error("=" * 80)
+                            # DO NOT create tables at runtime - fail fast
+                            # This ensures production safety and explicit schema management
+                            # The application will continue to start, but social endpoints will return 503
                         else:
                             logger.info("✅ All social tables exist")
                         
