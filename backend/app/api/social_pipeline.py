@@ -206,8 +206,35 @@ async def get_social_pipeline_status(
         }
         
     except Exception as e:
-        logger.error(f"❌ [SOCIAL PIPELINE] Error computing status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to compute pipeline status: {str(e)}")
+        # CRITICAL: Never return 500 - always return safe response
+        # Check if error is related to missing column
+        error_str = str(e).lower()
+        if 'source_type' in error_str or 'column' in error_str or 'does not exist' in error_str or 'undefinedcolumn' in error_str:
+            logger.warning(f"⚠️  [SOCIAL PIPELINE] Database schema error (likely missing columns): {e}")
+            logger.warning("⚠️  [SOCIAL PIPELINE] Returning safe empty status instead of 500")
+            return {
+                "discovered": 0,
+                "reviewed": 0,
+                "qualified": 0,
+                "drafted": 0,
+                "sent": 0,
+                "followup_ready": 0,
+                "status": "inactive",
+                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
+            }
+        else:
+            # For other errors, still return safe response but log the error
+            logger.error(f"❌ [SOCIAL PIPELINE] Unexpected error computing status: {e}", exc_info=True)
+            return {
+                "discovered": 0,
+                "reviewed": 0,
+                "qualified": 0,
+                "drafted": 0,
+                "sent": 0,
+                "followup_ready": 0,
+                "status": "inactive",
+                "message": f"Error computing pipeline status: {str(e)}"
+            }
 
 
 # ============================================
