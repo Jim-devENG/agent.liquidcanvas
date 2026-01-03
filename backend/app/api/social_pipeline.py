@@ -400,20 +400,42 @@ async def create_drafts(
                     logger.warning(f"⚠️  No previous message for profile {profile.id}, skipping follow-up")
                     continue
                 
-                # Get next sequence index
-                max_sequence = await db.execute(
-                    select(func.max(SocialDraft.sequence_index)).where(
-                        SocialDraft.profile_id == profile.id
-                    )
+            # Get next sequence index
+            max_sequence = await db.execute(
+                select(func.max(SocialDraft.sequence_index)).where(
+                    SocialDraft.profile_id == profile.id
                 )
-                next_sequence = (max_sequence.scalar() or 0) + 1
-                
-                # TODO: Generate follow-up using Gemini (humorous, clever, non-repetitive)
+            )
+            next_sequence = (max_sequence.scalar() or 0) + 1
+            
+            # Generate follow-up using AI drafting service
+            from app.services.social.drafting import SocialDraftingService
+            drafting_service = SocialDraftingService()
+            
+            draft_result = await drafting_service.compose_followup_message(profile, db)
+            
+            if draft_result.get("success"):
+                draft_body = draft_result.get("body", "")
+            else:
+                error = draft_result.get("error", "Unknown error")
+                logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
+                # Fallback to simple message
                 draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
             else:
                 # Initial message
-                # TODO: Generate initial draft using Gemini (platform-specific)
-                draft_body = f"Initial outreach message for {profile.username}"
+                # Generate initial draft using AI drafting service
+                from app.services.social.drafting import SocialDraftingService
+                drafting_service = SocialDraftingService()
+                
+                draft_result = await drafting_service.compose_initial_message(profile, db)
+                
+                if draft_result.get("success"):
+                    draft_body = draft_result.get("body", "")
+                else:
+                    error = draft_result.get("error", "Unknown error")
+                    logger.warning(f"⚠️  Failed to generate initial draft for {profile.username}: {error}")
+                    # Fallback to simple message
+                    draft_body = f"Initial outreach message for {profile.username}"
                 next_sequence = 0
             
             # Create draft
@@ -622,10 +644,19 @@ async def create_followups(
             )
             next_sequence = (max_sequence.scalar() or 0) + 1
             
-            # TODO: Generate follow-up using Gemini
-            # Tone: humorous, clever, non-repetitive
-            # Reference previous message content
-            draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
+            # Generate follow-up using AI drafting service
+            from app.services.social.drafting import SocialDraftingService
+            drafting_service = SocialDraftingService()
+            
+            draft_result = await drafting_service.compose_followup_message(profile, db)
+            
+            if draft_result.get("success"):
+                draft_body = draft_result.get("body", "")
+            else:
+                error = draft_result.get("error", "Unknown error")
+                logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
+                # Fallback to simple message
+                draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
             
             draft = SocialDraft(
                 profile_id=profile.id,
