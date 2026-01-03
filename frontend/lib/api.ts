@@ -1479,14 +1479,16 @@ export interface SocialDiscoveryResponse {
 export interface SocialProfile {
   id: string
   platform: string
-  handle: string
+  username: string
+  full_name?: string
   profile_url: string
-  display_name?: string
   bio?: string
   followers_count: number
   location?: string
-  is_business: boolean
-  qualification_status: string
+  category?: string
+  engagement_score: number
+  discovery_status: string
+  outreach_status: string
   created_at: string
 }
 

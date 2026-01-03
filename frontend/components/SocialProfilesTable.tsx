@@ -1,20 +1,28 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { RefreshCw, ExternalLink, CheckCircle, XCircle } from 'lucide-react'
-import { listSocialProfiles, createSocialDrafts, sendSocialMessages } from '@/lib/api'
+import { RefreshCw, ExternalLink, CheckCircle, XCircle, FileText, Send, Eye } from 'lucide-react'
+import { 
+  listSocialProfiles, 
+  draftSocialProfiles, 
+  sendSocialProfiles,
+  reviewSocialProfiles,
+  createSocialFollowupsPipeline
+} from '@/lib/api'
 
 interface SocialProfile {
   id: string
   platform: string
-  handle: string
+  username: string
+  full_name?: string
   profile_url: string
-  display_name?: string
   bio?: string
   followers_count: number
   location?: string
-  is_business: boolean
-  qualification_status: string
+  category?: string
+  engagement_score: number
+  discovery_status: string
+  outreach_status: string
   created_at: string
 }
 
@@ -88,6 +96,29 @@ export default function SocialProfilesTable() {
     setSelected(newSelected)
   }
 
+  const handleReview = async (action: 'qualify' | 'reject') => {
+    if (selected.size === 0) {
+      setError('Please select at least one profile')
+      return
+    }
+
+    setActionLoading(true)
+    setError(null)
+    try {
+      await reviewSocialProfiles(Array.from(selected), action)
+      setSelected(new Set())
+      await loadProfiles()
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+      }
+    } catch (err: any) {
+      setError(err.message || `Failed to ${action} profiles`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleCreateDrafts = async () => {
     if (selected.size === 0) {
       setError('Please select at least one profile')
@@ -97,9 +128,13 @@ export default function SocialProfilesTable() {
     setActionLoading(true)
     setError(null)
     try {
-      await createSocialDrafts({ profile_ids: Array.from(selected) })
+      await draftSocialProfiles(Array.from(selected), false)
       setSelected(new Set())
       await loadProfiles()
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create drafts')
     } finally {
@@ -113,14 +148,45 @@ export default function SocialProfilesTable() {
       return
     }
 
+    if (!confirm(`Send messages to ${selected.size} profile(s)?`)) {
+      return
+    }
+
     setActionLoading(true)
     setError(null)
     try {
-      await sendSocialMessages({ profile_ids: Array.from(selected) })
+      await sendSocialProfiles(Array.from(selected))
       setSelected(new Set())
       await loadProfiles()
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to send messages')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleCreateFollowups = async () => {
+    if (selected.size === 0) {
+      setError('Please select at least one profile')
+      return
+    }
+
+    setActionLoading(true)
+    setError(null)
+    try {
+      await createSocialFollowupsPipeline(Array.from(selected))
+      setSelected(new Set())
+      await loadProfiles()
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create follow-ups')
     } finally {
       setActionLoading(false)
     }
@@ -139,22 +205,48 @@ export default function SocialProfilesTable() {
     <div className="bg-white rounded-lg shadow p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Social Profiles</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {selected.size > 0 && (
             <>
               <button
+                onClick={() => handleReview('qualify')}
+                disabled={actionLoading}
+                className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <CheckCircle className="w-3 h-3" />
+                Qualify ({selected.size})
+              </button>
+              <button
+                onClick={() => handleReview('reject')}
+                disabled={actionLoading}
+                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <XCircle className="w-3 h-3" />
+                Reject ({selected.size})
+              </button>
+              <button
                 onClick={handleCreateDrafts}
                 disabled={actionLoading}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
               >
-                Create Drafts ({selected.size})
+                <FileText className="w-3 h-3" />
+                Draft ({selected.size})
               </button>
               <button
                 onClick={handleSend}
                 disabled={actionLoading}
-                className="px-3 py-1.5 text-xs bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-xs bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-1"
               >
+                <Send className="w-3 h-3" />
                 Send ({selected.size})
+              </button>
+              <button
+                onClick={handleCreateFollowups}
+                disabled={actionLoading}
+                className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Follow-up ({selected.size})
               </button>
             </>
           )}
@@ -197,10 +289,12 @@ export default function SocialProfilesTable() {
                   />
                 </th>
                 <th className="text-left py-2 px-3">Platform</th>
-                <th className="text-left py-2 px-3">Handle</th>
+                <th className="text-left py-2 px-3">Username</th>
                 <th className="text-left py-2 px-3">Name</th>
+                <th className="text-left py-2 px-3">Category</th>
                 <th className="text-left py-2 px-3">Followers</th>
-                <th className="text-left py-2 px-3">Status</th>
+                <th className="text-left py-2 px-3">Discovery Status</th>
+                <th className="text-left py-2 px-3">Outreach Status</th>
                 <th className="text-left py-2 px-3">Actions</th>
               </tr>
             </thead>
@@ -215,20 +309,41 @@ export default function SocialProfilesTable() {
                     />
                   </td>
                   <td className="py-2 px-3 capitalize">{profile.platform}</td>
-                  <td className="py-2 px-3 font-medium">@{profile.handle}</td>
-                  <td className="py-2 px-3">{profile.display_name || '-'}</td>
+                  <td className="py-2 px-3 font-medium">@{profile.username}</td>
+                  <td className="py-2 px-3">{profile.full_name || '-'}</td>
+                  <td className="py-2 px-3">{profile.category || '-'}</td>
                   <td className="py-2 px-3">{profile.followers_count.toLocaleString()}</td>
                   <td className="py-2 px-3">
-                    {profile.qualification_status === 'qualified' ? (
+                    {profile.discovery_status === 'qualified' ? (
                       <span className="inline-flex items-center gap-1 text-green-600">
                         <CheckCircle className="w-3 h-3" />
                         Qualified
                       </span>
+                    ) : profile.discovery_status === 'rejected' ? (
+                      <span className="inline-flex items-center gap-1 text-red-600">
+                        <XCircle className="w-3 h-3" />
+                        Rejected
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-gray-600">
-                        <XCircle className="w-3 h-3" />
-                        Pending
+                        <Eye className="w-3 h-3" />
+                        {profile.discovery_status || 'Discovered'}
                       </span>
+                    )}
+                  </td>
+                  <td className="py-2 px-3">
+                    {profile.outreach_status === 'sent' ? (
+                      <span className="inline-flex items-center gap-1 text-green-600">
+                        <Send className="w-3 h-3" />
+                        Sent
+                      </span>
+                    ) : profile.outreach_status === 'drafted' ? (
+                      <span className="inline-flex items-center gap-1 text-blue-600">
+                        <FileText className="w-3 h-3" />
+                        Drafted
+                      </span>
+                    ) : (
+                      <span className="text-gray-600 text-xs">{profile.outreach_status || 'Pending'}</span>
                     )}
                   </td>
                   <td className="py-2 px-3">

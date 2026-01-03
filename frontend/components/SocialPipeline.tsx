@@ -74,12 +74,24 @@ export default function SocialPipeline() {
       loadStatusDebounced()
     }, 10000)
     
+    // Listen for manual refresh requests
+    const handleRefresh = () => {
+      loadStatusDebounced()
+    }
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('refreshSocialPipelineStatus', handleRefresh)
+    }
+    
     return () => {
       abortController.abort()
       if (debounceTimeout) {
         clearTimeout(debounceTimeout)
       }
       clearInterval(interval)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('refreshSocialPipelineStatus', handleRefresh)
+      }
     }
   }, [])
 
