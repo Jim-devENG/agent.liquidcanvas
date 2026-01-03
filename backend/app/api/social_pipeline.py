@@ -63,6 +63,36 @@ async def get_social_pipeline_status(
         }
     """
     try:
+        # CRITICAL: Check if source_type column exists
+        # If migration hasn't run, return empty status instead of crashing
+        from sqlalchemy import text, inspect
+        from sqlalchemy.engine import Inspector
+        
+        # Check if column exists using raw SQL
+        column_check = await db.execute(
+            text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'source_type'
+            """)
+        )
+        column_exists = column_check.fetchone() is not None
+        
+        if not column_exists:
+            logger.warning("⚠️  [SOCIAL PIPELINE] source_type column does not exist - migration not applied")
+            logger.warning("⚠️  [SOCIAL PIPELINE] Returning empty status - migration add_social_columns_to_prospects needs to run")
+            return {
+                "discovered": 0,
+                "reviewed": 0,
+                "qualified": 0,
+                "drafted": 0,
+                "sent": 0,
+                "followup_ready": 0,
+                "status": "inactive",
+                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
+            }
+        
         # Base filter: only social prospects
         social_filter = Prospect.source_type == 'social'
         
