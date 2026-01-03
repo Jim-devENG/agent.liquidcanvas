@@ -1562,3 +1562,93 @@ export async function createSocialFollowups(request: { profile_ids: string[] }):
   }
   return await res.json()
 }
+
+// SOCIAL PIPELINE API (New pipeline endpoints)
+export interface SocialPipelineStatus {
+  discovered: number
+  reviewed: number
+  qualified: number
+  drafted: number
+  sent: number
+  followup_ready: number
+  status?: 'active' | 'inactive'
+  reason?: string
+}
+
+export async function getSocialPipelineStatus(): Promise<SocialPipelineStatus> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/status`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get social pipeline status' }))
+    throw new Error(error.detail || 'Failed to get social pipeline status')
+  }
+  return res.json()
+}
+
+export interface SocialDiscoveryPipelineRequest {
+  platform: 'linkedin' | 'instagram' | 'tiktok' | 'facebook'
+  categories: string[]
+  locations: string[]
+  keywords?: string[]
+  parameters?: Record<string, any>
+  max_results?: number
+}
+
+export async function discoverSocialProfilesPipeline(request: SocialDiscoveryPipelineRequest): Promise<{ success: boolean; job_id: string; message: string; profiles_count: number }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/discover`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to discover social profiles' }))
+    throw new Error(error.detail || 'Failed to discover social profiles')
+  }
+  return res.json()
+}
+
+export async function reviewSocialProfiles(profile_ids: string[], action: 'qualify' | 'reject'): Promise<{ success: boolean; updated: number; action: string; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/review`, {
+    method: 'POST',
+    body: JSON.stringify({ profile_ids, action }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to review profiles' }))
+    throw new Error(error.detail || 'Failed to review profiles')
+  }
+  return res.json()
+}
+
+export async function draftSocialProfiles(profile_ids: string[], is_followup: boolean = false): Promise<{ success: boolean; drafts_created: number; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/draft`, {
+    method: 'POST',
+    body: JSON.stringify({ profile_ids, is_followup }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create drafts' }))
+    throw new Error(error.detail || 'Failed to create drafts')
+  }
+  return res.json()
+}
+
+export async function sendSocialProfiles(profile_ids: string[]): Promise<{ success: boolean; messages_sent: number; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/send`, {
+    method: 'POST',
+    body: JSON.stringify({ profile_ids }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to send messages' }))
+    throw new Error(error.detail || 'Failed to send messages')
+  }
+  return res.json()
+}
+
+export async function createSocialFollowupsPipeline(profile_ids: string[]): Promise<{ success: boolean; drafts_created: number; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/followup`, {
+    method: 'POST',
+    body: JSON.stringify({ profile_ids }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create followups' }))
+    throw new Error(error.detail || 'Failed to create followups')
+  }
+  return res.json()
+}
