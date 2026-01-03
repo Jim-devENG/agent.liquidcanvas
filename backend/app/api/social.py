@@ -179,6 +179,35 @@ async def list_profiles(
     try:
         logger.info(f"📊 [SOCIAL PROFILES] Request: skip={skip}, limit={limit}, platform={platform}, discovery_status={discovery_status}")
         
+        # CRITICAL: Check if source_type column exists before using it
+        column_exists = False
+        try:
+            from sqlalchemy import text
+            column_check = await db.execute(
+                text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'prospects' 
+                    AND column_name = 'source_type'
+                """)
+            )
+            column_exists = column_check.fetchone() is not None
+        except Exception as check_err:
+            logger.warning(f"⚠️  [SOCIAL PROFILES] Could not check for source_type column: {check_err}")
+            column_exists = False
+        
+        if not column_exists:
+            logger.warning("⚠️  [SOCIAL PROFILES] source_type column does not exist - migration not applied")
+            logger.warning("⚠️  [SOCIAL PROFILES] Returning empty list - migration add_social_columns_to_prospects needs to run")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "status": "inactive",
+                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
+            }
+        
         # Base filter: only social prospects
         query = select(Prospect).where(Prospect.source_type == 'social')
         count_query = select(func.count(Prospect.id)).where(Prospect.source_type == 'social')
@@ -239,8 +268,30 @@ async def list_profiles(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {str(e)}")
+        # Check if error is related to missing column
+        error_str = str(e).lower()
+        if 'source_type' in error_str or 'column' in error_str or 'does not exist' in error_str or 'undefinedcolumn' in error_str:
+            logger.warning(f"⚠️  [SOCIAL PROFILES] Database schema error (likely missing columns): {e}")
+            logger.warning("⚠️  [SOCIAL PROFILES] Returning empty list instead of 500")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "status": "inactive",
+                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
+            }
+        else:
+            # For other errors, still return safe response but log the error
+            logger.error(f"❌ [SOCIAL PROFILES] Unexpected error listing profiles: {e}", exc_info=True)
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit,
+                "status": "inactive",
+                "message": f"Failed to list profiles: {str(e)}. Please check backend logs."
+            }
 
 
 # ============================================
