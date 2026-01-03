@@ -54,6 +54,10 @@ class TikTokClient:
         }
         
         try:
+            # Rate limiting: Wait if needed to prevent API ban
+            limiter = get_rate_limiter()
+            await limiter.wait_if_needed("tiktok")
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, json=data)
                 

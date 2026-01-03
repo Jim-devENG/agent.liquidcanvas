@@ -102,6 +102,10 @@ class InstagramClient:
         }
         
         try:
+            # Rate limiting: Wait if needed to prevent API ban
+            limiter = get_rate_limiter()
+            await limiter.wait_if_needed("instagram")
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(url, params=params)
                 
@@ -132,6 +136,9 @@ class InstagramClient:
                     "limit": limit,
                     "access_token": self.access_token
                 }
+                
+                # Rate limiting for media request
+                await limiter.wait_if_needed("instagram")
                 
                 media_response = await client.get(media_url, params=media_params)
                 
