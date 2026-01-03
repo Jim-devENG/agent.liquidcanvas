@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = 'ensure_critical_columns'
-down_revision = 'add_social_tables'  # Update to latest
+down_revision = 'update_social_complete'  # Chain after latest social migration to merge branches
 branch_labels = None
 depends_on = None
 
