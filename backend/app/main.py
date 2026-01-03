@@ -596,40 +596,40 @@ async def startup():
     schema_valid = False
     try:
         from app.utils.schema_validator import validate_all_tables_exist, SchemaValidationError
-            await validate_all_tables_exist(engine)
-            logger.info("✅ Database schema validated - All required tables present")
-            schema_valid = True
-        except SchemaValidationError as schema_error:
-            # If social tables are missing, try to create them automatically
-            logger.warning("⚠️  Schema validation failed - checking social tables...")
-            try:
-                from app.utils.social_schema_init import ensure_social_tables_exist
-                social_success, social_missing = await ensure_social_tables_exist(engine)
-                if social_success:
-                    logger.info("✅ Social outreach tables created automatically")
-                    # Re-validate after creating social tables
-                    try:
-                        await validate_all_tables_exist(engine)
-                        logger.info("✅ Database schema validated after social table creation")
-                        schema_valid = True
-                    except SchemaValidationError:
-                        logger.warning("⚠️  Schema still invalid after social table creation")
-                        schema_valid = False
-                else:
-                    logger.warning(f"⚠️  Could not create social tables: {', '.join(social_missing)}")
+        await validate_all_tables_exist(engine)
+        logger.info("✅ Database schema validated - All required tables present")
+        schema_valid = True
+    except SchemaValidationError as schema_error:
+        # If social tables are missing, try to create them automatically
+        logger.warning("⚠️  Schema validation failed - checking social tables...")
+        try:
+            from app.utils.social_schema_init import ensure_social_tables_exist
+            social_success, social_missing = await ensure_social_tables_exist(engine)
+            if social_success:
+                logger.info("✅ Social outreach tables created automatically")
+                # Re-validate after creating social tables
+                try:
+                    await validate_all_tables_exist(engine)
+                    logger.info("✅ Database schema validated after social table creation")
+                    schema_valid = True
+                except SchemaValidationError:
+                    logger.warning("⚠️  Schema still invalid after social table creation")
                     schema_valid = False
-            except Exception as init_error:
-                logger.error(f"❌ Failed to initialize social tables: {init_error}", exc_info=True)
+            else:
+                logger.warning(f"⚠️  Could not create social tables: {', '.join(social_missing)}")
                 schema_valid = False
-        except Exception as validation_error:
-            logger.error("=" * 80)
-            logger.error("❌ CRITICAL: Schema validation check failed")
-            logger.error(f"❌ Error: {validation_error}")
-            logger.error("=" * 80)
-            logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
-            logger.error("⚠️  Some features may not work until schema is fixed")
-            logger.error("=" * 80)
+        except Exception as init_error:
+            logger.error(f"❌ Failed to initialize social tables: {init_error}", exc_info=True)
             schema_valid = False
+    except Exception as validation_error:
+        logger.error("=" * 80)
+        logger.error("❌ CRITICAL: Schema validation check failed")
+        logger.error(f"❌ Error: {validation_error}")
+        logger.error("=" * 80)
+        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+        logger.error("⚠️  Some features may not work until schema is fixed")
+        logger.error("=" * 80)
+        schema_valid = False
         logger.error("=" * 80)
         logger.error("❌ CRITICAL: Schema validation check failed")
         logger.error(f"❌ Error: {validation_error}")
