@@ -382,6 +382,10 @@ async def create_drafts(
         
         drafts_created = 0
         
+        # Import drafting service once
+        from app.services.social.drafting import SocialDraftingService
+        drafting_service = SocialDraftingService()
+        
         for profile in profiles:
             # Check if this is a follow-up
             if request.is_followup:
@@ -400,33 +404,27 @@ async def create_drafts(
                     logger.warning(f"⚠️  No previous message for profile {profile.id}, skipping follow-up")
                     continue
                 
-            # Get next sequence index
-            max_sequence = await db.execute(
-                select(func.max(SocialDraft.sequence_index)).where(
-                    SocialDraft.profile_id == profile.id
+                # Get next sequence index
+                max_sequence = await db.execute(
+                    select(func.max(SocialDraft.sequence_index)).where(
+                        SocialDraft.profile_id == profile.id
+                    )
                 )
-            )
-            next_sequence = (max_sequence.scalar() or 0) + 1
-            
-            # Generate follow-up using AI drafting service
-            from app.services.social.drafting import SocialDraftingService
-            drafting_service = SocialDraftingService()
-            
-            draft_result = await drafting_service.compose_followup_message(profile, db)
-            
-            if draft_result.get("success"):
-                draft_body = draft_result.get("body", "")
-            else:
-                error = draft_result.get("error", "Unknown error")
-                logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
-                # Fallback to simple message
-                draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
+                next_sequence = (max_sequence.scalar() or 0) + 1
+                
+                # Generate follow-up using AI drafting service
+                draft_result = await drafting_service.compose_followup_message(profile, db)
+                
+                if draft_result.get("success"):
+                    draft_body = draft_result.get("body", "")
+                else:
+                    error = draft_result.get("error", "Unknown error")
+                    logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
+                    # Fallback to simple message
+                    draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
             else:
                 # Initial message
                 # Generate initial draft using AI drafting service
-                from app.services.social.drafting import SocialDraftingService
-                drafting_service = SocialDraftingService()
-                
                 draft_result = await drafting_service.compose_initial_message(profile, db)
                 
                 if draft_result.get("success"):
