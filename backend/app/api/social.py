@@ -1,34 +1,25 @@
 """
 Social Media Outreach API
 
-Separate from Website Outreach - parallel system with no shared logic.
-
-FEATURE-SCOPED SCHEMA VALIDATION:
-- Social endpoints check only social tables
-- Missing tables return 200 with structured metadata (not 500)
-- Website endpoints are unaffected
+REUSES Website Outreach tables - filters by source_type='social'.
+All queries filter: Prospect.source_type == 'social'
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, and_, or_
 from typing import List, Optional
 from uuid import UUID
 import logging
 from pydantic import BaseModel
 
-from app.db.database import get_db, engine
+from app.db.database import get_db
 from app.api.auth import get_current_user_optional
-from app.utils.schema_validator import check_social_schema_ready
-from app.models.social import (
-    SocialProfile,
-    SocialDiscoveryJob,
-    SocialDraft,
-    SocialMessage,
-    SocialPlatform,
-    DiscoveryStatus,
-    OutreachStatus,
-    MessageType,
-    MessageStatus,
+from app.models.prospect import Prospect, DiscoveryStatus
+from app.adapters.social_discovery import (
+    LinkedInDiscoveryAdapter,
+    InstagramDiscoveryAdapter,
+    TikTokDiscoveryAdapter,
+    FacebookDiscoveryAdapter
 )
 
 logger = logging.getLogger(__name__)
@@ -62,93 +53,84 @@ async def discover_profiles(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    Discover social media profiles
+    Discover social media profiles using adapter pattern.
     
-    Platform-specific discovery logic will be implemented per platform.
-    
-    Returns 200 with status="inactive" if social tables are missing (not 500).
+    REUSES prospects table - saves with source_type='social'.
     """
-    # Feature-scoped schema check - only checks social tables
-    schema_status = await check_social_schema_ready(engine)
-    
-    if not schema_status["ready"]:
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Social schema not ready: {schema_status['reason']}")
-        logger.warning(f"⚠️  Missing tables: {', '.join(schema_status['missing_tables'])}")
-        # Return 200 with structured metadata - not a 500 error
-        return SocialDiscoveryResponse(
-            success=False,
-            job_id=None,
-            message=f"Social outreach feature is not available: {schema_status['reason']}",
-            profiles_count=0,
-            status="inactive",
-            reason=schema_status["reason"]
+    # Validate platform
+    platform = request.platform.lower()
+    valid_platforms = ['linkedin', 'instagram', 'facebook', 'tiktok']
+    if platform not in valid_platforms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid platform. Must be one of: {valid_platforms}"
         )
     
-    try:
-        platform = SocialPlatform(request.platform.lower())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid platform. Must be one of: {[p.value for p in SocialPlatform]}")
-    
-    logger.info(f"🔍 [SOCIAL DISCOVERY] Starting discovery for {platform.value}")
+    logger.info(f"🔍 [SOCIAL DISCOVERY] Starting discovery for {platform}")
     
     try:
-        # Create discovery job
-        job = SocialDiscoveryJob(
-            platform=platform,
-            filters=request.filters,
-            status="pending",
-            results_count=0
-        )
+        # Select adapter based on platform
+        adapter_map = {
+            'linkedin': LinkedInDiscoveryAdapter(),
+            'instagram': InstagramDiscoveryAdapter(),
+            'facebook': FacebookDiscoveryAdapter(),
+            'tiktok': TikTokDiscoveryAdapter(),
+        }
         
+        adapter = adapter_map[platform]
+        
+        # Prepare adapter parameters
+        adapter_params = {
+            **request.filters,  # Platform-specific filters
+            'max_results': request.max_results or 100
+        }
+        
+        # Run discovery using adapter
+        prospects = await adapter.discover(adapter_params, db)
+        
+        # Save prospects to database
+        for prospect in prospects:
+            prospect.source_type = 'social'
+            prospect.source_platform = platform
+            prospect.discovery_status = DiscoveryStatus.DISCOVERED.value
+            prospect.approval_status = 'PENDING'
+            prospect.scrape_status = 'DISCOVERED'
+            db.add(prospect)
+        
+        await db.commit()
+        
+        logger.info(f"✅ [SOCIAL DISCOVERY] Discovered {len(prospects)} profiles for {platform}")
+        
+        # Create a job record (using existing Job model)
+        from app.models import Job
+        job = Job(
+            job_type="social_discover",
+            params={
+                "platform": platform,
+                "filters": request.filters,
+                "prospects_count": len(prospects)
+            },
+            status="completed",
+            result={"prospects_count": len(prospects)}
+        )
         db.add(job)
         await db.commit()
         await db.refresh(job)
         
-        logger.info(f"✅ [SOCIAL DISCOVERY] Job created: {job.id}")
-        
-        # TODO: Start background task for discovery
-        # For now, return job created
-        
         return SocialDiscoveryResponse(
             success=True,
             job_id=job.id,
-            message=f"Discovery job created for {platform.value}",
-            profiles_count=0,
+            message=f"Discovered {len(prospects)} profiles for {platform}",
+            profiles_count=len(prospects),
             status="active"
         )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        error_msg = str(e)
-        error_type = type(e).__name__
-        logger.error(f"❌ [SOCIAL DISCOVERY] Error creating discovery job: {error_msg}", exc_info=True)
-        
-        # Check if this is a database schema error (table/column missing)
-        is_schema_error = (
-            "does not exist" in error_msg.lower() or
-            "relation" in error_msg.lower() or
-            "f405" in error_msg.lower() or
-            "UndefinedTableError" in error_type or
-            "ProgrammingError" in error_type or
-            "table" in error_msg.lower() and "not exist" in error_msg.lower()
-        )
-        
-        if is_schema_error:
-            # Schema error - return 200 with inactive status (not 500)
-            logger.warning(f"⚠️  [SOCIAL DISCOVERY] Database schema error detected: {error_msg}")
-            logger.warning("⚠️  Returning inactive status instead of 500 error")
-            return SocialDiscoveryResponse(
-                success=False,
-                job_id=None,
-                message=f"Social outreach feature is not available: database schema error",
-                profiles_count=0,
-                status="inactive",
-                reason="database schema error"
-            )
-        
-        # Other errors - return 500 (but never for schema issues)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create discovery job: {error_msg}"
-        )
+        logger.error(f"❌ [SOCIAL DISCOVERY] Error: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to discover profiles: {str(e)}")
 
 
 # ============================================
@@ -190,90 +172,61 @@ async def list_profiles(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    List discovered social profiles
+    List discovered social profiles.
     
-    Returns 200 with empty data and status="inactive" if social tables are missing (not 500).
+    REUSES prospects table - filters by source_type='social'.
     """
-    # Feature-scoped schema check - only checks social tables
-    schema_status = await check_social_schema_ready(engine)
-    
-    if not schema_status["ready"]:
-        logger.warning(f"⚠️  [SOCIAL PROFILES] Social schema not ready: {schema_status['reason']}")
-        logger.warning(f"⚠️  Missing tables: {', '.join(schema_status['missing_tables'])}")
-        # Return 200 with empty data and structured metadata - not a 500 error
-        return SocialProfilesListResponse(
-            data=[],
-            total=0,
-            skip=skip,
-            limit=limit,
-            status="inactive",
-            reason=schema_status["reason"]
-        )
-    
     try:
         logger.info(f"📊 [SOCIAL PROFILES] Request: skip={skip}, limit={limit}, platform={platform}, discovery_status={discovery_status}")
         
-        query = select(SocialProfile)
+        # Base filter: only social prospects
+        query = select(Prospect).where(Prospect.source_type == 'social')
+        count_query = select(func.count(Prospect.id)).where(Prospect.source_type == 'social')
         
         if platform:
-            try:
-                platform_enum = SocialPlatform(platform.lower())
-                query = query.where(SocialProfile.platform == platform_enum)
-            except ValueError:
+            platform_lower = platform.lower()
+            valid_platforms = ['linkedin', 'instagram', 'facebook', 'tiktok']
+            if platform_lower not in valid_platforms:
                 raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+            query = query.where(Prospect.source_platform == platform_lower)
+            count_query = count_query.where(Prospect.source_platform == platform_lower)
         
         if discovery_status:
-            try:
-                status_enum = DiscoveryStatus(discovery_status.lower())
-                query = query.where(SocialProfile.discovery_status == status_enum)
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid discovery status: {discovery_status}")
+            # Map discovery_status to Prospect.discovery_status
+            query = query.where(Prospect.discovery_status == discovery_status.upper())
+            count_query = count_query.where(Prospect.discovery_status == discovery_status.upper())
         
         # Get total count
-        count_query = select(func.count(SocialProfile.id))
-        if platform:
-            try:
-                platform_enum = SocialPlatform(platform.lower())
-                count_query = count_query.where(SocialProfile.platform == platform_enum)
-            except ValueError:
-                pass
-        if discovery_status:
-            try:
-                status_enum = DiscoveryStatus(discovery_status.lower())
-                count_query = count_query.where(SocialProfile.discovery_status == status_enum)
-            except ValueError:
-                pass
-        
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
         
         logger.info(f"📊 [SOCIAL PROFILES] RAW COUNT (before pagination): {total} social profiles")
         
         # Get paginated results
-        query = query.order_by(SocialProfile.created_at.desc()).offset(skip).limit(limit)
+        query = query.order_by(Prospect.created_at.desc()).offset(skip).limit(limit)
         result = await db.execute(query)
-        profiles = result.scalars().all()
+        prospects = result.scalars().all()
         
-        logger.info(f"📊 [SOCIAL PROFILES] QUERY RESULT: Found {len(profiles)} profiles from database query (total available: {total})")
+        logger.info(f"📊 [SOCIAL PROFILES] QUERY RESULT: Found {len(prospects)} profiles from database query (total available: {total})")
         
         response_data = {
             "data": [
                 {
-                    "id": p.id,
-                    "platform": p.platform.value,
-                    "username": p.username,
-                    "full_name": p.full_name,
-                    "profile_url": p.profile_url,
-                    "bio": p.bio,
-                    "followers_count": p.followers_count or 0,
-                    "location": p.location,
-                    "category": p.category,
-                    "engagement_score": float(p.engagement_score) if p.engagement_score else 0.0,
-                    "discovery_status": p.discovery_status.value,
-                    "outreach_status": p.outreach_status.value,
+                    "id": str(p.id),
+                    "platform": p.source_platform or "",
+                    "username": p.username or "",
+                    "full_name": p.display_name or "",
+                    "profile_url": p.profile_url or "",
+                    "bio": p.page_title or "",  # Use page_title for bio
+                    "followers_count": p.follower_count or 0,
+                    "location": p.discovery_location or "",
+                    "category": p.discovery_category or "",
+                    "engagement_score": float(p.engagement_rate) if p.engagement_rate else 0.0,
+                    "discovery_status": p.discovery_status or "DISCOVERED",
+                    "outreach_status": p.outreach_status or "pending",
                     "created_at": p.created_at.isoformat() if p.created_at else None,
                 }
-                for p in profiles
+                for p in prospects
             ],
             "total": total,
             "skip": skip,
@@ -286,35 +239,8 @@ async def list_profiles(
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = str(e)
-        error_type = type(e).__name__
-        logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {error_msg}", exc_info=True)
-        
-        # Check if this is a database schema error (table/column missing)
-        is_schema_error = (
-            "does not exist" in error_msg.lower() or
-            "relation" in error_msg.lower() or
-            "f405" in error_msg.lower() or
-            "UndefinedTableError" in error_type or
-            "ProgrammingError" in error_type or
-            "table" in error_msg.lower() and "not exist" in error_msg.lower()
-        )
-        
-        if is_schema_error:
-            # Schema error - return 200 with empty data and inactive status (not 500)
-            logger.warning(f"⚠️  [SOCIAL PROFILES] Database schema error detected: {error_msg}")
-            logger.warning("⚠️  Returning empty data with inactive status instead of 500 error")
-            return SocialProfilesListResponse(
-                data=[],
-                total=0,
-                skip=skip,
-                limit=limit,
-                status="inactive",
-                reason="database schema error"
-            )
-        
-        # Other errors - return 500 (but never for schema issues)
-        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {error_msg}")
+        logger.error(f"❌ [SOCIAL PROFILES] Error listing social profiles: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {str(e)}")
 
 
 # ============================================
@@ -339,86 +265,45 @@ async def create_drafts(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    Create draft messages for profiles
+    Create draft messages for social profiles.
     
+    REUSES website drafting logic - filters by source_type='social'.
     If is_followup=True, generates follow-up messages using Gemini.
     """
-    # Feature-scoped schema check
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Social outreach feature is not available: {schema_status['reason']}"
-        )
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
-    logger.info(f"📝 [SOCIAL DRAFTS] Creating drafts for {len(request.profile_ids)} profiles (followup={request.is_followup})")
+    logger.info(f"📝 [SOCIAL DRAFTS] Creating drafts for {len(request.profile_ids)} profiles")
     
-    # Get profiles
-    result = await db.execute(
-        select(SocialProfile).where(SocialProfile.id.in_(request.profile_ids))
+    # Reuse website drafting task
+    from app.models import Job
+    job = Job(
+        job_type="social_draft",
+        params={
+            "prospect_ids": [str(pid) for pid in request.profile_ids],
+            "is_followup": request.is_followup,
+            "pipeline_mode": True
+        },
+        status="pending"
     )
-    profiles = result.scalars().all()
-    
-    if len(profiles) != len(request.profile_ids):
-        logger.warning(f"⚠️  Only found {len(profiles)} of {len(request.profile_ids)} requested profiles")
-    
-    drafts_created = 0
-    
-    for profile in profiles:
-        # Check if this is a follow-up (previous message exists)
-        if request.is_followup:
-            # Check for previous messages
-            prev_messages = await db.execute(
-                select(SocialMessage).where(
-                    SocialMessage.profile_id == profile.id,
-                    SocialMessage.status == MessageStatus.SENT.value
-                ).order_by(SocialMessage.sent_at.desc())
-            )
-            previous = prev_messages.scalars().first()
-            
-            if not previous:
-                logger.warning(f"⚠️  No previous message found for profile {profile.id}, skipping follow-up")
-                continue
-            
-            # Get sequence index
-            max_sequence = await db.execute(
-                select(func.max(SocialDraft.sequence_index)).where(
-                    SocialDraft.profile_id == profile.id
-                )
-            )
-            next_sequence = (max_sequence.scalar() or 0) + 1
-            
-            # TODO: Generate follow-up using Gemini (humorous, clever, non-repetitive)
-            draft_body = f"Follow-up message for {profile.username} (sequence {next_sequence})"
-        else:
-            # Initial message
-            # TODO: Generate initial draft using Gemini
-            draft_body = f"Initial outreach message for {profile.username}"
-            next_sequence = 0
-        
-        # Create draft
-        draft = SocialDraft(
-            profile_id=profile.id,
-            platform=profile.platform,
-            draft_body=draft_body,
-            is_followup=request.is_followup,
-            sequence_index=next_sequence
-        )
-        
-        db.add(draft)
-        drafts_created += 1
-    
+    db.add(job)
     await db.commit()
+    await db.refresh(job)
     
-    logger.info(f"✅ [SOCIAL DRAFTS] Created {drafts_created} drafts")
+    # Start drafting task (reuse existing drafting logic)
+    from app.tasks.drafting import draft_prospects_async
+    import asyncio
+    from app.task_manager import register_task
+    
+    task = asyncio.create_task(draft_prospects_async(str(job.id)))
+    register_task(str(job.id), task)
+    
+    logger.info(f"✅ [SOCIAL DRAFTS] Drafting job {job.id} started")
     
     return SocialDraftResponse(
         success=True,
-        drafts_created=drafts_created,
-        message=f"Created {drafts_created} draft(s)"
+        drafts_created=0,  # Will be updated by task
+        message=f"Drafting job started for {len(request.profile_ids)} profiles"
     )
 
 
@@ -443,70 +328,44 @@ async def send_messages(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    Send messages to social profiles
+    Send messages to social profiles.
     
-    Requires draft to exist for each profile.
+    REUSES website sending logic - filters by source_type='social'.
+    Requires draft to exist (draft_subject and draft_body).
     """
-    # Feature-scoped schema check
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Social outreach feature is not available: {schema_status['reason']}"
-        )
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
     logger.info(f"📤 [SOCIAL SEND] Sending messages to {len(request.profile_ids)} profiles")
     
-    messages_sent = 0
-    
-    for profile_id in request.profile_ids:
-        # Get latest draft for profile
-        draft_result = await db.execute(
-            select(SocialDraft).where(
-                SocialDraft.profile_id == profile_id
-            ).order_by(SocialDraft.created_at.desc())
-        )
-        draft = draft_result.scalar_one_or_none()
-        
-        if not draft:
-            logger.warning(f"⚠️  No draft found for profile {profile_id}")
-            continue
-        
-        # Get profile
-        profile_result = await db.execute(
-            select(SocialProfile).where(SocialProfile.id == profile_id)
-        )
-        profile = profile_result.scalar_one_or_none()
-        
-        if not profile:
-            logger.warning(f"⚠️  Profile {profile_id} not found")
-            continue
-        
-        # TODO: Send message via platform API (LinkedIn, Instagram, TikTok)
-        # For now, create message record
-        
-        message = SocialMessage(
-            profile_id=profile.id,
-            platform=profile.platform,
-            message_body=draft.draft_body,
-            status=MessageStatus.SENT.value,
-            sent_at=func.now()
-        )
-        
-        db.add(message)
-        messages_sent += 1
-    
+    # Reuse website sending task
+    from app.models import Job
+    job = Job(
+        job_type="social_send",
+        params={
+            "prospect_ids": [str(pid) for pid in request.profile_ids],
+            "pipeline_mode": True
+        },
+        status="pending"
+    )
+    db.add(job)
     await db.commit()
+    await db.refresh(job)
     
-    logger.info(f"✅ [SOCIAL SEND] Sent {messages_sent} messages")
+    # Start sending task (reuse existing sending logic)
+    from app.tasks.send import process_send_job
+    import asyncio
+    from app.task_manager import register_task
+    
+    task = asyncio.create_task(process_send_job(str(job.id)))
+    register_task(str(job.id), task)
+    
+    logger.info(f"✅ [SOCIAL SEND] Sending job {job.id} started")
     
     return SocialSendResponse(
         success=True,
-        messages_sent=messages_sent,
-        message=f"Sent {messages_sent} message(s)"
+        messages_sent=0,  # Will be updated by task
+        message=f"Sending job started for {len(request.profile_ids)} profiles"
     )
 
 
@@ -521,74 +380,43 @@ async def create_followups(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    Create follow-up drafts for profiles that have sent messages
+    Create follow-up drafts for social profiles that have sent messages.
     
-    Automatically generates follow-up using Gemini with humorous, clever tone.
+    REUSES website follow-up logic - filters by source_type='social'.
+    Automatically generates follow-up using Gemini (reuses website drafting).
     """
-    # Feature-scoped schema check
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Social outreach feature is not available: {schema_status['reason']}"
-        )
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
     logger.info(f"🔄 [SOCIAL FOLLOWUP] Creating follow-ups for {len(request.profile_ids)} profiles")
     
-    # Get profiles with sent messages
-    result = await db.execute(
-        select(SocialProfile).where(
-            SocialProfile.id.in_(request.profile_ids)
-        )
+    # Reuse website drafting task with is_followup=True
+    from app.models import Job
+    job = Job(
+        job_type="social_draft",
+        params={
+            "prospect_ids": [str(pid) for pid in request.profile_ids],
+            "is_followup": True,
+            "pipeline_mode": True
+        },
+        status="pending"
     )
-    profiles = result.scalars().all()
-    
-    drafts_created = 0
-    
-    for profile in profiles:
-        # Check for previous sent messages
-        prev_messages = await db.execute(
-            select(SocialMessage).where(
-                SocialMessage.profile_id == profile.id,
-                SocialMessage.status == MessageStatus.SENT.value
-            ).order_by(SocialMessage.sent_at.desc())
-        )
-        previous = prev_messages.scalars().first()
-        
-        if not previous:
-            logger.warning(f"⚠️  No previous message for profile {profile.id}, skipping follow-up")
-            continue
-        
-        # Get next sequence index
-        max_sequence = await db.execute(
-            select(func.max(SocialDraft.sequence_index)).where(
-                SocialDraft.profile_id == profile.id
-            )
-        )
-        next_sequence = (max_sequence.scalar() or 0) + 1
-        
-        # TODO: Generate follow-up using Gemini
-        # Tone: humorous, clever, non-repetitive
-        draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
-        
-        draft = SocialDraft(
-            profile_id=profile.id,
-            platform=profile.platform,
-            draft_body=draft_body,
-            is_followup=True,
-            sequence_index=next_sequence
-        )
-        
-        db.add(draft)
-        drafts_created += 1
-    
+    db.add(job)
     await db.commit()
+    await db.refresh(job)
+    
+    # Start drafting task (reuse existing drafting logic with follow-up mode)
+    from app.tasks.drafting import draft_prospects_async
+    import asyncio
+    from app.task_manager import register_task
+    
+    task = asyncio.create_task(draft_prospects_async(str(job.id)))
+    register_task(str(job.id), task)
+    
+    logger.info(f"✅ [SOCIAL FOLLOWUP] Follow-up drafting job {job.id} started")
     
     return SocialDraftResponse(
         success=True,
-        drafts_created=drafts_created,
-        message=f"Created {drafts_created} follow-up draft(s)"
+        drafts_created=0,  # Will be updated by task
+        message=f"Follow-up drafting job started for {len(request.profile_ids)} profiles"
     )

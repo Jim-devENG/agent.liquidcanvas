@@ -170,6 +170,18 @@ class Prospect(Base):
     serp_confidence = Column(Numeric(3, 2))  # Confidence score (0.0-1.0)
     serp_signals = Column(JSON)  # List of signals that led to intent classification
     
+    # SOCIAL OUTREACH FIELDS (reusing prospects table)
+    # source_type: 'website' (default) or 'social'
+    source_type = Column(String, nullable=False, server_default='website', index=True)
+    # source_platform: 'linkedin', 'instagram', 'facebook', 'tiktok' (only for social)
+    source_platform = Column(String, nullable=True, index=True)
+    # Social profile fields
+    profile_url = Column(Text, nullable=True, index=True)  # Social profile URL
+    username = Column(String, nullable=True, index=True)  # @username or profile identifier
+    display_name = Column(String, nullable=True)  # Full name or display name
+    follower_count = Column(Integer, nullable=True)  # Number of followers
+    engagement_rate = Column(Numeric(5, 2), nullable=True)  # Engagement rate (0-100)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     

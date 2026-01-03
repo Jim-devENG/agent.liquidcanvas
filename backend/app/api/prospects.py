@@ -3,7 +3,7 @@ Prospect management API endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, and_
 from typing import List, Optional, Dict
 from uuid import UUID
 import os
@@ -661,35 +661,47 @@ async def list_leads(
     """
     List prospects with scraped emails (matches pipeline "Scraped" card count)
     
-    SINGLE SOURCE OF TRUTH: Returns prospects where scrape_status IN ("SCRAPED", "ENRICHED")
+    WEBSITE OUTREACH ONLY: Returns prospects where scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
     This matches the pipeline status "scraped" count exactly.
     """
     try:
         from app.models.prospect import ScrapeStatus
         
+        # CRITICAL: Filter by source_type='website' to separate from social outreach
+        website_filter = or_(
+            Prospect.source_type == 'website',
+            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+        )
+        
         # SINGLE SOURCE OF TRUTH: Match pipeline status query exactly
-        # Pipeline counts: scrape_status IN ("SCRAPED", "ENRICHED")
-        logger.info(f"🔍 [LEADS] Querying prospects with scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
+        # Pipeline counts: scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
+        logger.info(f"🔍 [LEADS] Querying website prospects with scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
         
         # Get total count FIRST (before any filtering that might exclude data)
         count_query = select(func.count(Prospect.id)).where(
-            Prospect.scrape_status.in_([
-                ScrapeStatus.SCRAPED.value,
-                ScrapeStatus.ENRICHED.value
-            ])
+            and_(
+                Prospect.scrape_status.in_([
+                    ScrapeStatus.SCRAPED.value,
+                    ScrapeStatus.ENRICHED.value
+                ]),
+                website_filter
+            )
         )
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
-        logger.info(f"📊 [LEADS] RAW COUNT (before pagination): {total} prospects with scrape_status IN ('SCRAPED', 'ENRICHED')")
+        logger.info(f"📊 [LEADS] RAW COUNT (before pagination): {total} website prospects with scrape_status IN ('SCRAPED', 'ENRICHED')")
         
         # Build query with explicit column selection to avoid missing column errors
         # Use ORM query - schema validation ensures columns exist
         query = select(Prospect).where(
-            Prospect.scrape_status.in_([
-                ScrapeStatus.SCRAPED.value,
-                ScrapeStatus.ENRICHED.value
-            ])
+            and_(
+                Prospect.scrape_status.in_([
+                    ScrapeStatus.SCRAPED.value,
+                    ScrapeStatus.ENRICHED.value
+                ]),
+                website_filter
+            )
         ).order_by(Prospect.created_at.desc())
         
         # Get paginated results

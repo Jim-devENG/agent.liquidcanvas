@@ -591,35 +591,17 @@ async def startup():
         # Log error but don't exit - allow app to start
         migration_success = False
     
-    # Validate ALL tables exist after migrations
-    # Log errors but don't exit - allow app to start
+    # Validate website tables exist after migrations
+    # Social outreach now uses prospects table, so no separate validation needed
     schema_valid = False
     try:
-        from app.utils.schema_validator import validate_all_tables_exist, SchemaValidationError
-        await validate_all_tables_exist(engine)
-        logger.info("✅ Database schema validated - All required tables present")
-        schema_valid = True
-    except SchemaValidationError as schema_error:
-        # If social tables are missing, try to create them automatically
-        logger.warning("⚠️  Schema validation failed - checking social tables...")
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if social_success:
-                logger.info("✅ Social outreach tables created automatically")
-                # Re-validate after creating social tables
-                try:
-                    await validate_all_tables_exist(engine)
-                    logger.info("✅ Database schema validated after social table creation")
-                    schema_valid = True
-                except SchemaValidationError:
-                    logger.warning("⚠️  Schema still invalid after social table creation")
-                    schema_valid = False
-            else:
-                logger.warning(f"⚠️  Could not create social tables: {', '.join(social_missing)}")
-                schema_valid = False
-        except Exception as init_error:
-            logger.error(f"❌ Failed to initialize social tables: {init_error}", exc_info=True)
+        from app.utils.schema_validator import validate_website_tables_exist
+        website_valid, website_missing = await validate_website_tables_exist(engine)
+        if website_valid:
+            logger.info("✅ Database schema validated - Website outreach tables present")
+            schema_valid = True
+        else:
+            logger.warning(f"⚠️  Some website tables missing: {', '.join(website_missing)}")
             schema_valid = False
     except Exception as validation_error:
         logger.error("=" * 80)
@@ -636,23 +618,6 @@ async def startup():
         logger.info("✅ Server is ready - All validations passed")
     else:
         logger.warning("⚠️  Server is starting with validation issues - some features may not work")
-        # If social tables are missing, log explicit instructions
-        if not schema_valid:
-            try:
-                from app.utils.schema_validator import validate_social_tables_exist
-                social_valid, social_missing = await validate_social_tables_exist(engine)
-                if not social_valid:
-                    logger.error("=" * 80)
-                    logger.error("❌ SOCIAL OUTREACH TABLES MISSING")
-                    logger.error(f"❌ Missing tables: {', '.join(social_missing)}")
-                    logger.error("=" * 80)
-                    logger.error("🔧 TO FIX: Run migrations manually on Render:")
-                    logger.error("   1. Go to Render Dashboard → Your Service → Shell")
-                    logger.error("   2. Run: cd /app && alembic upgrade head")
-                    logger.error("   3. Or: cd /app/backend && alembic upgrade head")
-                    logger.error("=" * 80)
-            except Exception as e:
-                logger.error(f"Could not check social tables: {e}")
     
     # Start scheduler for periodic tasks (always start - scraper check runs every minute)
     try:

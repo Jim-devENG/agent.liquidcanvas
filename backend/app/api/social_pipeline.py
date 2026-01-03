@@ -1,38 +1,35 @@
 """
 Social Outreach Pipeline API
 
-COMPLETELY SEPARATE from Website Outreach Pipeline.
+REUSES Website Outreach Pipeline - filters by source_type='social'.
 Stage-based progression for social media outreach.
 
-Pipeline Stages:
+Pipeline Stages (same as website):
 1. Discovery - Always unlocked
 2. Profile Review - Unlocked when discovered_count > 0
 3. Drafting - Unlocked when qualified_count > 0
 4. Sending - Unlocked when drafted_count > 0
 5. Follow-ups - Unlocked when sent_count > 0
+
+All queries filter: source_type='social'
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from typing import List, Optional
 from uuid import UUID
+from datetime import datetime, timezone, timedelta
 import logging
 from pydantic import BaseModel
 
-from app.db.database import get_db, engine
+from app.db.database import get_db
 from app.api.auth import get_current_user_optional
-from app.utils.schema_validator import check_social_schema_ready
-from app.models.social import (
-    SocialProfile,
-    SocialDiscoveryJob,
-    SocialDraft,
-    SocialMessage,
-    SocialPlatform,
-    DiscoveryStatus,
-    OutreachStatus,
-    MessageType,
-    MessageStatus,
-    DiscoveryJobStatus,
+from app.models.prospect import Prospect, DiscoveryStatus
+from app.adapters.social_discovery import (
+    LinkedInDiscoveryAdapter,
+    InstagramDiscoveryAdapter,
+    TikTokDiscoveryAdapter,
+    FacebookDiscoveryAdapter
 )
 
 logger = logging.getLogger(__name__)
@@ -52,86 +49,88 @@ async def get_social_pipeline_status(
     """
     Get social pipeline status.
     
-    Computes counts from social tables ONLY.
-    Completely separate from website pipeline status.
+    REUSES prospects table - filters by source_type='social'.
+    Same pipeline stages as website outreach.
     
     Returns:
         {
-            "discovered": int,      # discovery_status = 'discovered'
-            "reviewed": int,        # discovery_status = 'reviewed'
-            "qualified": int,       # discovery_status = 'qualified'
-            "drafted": int,         # outreach_status = 'drafted'
-            "sent": int,            # outreach_status = 'sent'
-            "followup_ready": int,  # sent AND last_contacted_at < threshold
+            "discovered": int,      # discovery_status = 'DISCOVERED' AND source_type='social'
+            "reviewed": int,        # approval_status = 'approved' AND source_type='social'
+            "qualified": int,       # scrape_status = 'SCRAPED' AND source_type='social'
+            "drafted": int,         # draft_status = 'drafted' AND source_type='social'
+            "sent": int,            # send_status = 'sent' AND source_type='social'
+            "followup_ready": int,  # sent AND last_sent < threshold AND source_type='social'
         }
     """
-    # Feature-scoped schema check
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        logger.warning("⚠️  [SOCIAL PIPELINE] Social schema not ready - returning empty status")
-        return {
-            "discovered": 0,
-            "reviewed": 0,
-            "qualified": 0,
-            "drafted": 0,
-            "sent": 0,
-            "followup_ready": 0,
-            "status": "inactive",
-            "reason": schema_status["reason"]
-        }
-    
     try:
+        # Base filter: only social prospects
+        social_filter = Prospect.source_type == 'social'
+        
         # Count discovered profiles
         discovered_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
-                SocialProfile.discovery_status == DiscoveryStatus.DISCOVERED.value
+            select(func.count(Prospect.id)).where(
+                and_(
+                    social_filter,
+                    Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+                )
             )
         )
         discovered_count = discovered_result.scalar() or 0
         
-        # Count reviewed profiles
+        # Count reviewed/approved profiles
         reviewed_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
-                SocialProfile.discovery_status == DiscoveryStatus.REVIEWED.value
+            select(func.count(Prospect.id)).where(
+                and_(
+                    social_filter,
+                    Prospect.approval_status == 'approved'
+                )
             )
         )
         reviewed_count = reviewed_result.scalar() or 0
         
-        # Count qualified profiles
+        # Count qualified profiles (scraped with emails or enriched)
         qualified_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
-                SocialProfile.discovery_status == DiscoveryStatus.QUALIFIED.value
+            select(func.count(Prospect.id)).where(
+                and_(
+                    social_filter,
+                    Prospect.scrape_status.in_(['SCRAPED', 'ENRICHED'])
+                )
             )
         )
         qualified_count = qualified_result.scalar() or 0
         
         # Count drafted profiles
         drafted_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
-                SocialProfile.outreach_status == OutreachStatus.DRAFTED.value
+            select(func.count(Prospect.id)).where(
+                and_(
+                    social_filter,
+                    Prospect.draft_status == 'drafted'
+                )
             )
         )
         drafted_count = drafted_result.scalar() or 0
         
         # Count sent profiles
         sent_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
-                SocialProfile.outreach_status == OutreachStatus.SENT.value
+            select(func.count(Prospect.id)).where(
+                and_(
+                    social_filter,
+                    Prospect.send_status == 'sent'
+                )
             )
         )
         sent_count = sent_result.scalar() or 0
         
-        # Count follow-up ready profiles (sent AND last_contacted_at > 7 days ago)
-        from datetime import datetime, timezone, timedelta
+        # Count follow-up ready profiles (sent AND last_sent > 7 days ago or NULL)
         followup_threshold = datetime.now(timezone.utc) - timedelta(days=7)
-        
         followup_ready_result = await db.execute(
-            select(func.count(SocialProfile.id)).where(
+            select(func.count(Prospect.id)).where(
                 and_(
-                    SocialProfile.outreach_status == OutreachStatus.SENT.value,
+                    social_filter,
+                    Prospect.send_status == 'sent',
                     or_(
-                        SocialProfile.last_contacted_at.is_(None),
-                        SocialProfile.last_contacted_at < followup_threshold
+                        Prospect.last_sent.is_(None),
+                        Prospect.last_sent < followup_threshold
                     )
                 )
             )
@@ -187,58 +186,18 @@ async def discover_profiles(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    STAGE 1: Discover social profiles.
+    STAGE 1: Discover social profiles using adapter pattern.
     
     Always unlocked - this is the entry point.
-    Creates a discovery job and starts background processing.
+    Uses platform-specific adapters to normalize results into Prospect objects.
     """
-    # Feature-scoped schema check - graceful degradation
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        # Try to create tables automatically as a safety net
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Schema not ready: {schema_status['reason']}")
-        logger.warning("⚠️  Attempting to create missing tables...")
-        
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if not social_success:
-                # Tables still missing - return empty response instead of 503
-                logger.error(f"❌ [SOCIAL DISCOVERY] Could not create tables: {', '.join(social_missing)}")
-                logger.error("❌ Returning empty response - feature not available")
-                return SocialDiscoveryResponse(
-                    success=False,
-                    job_id=None,
-                    message=f"Social outreach feature is not available: {schema_status['reason']}",
-                    profiles_count=0
-                )
-            else:
-                logger.info("✅ [SOCIAL DISCOVERY] Tables created successfully - retrying...")
-                # Re-check schema
-                schema_status = await check_social_schema_ready(engine)
-                if not schema_status["ready"]:
-                    return SocialDiscoveryResponse(
-                        success=False,
-                        job_id=None,
-                        message=f"Social outreach feature is not available: {schema_status['reason']}",
-                        profiles_count=0
-                    )
-        except Exception as init_error:
-            logger.error(f"❌ [SOCIAL DISCOVERY] Failed to initialize tables: {init_error}", exc_info=True)
-            return SocialDiscoveryResponse(
-                success=False,
-                job_id=None,
-                message=f"Social outreach feature is not available: {str(init_error)}",
-                profiles_count=0
-            )
-    
     # Validate platform
-    try:
-        platform = SocialPlatform(request.platform.lower())
-    except ValueError:
+    platform = request.platform.lower()
+    valid_platforms = ['linkedin', 'instagram', 'facebook', 'tiktok']
+    if platform not in valid_platforms:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid platform. Must be one of: {[p.value for p in SocialPlatform]}"
+            detail=f"Invalid platform. Must be one of: {valid_platforms}"
         )
     
     # Validate required fields
@@ -247,46 +206,75 @@ async def discover_profiles(
     if not request.locations:
         raise HTTPException(status_code=400, detail="At least one location is required")
     
-    logger.info(f"🔍 [SOCIAL PIPELINE STAGE 1] Discovery request for {platform.value}")
+    logger.info(f"🔍 [SOCIAL PIPELINE STAGE 1] Discovery request for {platform}")
     
     try:
-        # Create discovery job
-        job = SocialDiscoveryJob(
-            platform=platform,
-            categories=request.categories,
-            locations=request.locations,
-            keywords=request.keywords,
-            parameters=request.parameters,
-            status=DiscoveryJobStatus.PENDING.value,
-            results_count=0
-        )
+        # Select adapter based on platform
+        adapter_map = {
+            'linkedin': LinkedInDiscoveryAdapter(),
+            'instagram': InstagramDiscoveryAdapter(),
+            'facebook': FacebookDiscoveryAdapter(),
+            'tiktok': TikTokDiscoveryAdapter(),
+        }
         
+        adapter = adapter_map[platform]
+        
+        # Prepare adapter parameters (platform-specific)
+        adapter_params = {
+            'categories': request.categories,
+            'locations': request.locations,
+            'keywords': request.keywords,
+            'max_results': request.max_results or 100,
+            **request.parameters  # Platform-specific parameters
+        }
+        
+        # Run discovery using adapter
+        prospects = await adapter.discover(adapter_params, db)
+        
+        # Save prospects to database
+        for prospect in prospects:
+            # Ensure source_type is set
+            prospect.source_type = 'social'
+            prospect.source_platform = platform
+            prospect.discovery_status = DiscoveryStatus.DISCOVERED.value
+            prospect.approval_status = 'PENDING'
+            prospect.scrape_status = 'DISCOVERED'
+            db.add(prospect)
+        
+        await db.commit()
+        
+        logger.info(f"✅ [SOCIAL PIPELINE STAGE 1] Discovered {len(prospects)} profiles for {platform}")
+        
+        # Create a job record (using existing Job model for consistency)
+        from app.models import Job
+        job = Job(
+            job_type="social_discover",
+            params={
+                "platform": platform,
+                "categories": request.categories,
+                "locations": request.locations,
+                "keywords": request.keywords,
+                "prospects_count": len(prospects),
+                **request.parameters
+            },
+            status="completed",
+            result={"prospects_count": len(prospects)}
+        )
         db.add(job)
         await db.commit()
         await db.refresh(job)
         
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 1] Discovery job created: {job.id}")
-        
-        # Start background task
-        from fastapi import BackgroundTasks
-        from app.tasks.social_discovery import process_social_discovery_job
-        
-        # Note: BackgroundTasks needs to be injected, but we'll handle it in the API call
-        # For now, we'll use asyncio.create_task
-        import asyncio
-        asyncio.create_task(process_social_discovery_job(str(job.id)))
-        
         return SocialDiscoveryResponse(
             success=True,
             job_id=job.id,
-            message=f"Discovery job created for {platform.value}",
-            profiles_count=0
+            message=f"Discovered {len(prospects)} profiles for {platform}",
+            profiles_count=len(prospects)
         )
         
     except Exception as e:
         logger.error(f"❌ [SOCIAL PIPELINE STAGE 1] Error: {e}", exc_info=True)
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create discovery job: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to discover profiles: {str(e)}")
 
 
 # ============================================
@@ -305,51 +293,11 @@ async def review_profiles(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    STAGE 2: Review and qualify/reject profiles.
+    STAGE 2: Review and approve/reject social profiles.
     
+    REUSES website approval logic - filters by source_type='social'.
     Unlocked when discovered_count > 0.
-    Manual review step - user decides which profiles to qualify.
     """
-    # Feature-scoped schema check - graceful degradation
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        # Try to create tables automatically as a safety net
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Schema not ready: {schema_status['reason']}")
-        logger.warning("⚠️  Attempting to create missing tables...")
-        
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if not social_success:
-                # Tables still missing - return empty response instead of 503
-                logger.error(f"❌ [SOCIAL REVIEW] Could not create tables: {', '.join(social_missing)}")
-                logger.error("❌ Returning empty response - feature not available")
-                return {
-                    "success": False,
-                    "updated": 0,
-                    "action": request.action,
-                    "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                }
-            else:
-                logger.info("✅ [SOCIAL REVIEW] Tables created successfully - retrying...")
-                # Re-check schema
-                schema_status = await check_social_schema_ready(engine)
-                if not schema_status["ready"]:
-                    return {
-                        "success": False,
-                        "updated": 0,
-                        "action": request.action,
-                        "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                    }
-        except Exception as init_error:
-            logger.error(f"❌ [SOCIAL REVIEW] Failed to initialize tables: {init_error}", exc_info=True)
-            return {
-                "success": False,
-                "updated": 0,
-                "action": request.action,
-                "message": f"Social outreach feature is not available: {str(init_error)}"
-            }
-    
     if request.action not in ["qualify", "reject"]:
         raise HTTPException(status_code=400, detail="Action must be 'qualify' or 'reject'")
     
@@ -359,31 +307,43 @@ async def review_profiles(
     logger.info(f"📋 [SOCIAL PIPELINE STAGE 2] Reviewing {len(request.profile_ids)} profiles: {request.action}")
     
     try:
-        # Get profiles
+        # Get social prospects
         result = await db.execute(
-            select(SocialProfile).where(SocialProfile.id.in_(request.profile_ids))
+            select(Prospect).where(
+                and_(
+                    Prospect.id.in_(request.profile_ids),
+                    Prospect.source_type == 'social'
+                )
+            )
         )
-        profiles = result.scalars().all()
+        prospects = result.scalars().all()
         
-        if len(profiles) != len(request.profile_ids):
-            logger.warning(f"⚠️  Only found {len(profiles)} of {len(request.profile_ids)} requested profiles")
+        if len(prospects) != len(request.profile_ids):
+            logger.warning(f"⚠️  Only found {len(prospects)} of {len(request.profile_ids)} requested profiles")
         
         updated_count = 0
-        new_status = DiscoveryStatus.QUALIFIED.value if request.action == "qualify" else DiscoveryStatus.REJECTED.value
         
-        for profile in profiles:
-            profile.discovery_status = new_status
-            updated_count += 1
+        # Map action to approval_status (reuse website logic)
+        if request.action == "qualify":
+            # Qualify = approve (same as website outreach)
+            for prospect in prospects:
+                prospect.approval_status = "approved"
+                updated_count += 1
+        else:
+            # Reject = rejected
+            for prospect in prospects:
+                prospect.approval_status = "rejected"
+                updated_count += 1
         
         await db.commit()
         
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 2] Updated {updated_count} profiles to {new_status}")
+        logger.info(f"✅ [SOCIAL PIPELINE STAGE 2] Updated {updated_count} profiles: {request.action}")
         
         return {
             "success": True,
             "updated": updated_count,
             "action": request.action,
-            "message": f"Updated {updated_count} profile(s) to {new_status}"
+            "message": f"Updated {updated_count} profile(s) - {request.action}"
         }
         
     except Exception as e:
@@ -408,154 +368,67 @@ async def create_drafts(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    STAGE 3: Create drafts for qualified profiles.
+    STAGE 3: Create drafts for social profiles.
     
+    REUSES website drafting logic - filters by source_type='social'.
     Unlocked when qualified_count > 0.
-    Drafts are saved but not sent.
+    Drafts are saved to prospect.draft_body and prospect.draft_subject.
     """
-    # Feature-scoped schema check - graceful degradation
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        # Try to create tables automatically as a safety net
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Schema not ready: {schema_status['reason']}")
-        logger.warning("⚠️  Attempting to create missing tables...")
-        
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if not social_success:
-                # Tables still missing - return empty response instead of 503
-                logger.error(f"❌ [SOCIAL DISCOVERY] Could not create tables: {', '.join(social_missing)}")
-                logger.error("❌ Returning empty response - feature not available")
-                return SocialDiscoveryResponse(
-                    success=False,
-                    job_id=None,
-                    message=f"Social outreach feature is not available: {schema_status['reason']}",
-                    profiles_count=0
-                )
-            else:
-                logger.info("✅ [SOCIAL DISCOVERY] Tables created successfully - retrying...")
-                # Re-check schema
-                schema_status = await check_social_schema_ready(engine)
-                if not schema_status["ready"]:
-                    return SocialDiscoveryResponse(
-                        success=False,
-                        job_id=None,
-                        message=f"Social outreach feature is not available: {schema_status['reason']}",
-                        profiles_count=0
-                    )
-        except Exception as init_error:
-            logger.error(f"❌ [SOCIAL DISCOVERY] Failed to initialize tables: {init_error}", exc_info=True)
-            return SocialDiscoveryResponse(
-                success=False,
-                job_id=None,
-                message=f"Social outreach feature is not available: {str(init_error)}",
-                profiles_count=0
-            )
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
     logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Creating drafts for {len(request.profile_ids)} profiles")
     
     try:
-        # Get qualified profiles
+        # Get approved social prospects (reuse website approval logic)
         result = await db.execute(
-            select(SocialProfile).where(
+            select(Prospect).where(
                 and_(
-                    SocialProfile.id.in_(request.profile_ids),
-                    SocialProfile.discovery_status == DiscoveryStatus.QUALIFIED.value
+                    Prospect.id.in_(request.profile_ids),
+                    Prospect.source_type == 'social',
+                    Prospect.approval_status == 'approved'
                 )
             )
         )
-        profiles = result.scalars().all()
+        prospects = result.scalars().all()
         
-        if len(profiles) == 0:
+        if len(prospects) == 0:
             raise HTTPException(
                 status_code=400,
-                detail="No qualified profiles found. Profiles must be qualified before drafting."
+                detail="No approved social profiles found. Profiles must be approved before drafting."
             )
         
-        drafts_created = 0
-        
-        # Import drafting service once
-        from app.services.social.drafting import SocialDraftingService
-        drafting_service = SocialDraftingService()
-        
-        for profile in profiles:
-            # Check if this is a follow-up
-            if request.is_followup:
-                # Check for previous messages
-                prev_messages = await db.execute(
-                    select(SocialMessage).where(
-                        and_(
-                            SocialMessage.profile_id == profile.id,
-                            SocialMessage.status == MessageStatus.SENT.value
-                        )
-                    ).order_by(SocialMessage.sent_at.desc())
-                )
-                previous = prev_messages.scalar_one_or_none()
-                
-                if not previous:
-                    logger.warning(f"⚠️  No previous message for profile {profile.id}, skipping follow-up")
-                    continue
-                
-                # Get next sequence index
-                max_sequence = await db.execute(
-                    select(func.max(SocialDraft.sequence_index)).where(
-                        SocialDraft.profile_id == profile.id
-                    )
-                )
-                next_sequence = (max_sequence.scalar() or 0) + 1
-                
-                # Generate follow-up using AI drafting service
-                draft_result = await drafting_service.compose_followup_message(profile, db)
-                
-                if draft_result.get("success"):
-                    draft_body = draft_result.get("body", "")
-                else:
-                    error = draft_result.get("error", "Unknown error")
-                    logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
-                    # Fallback to simple message
-                    draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
-            else:
-                # Initial message
-                # Generate initial draft using AI drafting service
-                draft_result = await drafting_service.compose_initial_message(profile, db)
-                
-                if draft_result.get("success"):
-                    draft_body = draft_result.get("body", "")
-                else:
-                    error = draft_result.get("error", "Unknown error")
-                    logger.warning(f"⚠️  Failed to generate initial draft for {profile.username}: {error}")
-                    # Fallback to simple message
-                    draft_body = f"Initial outreach message for {profile.username}"
-                next_sequence = 0
-            
-            # Create draft
-            draft = SocialDraft(
-                profile_id=profile.id,
-                platform=profile.platform,
-                draft_body=draft_body,
-                is_followup=request.is_followup,
-                sequence_index=next_sequence
-            )
-            
-            db.add(draft)
-            
-            # Update profile outreach status
-            profile.outreach_status = OutreachStatus.DRAFTED.value
-            
-            drafts_created += 1
-        
+        # Reuse website drafting task
+        # Create a job for drafting
+        from app.models import Job
+        job = Job(
+            job_type="social_draft",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "is_followup": request.is_followup,
+                "pipeline_mode": True
+            },
+            status="pending"
+        )
+        db.add(job)
         await db.commit()
+        await db.refresh(job)
         
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 3] Created {drafts_created} drafts")
+        # Start drafting task (reuse existing drafting logic)
+        from app.tasks.drafting import draft_prospects_async
+        import asyncio
+        from app.task_manager import register_task
+        
+        task = asyncio.create_task(draft_prospects_async(str(job.id)))
+        register_task(str(job.id), task)
+        
+        logger.info(f"✅ [SOCIAL PIPELINE STAGE 3] Drafting job {job.id} started for {len(prospects)} profiles")
         
         return {
             "success": True,
-            "drafts_created": drafts_created,
-            "message": f"Created {drafts_created} draft(s)"
+            "job_id": job.id,
+            "drafts_created": 0,  # Will be updated by task
+            "message": f"Drafting job started for {len(prospects)} profiles"
         }
         
     except HTTPException:
@@ -581,104 +454,71 @@ async def send_messages(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    STAGE 4: Send messages to profiles.
+    STAGE 4: Send messages to social profiles.
     
+    REUSES website sending logic - filters by source_type='social'.
     Unlocked when drafted_count > 0.
-    Requires draft to exist for each profile.
-    Sending happens only from this stage.
+    Requires draft to exist (draft_subject and draft_body).
     """
-    # Feature-scoped schema check - graceful degradation
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        # Try to create tables automatically as a safety net
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Schema not ready: {schema_status['reason']}")
-        logger.warning("⚠️  Attempting to create missing tables...")
-        
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if not social_success:
-                # Tables still missing - return empty response instead of 503
-                logger.error(f"❌ [SOCIAL DRAFT] Could not create tables: {', '.join(social_missing)}")
-                logger.error("❌ Returning empty response - feature not available")
-                return {
-                    "success": False,
-                    "drafts_created": 0,
-                    "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                }
-            else:
-                logger.info("✅ [SOCIAL DRAFT] Tables created successfully - retrying...")
-                # Re-check schema
-                schema_status = await check_social_schema_ready(engine)
-                if not schema_status["ready"]:
-                    return {
-                        "success": False,
-                        "drafts_created": 0,
-                        "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                    }
-        except Exception as init_error:
-            logger.error(f"❌ [SOCIAL DRAFT] Failed to initialize tables: {init_error}", exc_info=True)
-            return {
-                "success": False,
-                "drafts_created": 0,
-                "message": f"Social outreach feature is not available: {str(init_error)}"
-            }
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
-    logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Creating drafts for {len(request.profile_ids)} profiles")
+    logger.info(f"📧 [SOCIAL PIPELINE STAGE 4] Sending messages to {len(request.profile_ids)} profiles")
     
     try:
-        messages_sent = 0
-        
-        for profile_id in request.profile_ids:
-            # Get latest draft for profile
-            draft_result = await db.execute(
-                select(SocialDraft).where(
-                    SocialDraft.profile_id == profile_id
-                ).order_by(SocialDraft.created_at.desc())
+        # Get drafted social prospects (reuse website logic)
+        result = await db.execute(
+            select(Prospect).where(
+                and_(
+                    Prospect.id.in_(request.profile_ids),
+                    Prospect.source_type == 'social',
+                    Prospect.draft_status == 'drafted',
+                    Prospect.draft_subject.isnot(None),
+                    Prospect.draft_body.isnot(None)
+                )
             )
-            draft = draft_result.scalar_one_or_none()
-            
-            if not draft:
-                logger.warning(f"⚠️  No draft found for profile {profile_id}")
-                continue
-            
-            # Get profile
-            profile_result = await db.execute(
-                select(SocialProfile).where(SocialProfile.id == profile_id)
-            )
-            profile = profile_result.scalar_one_or_none()
-            
-            if not profile:
-                logger.warning(f"⚠️  Profile {profile_id} not found")
-                continue
-            
-            # Send message via platform API using sending service
-            from app.services.social.sending import SocialSendingService
-            
-            sending_service = SocialSendingService()
-            send_result = await sending_service.send_message(profile, draft.draft_body, db)
-            
-            if send_result.get("success"):
-                messages_sent += 1
-                logger.info(f"✅ [SOCIAL PIPELINE STAGE 4] Message sent to @{profile.username}")
-            else:
-                error = send_result.get("error", "Unknown error")
-                logger.warning(f"⚠️  [SOCIAL PIPELINE STAGE 4] Failed to send to @{profile.username}: {error}")
-                # Message record already created by sending service with FAILED status
+        )
+        prospects = result.scalars().all()
         
+        if len(prospects) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="No drafted social profiles found. Profiles must be drafted before sending."
+            )
+        
+        # Reuse website sending task
+        from app.models import Job
+        job = Job(
+            job_type="social_send",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "pipeline_mode": True
+            },
+            status="pending"
+        )
+        db.add(job)
         await db.commit()
+        await db.refresh(job)
         
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 4] Sent {messages_sent} messages")
+        # Start sending task (reuse existing sending logic)
+        from app.tasks.send import process_send_job
+        import asyncio
+        from app.task_manager import register_task
+        
+        task = asyncio.create_task(process_send_job(str(job.id)))
+        register_task(str(job.id), task)
+        
+        logger.info(f"✅ [SOCIAL PIPELINE STAGE 4] Sending job {job.id} started for {len(prospects)} profiles")
         
         return {
             "success": True,
-            "messages_sent": messages_sent,
-            "message": f"Sent {messages_sent} message(s)"
+            "job_id": job.id,
+            "messages_sent": 0,  # Will be updated by task
+            "message": f"Sending job started for {len(prospects)} profiles"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ [SOCIAL PIPELINE STAGE 4] Error: {e}", exc_info=True)
         await db.rollback()
@@ -696,130 +536,67 @@ async def create_followups(
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    STAGE 5: Create follow-up drafts for profiles that have sent messages.
+    STAGE 5: Create follow-up drafts for social profiles that have sent messages.
     
+    REUSES website follow-up logic - filters by source_type='social'.
     Unlocked when sent_count > 0.
-    Automatically generates follow-up using Gemini (humorous, clever, non-repetitive).
+    Automatically generates follow-up using Gemini (reuses website drafting).
     """
-    # Feature-scoped schema check - graceful degradation
-    schema_status = await check_social_schema_ready(engine)
-    if not schema_status["ready"]:
-        # Try to create tables automatically as a safety net
-        logger.warning(f"⚠️  [SOCIAL DISCOVERY] Schema not ready: {schema_status['reason']}")
-        logger.warning("⚠️  Attempting to create missing tables...")
-        
-        try:
-            from app.utils.social_schema_init import ensure_social_tables_exist
-            social_success, social_missing = await ensure_social_tables_exist(engine)
-            if not social_success:
-                # Tables still missing - return empty response instead of 503
-                logger.error(f"❌ [SOCIAL FOLLOWUP] Could not create tables: {', '.join(social_missing)}")
-                logger.error("❌ Returning empty response - feature not available")
-                return {
-                    "success": False,
-                    "followups_created": 0,
-                    "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                }
-            else:
-                logger.info("✅ [SOCIAL FOLLOWUP] Tables created successfully - retrying...")
-                # Re-check schema
-                schema_status = await check_social_schema_ready(engine)
-                if not schema_status["ready"]:
-                    return {
-                        "success": False,
-                        "followups_created": 0,
-                        "message": f"Social outreach feature is not available: {schema_status['reason']}"
-                    }
-        except Exception as init_error:
-            logger.error(f"❌ [SOCIAL FOLLOWUP] Failed to initialize tables: {init_error}", exc_info=True)
-            return {
-                "success": False,
-                "followups_created": 0,
-                "message": f"Social outreach feature is not available: {str(init_error)}"
-            }
-    
     if not request.profile_ids:
         raise HTTPException(status_code=400, detail="At least one profile ID is required")
     
     logger.info(f"🔄 [SOCIAL PIPELINE STAGE 5] Creating follow-ups for {len(request.profile_ids)} profiles")
     
     try:
-        # Get profiles with sent messages
+        # Get sent social prospects (reuse website logic)
         result = await db.execute(
-            select(SocialProfile).where(
+            select(Prospect).where(
                 and_(
-                    SocialProfile.id.in_(request.profile_ids),
-                    SocialProfile.outreach_status == OutreachStatus.SENT.value
+                    Prospect.id.in_(request.profile_ids),
+                    Prospect.source_type == 'social',
+                    Prospect.send_status == 'sent',
+                    Prospect.last_sent.isnot(None)
                 )
             )
         )
-        profiles = result.scalars().all()
+        prospects = result.scalars().all()
         
-        if len(profiles) == 0:
+        if len(prospects) == 0:
             raise HTTPException(
                 status_code=400,
-                detail="No profiles with sent messages found. Profiles must have sent messages before follow-ups."
+                detail="No sent social profiles found. Profiles must have sent messages before follow-ups."
             )
         
-        drafts_created = 0
-        
-        for profile in profiles:
-            # Check for previous sent messages
-            prev_messages = await db.execute(
-                select(SocialMessage).where(
-                    and_(
-                        SocialMessage.profile_id == profile.id,
-                        SocialMessage.status == MessageStatus.SENT.value
-                    )
-                ).order_by(SocialMessage.sent_at.desc())
-            )
-            previous = prev_messages.scalar_one_or_none()
-            
-            if not previous:
-                logger.warning(f"⚠️  No previous message for profile {profile.id}, skipping follow-up")
-                continue
-            
-            # Get next sequence index
-            max_sequence = await db.execute(
-                select(func.max(SocialDraft.sequence_index)).where(
-                    SocialDraft.profile_id == profile.id
-                )
-            )
-            next_sequence = (max_sequence.scalar() or 0) + 1
-            
-            # Generate follow-up using AI drafting service
-            from app.services.social.drafting import SocialDraftingService
-            drafting_service = SocialDraftingService()
-            
-            draft_result = await drafting_service.compose_followup_message(profile, db)
-            
-            if draft_result.get("success"):
-                draft_body = draft_result.get("body", "")
-            else:
-                error = draft_result.get("error", "Unknown error")
-                logger.warning(f"⚠️  Failed to generate follow-up draft for {profile.username}: {error}")
-                # Fallback to simple message
-                draft_body = f"Follow-up message #{next_sequence} for {profile.username}"
-            
-            draft = SocialDraft(
-                profile_id=profile.id,
-                platform=profile.platform,
-                draft_body=draft_body,
-                is_followup=True,
-                sequence_index=next_sequence
-            )
-            
-            db.add(draft)
-            drafts_created += 1
-        
+        # Reuse website drafting task with is_followup=True
+        from app.models import Job
+        job = Job(
+            job_type="social_draft",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "is_followup": True,
+                "pipeline_mode": True
+            },
+            status="pending"
+        )
+        db.add(job)
         await db.commit()
+        await db.refresh(job)
         
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 5] Created {drafts_created} follow-up drafts")
+        # Start drafting task (reuse existing drafting logic with follow-up mode)
+        from app.tasks.drafting import draft_prospects_async
+        import asyncio
+        from app.task_manager import register_task
+        
+        task = asyncio.create_task(draft_prospects_async(str(job.id)))
+        register_task(str(job.id), task)
+        
+        logger.info(f"✅ [SOCIAL PIPELINE STAGE 5] Follow-up drafting job {job.id} started for {len(prospects)} profiles")
         
         return {
             "success": True,
-            "drafts_created": drafts_created,
-            "message": f"Created {drafts_created} follow-up draft(s)"
+            "job_id": job.id,
+            "followups_created": 0,  # Will be updated by task
+            "message": f"Follow-up drafting job started for {len(prospects)} profiles"
         }
         
     except HTTPException:

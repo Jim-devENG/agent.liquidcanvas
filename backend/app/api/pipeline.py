@@ -225,11 +225,20 @@ async def approve_all_prospects(
             detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
         )
     
-    # Find all discovered prospects that are not yet approved
+    # Find all discovered WEBSITE prospects that are not yet approved
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
     result = await db.execute(
         select(Prospect).where(
-            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-            Prospect.approval_status != "approved",
+            and_(
+                Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+                Prospect.approval_status != "approved",
+                website_filter
+            )
         )
     )
     prospects = result.scalars().all()
@@ -299,18 +308,28 @@ async def scrape_websites(
             detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
         )
     
-    # Get discovered, non-rejected prospects ready for scraping
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
+    # Get discovered, non-rejected WEBSITE prospects ready for scraping
     # Scrape eligibility:
     # - discovery_status == DISCOVERED
     # - approval_status is NOT "rejected" (NULL or any other value is allowed)
     # - scrape_status == DISCOVERED (avoid re-scraping already processed prospects)
+    # - source_type='website' (only website prospects)
     query = select(Prospect).where(
-        Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-        or_(
-            Prospect.approval_status.is_(None),
-            Prospect.approval_status != "rejected",
-        ),
-        Prospect.scrape_status == ScrapeStatus.DISCOVERED.value,
+        and_(
+            Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+            or_(
+                Prospect.approval_status.is_(None),
+                Prospect.approval_status != "rejected",
+            ),
+            Prospect.scrape_status == ScrapeStatus.DISCOVERED.value,
+            website_filter  # Only website prospects
+        )
     )
     
     if request.prospect_ids:
@@ -418,17 +437,26 @@ async def verify_emails(
             detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
         )
     
-    # Get prospects ready for verification
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
+    # Get WEBSITE prospects ready for verification
     # REMOVED: Hard stage filtering (stage = LEAD)
-    # Use status flags instead: scraped + email + not already verified
+    # Use status flags instead: scraped + email + not already verified + source_type='website'
     # Note: Default verification_status is "UNVERIFIED", not "pending"
     try:
         query = select(Prospect).where(
-            Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
-            Prospect.contact_email.isnot(None),
-            # Include prospects that are NOT already verified
-            # Default status is "UNVERIFIED", but also check for "pending" and "unverified"
-            Prospect.verification_status != VerificationStatus.VERIFIED.value,
+            and_(
+                Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                Prospect.contact_email.isnot(None),
+                # Include prospects that are NOT already verified
+                # Default status is "UNVERIFIED", but also check for "pending" and "unverified"
+                Prospect.verification_status != VerificationStatus.VERIFIED.value,
+                website_filter  # Only website prospects
+            )
         )
         if request.prospect_ids:
             query = query.where(Prospect.id.in_(request.prospect_ids))
@@ -590,16 +618,25 @@ async def draft_emails(
     # Accept NULL for existing prospects created before draft_status column was added
     prospects = []  # Initialize prospects list
     
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
     if request.prospect_ids is not None and len(request.prospect_ids) > 0:
         # Manual selection: use provided prospect_ids but validate they meet draft-ready criteria
         result = await db.execute(
             select(Prospect).where(
-                Prospect.id.in_(request.prospect_ids),
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None),
-                or_(
-                    Prospect.draft_status == DraftStatus.PENDING.value,
-                    Prospect.draft_status.is_(None)
+                and_(
+                    Prospect.id.in_(request.prospect_ids),
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.contact_email.isnot(None),
+                    or_(
+                        Prospect.draft_status == DraftStatus.PENDING.value,
+                        Prospect.draft_status.is_(None)
+                    ),
+                    website_filter  # Only website prospects
                 )
         )
     )
@@ -611,19 +648,25 @@ async def draft_emails(
                 detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending' or NULL."
             )
     else:
-        # Automatic: query all draft-ready prospects
+        # Automatic: query all draft-ready WEBSITE prospects
         # First, let's check what we have in the database for debugging
         debug_verified = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value
+                and_(
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    website_filter
+                )
             )
         )
         verified_total = debug_verified.scalar() or 0
         
         debug_with_email = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None)
+                and_(
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.contact_email.isnot(None),
+                    website_filter
+                )
             )
         )
         verified_with_email = debug_with_email.scalar() or 0
@@ -771,16 +814,25 @@ async def send_emails(
     # Redefine send-ready as: verified + drafted + not sent
     prospects = []  # Initialize prospects list
     
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
     if request.prospect_ids is not None and len(request.prospect_ids) > 0:
         # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
         result = await db.execute(
             select(Prospect).where(
-                Prospect.id.in_(request.prospect_ids),
-                Prospect.contact_email.isnot(None),
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.draft_subject.isnot(None),
-            Prospect.draft_body.isnot(None),
-                Prospect.send_status != SendStatus.SENT.value
+                and_(
+                    Prospect.id.in_(request.prospect_ids),
+                    Prospect.contact_email.isnot(None),
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.draft_subject.isnot(None),
+                    Prospect.draft_body.isnot(None),
+                    Prospect.send_status != SendStatus.SENT.value,
+                    website_filter  # Only website prospects
+                )
         )
     )
     prospects = result.scalars().all()
@@ -791,14 +843,17 @@ async def send_emails(
                 detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
             )
     else:
-        # Automatic: query all send-ready prospects
+        # Automatic: query all send-ready WEBSITE prospects
         result = await db.execute(
             select(Prospect).where(
-                Prospect.contact_email.isnot(None),
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.draft_subject.isnot(None),
-                Prospect.draft_body.isnot(None),
-                Prospect.send_status != SendStatus.SENT.value
+                and_(
+                    Prospect.contact_email.isnot(None),
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.draft_subject.isnot(None),
+                    Prospect.draft_body.isnot(None),
+                    Prospect.send_status != SendStatus.SENT.value,
+                    website_filter  # Only website prospects
+                )
             )
         )
         prospects = result.scalars().all()
@@ -885,42 +940,63 @@ async def get_pipeline_status(
     
     # Wrap entire endpoint in try-catch to handle transaction errors
     try:
+        # CRITICAL: Filter by source_type='website' to separate from social outreach
+        # Website outreach only shows website prospects
+        website_filter = or_(
+            Prospect.source_type == 'website',
+            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+        )
+        
         # Step 1: DISCOVERED (canonical status for discovered websites)
-        # SINGLE SOURCE OF TRUTH: discovery_status = "DISCOVERED"
+        # SINGLE SOURCE OF TRUTH: discovery_status = "DISCOVERED" AND source_type='website'
         discovered = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value
+                and_(
+                    Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+                    website_filter
+                )
             )
         )
         discovered_count = discovered.scalar() or 0
-        logger.info(f"📊 [PIPELINE STATUS] DISCOVERED count: {discovered_count} (discovery_status = 'DISCOVERED')")
+        logger.info(f"📊 [PIPELINE STATUS] DISCOVERED count: {discovered_count} (discovery_status = 'DISCOVERED' AND source_type='website')")
         
-        # Step 2: APPROVED (approval_status = "approved")
+        # Step 2: APPROVED (approval_status = "approved" AND source_type='website')
         approved = await db.execute(
-            select(func.count(Prospect.id)).where(Prospect.approval_status == "approved")
+            select(func.count(Prospect.id)).where(
+                and_(
+                    Prospect.approval_status == "approved",
+                    website_filter
+                )
+            )
         )
         approved_count = approved.scalar() or 0
         
-        # Step 3: SCRAPED = Prospects with scrape_status IN ("SCRAPED", "ENRICHED")
-        # SINGLE SOURCE OF TRUTH: scrape_status IN ("SCRAPED", "ENRICHED")
+        # Step 3: SCRAPED = Prospects with scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
         scraped = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.scrape_status.in_([
-                    ScrapeStatus.SCRAPED.value,
-                    ScrapeStatus.ENRICHED.value
-                ])
+                and_(
+                    Prospect.scrape_status.in_([
+                        ScrapeStatus.SCRAPED.value,
+                        ScrapeStatus.ENRICHED.value
+                    ]),
+                    website_filter
+                )
             )
         )
         scraped_count = scraped.scalar() or 0
-        logger.info(f"📊 [PIPELINE STATUS] SCRAPED count: {scraped_count} (scrape_status IN ('SCRAPED', 'ENRICHED'))")
+        logger.info(f"📊 [PIPELINE STATUS] SCRAPED count: {scraped_count} (scrape_status IN ('SCRAPED', 'ENRICHED') AND source_type='website')")
         
-        # Scrape-ready: any DISCOVERED prospect that has NOT been explicitly rejected.
+        # Scrape-ready: any DISCOVERED prospect that has NOT been explicitly rejected AND source_type='website'
         # This unlocks scraping as soon as at least one website has been discovered,
         # while still allowing optional manual rejection to exclude sites.
         scrape_ready = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-                Prospect.approval_status != "rejected",
+                and_(
+                    Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
+                    Prospect.approval_status != "rejected",
+                    website_filter
+                )
             )
         )
         scrape_ready_count = scrape_ready.scalar() or 0
@@ -942,34 +1018,37 @@ async def get_pipeline_status(
             )
             if column_check.fetchone():
                 # Column exists - use raw SQL to query safely
-                # EMAIL_FOUND: prospects with emails found but not yet promoted to LEAD
+                # EMAIL_FOUND: prospects with emails found but not yet promoted to LEAD AND source_type='website'
                 email_found_result = await db.execute(
                     text("""
                         SELECT COUNT(*) 
                         FROM prospects 
                         WHERE stage = :stage_value
+                        AND (source_type = 'website' OR source_type IS NULL)
                     """),
                     {"stage_value": ProspectStage.EMAIL_FOUND.value}
                 )
                 email_found_count = email_found_result.scalar() or 0
                 
-                # LEAD: explicitly promoted leads (ready for outreach)
+                # LEAD: explicitly promoted leads (ready for outreach) AND source_type='website'
                 leads_result = await db.execute(
                     text("""
                         SELECT COUNT(*) 
                         FROM prospects 
                         WHERE stage = :stage_value
+                        AND (source_type = 'website' OR source_type IS NULL)
                     """),
                     {"stage_value": ProspectStage.LEAD.value}
                 )
                 leads_count = leads_result.scalar() or 0
                 
-                # VERIFIED: prospects with verified emails
+                # VERIFIED: prospects with verified emails AND source_type='website'
                 verified_stage_result = await db.execute(
                     text("""
                         SELECT COUNT(*) 
                         FROM prospects 
                         WHERE stage = :stage_value
+                        AND (source_type = 'website' OR source_type IS NULL)
                     """),
                     {"stage_value": ProspectStage.VERIFIED.value}
                 )
@@ -977,11 +1056,14 @@ async def get_pipeline_status(
             else:
                 # Column doesn't exist yet - fallback to scrape_status + email
                 logger.warning("⚠️  stage column not found, using fallback logic for stage counts")
-                # Fallback: count prospects with emails as EMAIL_FOUND
+                # Fallback: count website prospects with emails as EMAIL_FOUND
                 email_found_fallback = await db.execute(
                     select(func.count(Prospect.id)).where(
-                        Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
-                        Prospect.contact_email.isnot(None)
+                        and_(
+                            Prospect.scrape_status.in_([ScrapeStatus.SCRAPED.value, ScrapeStatus.ENRICHED.value]),
+                            Prospect.contact_email.isnot(None),
+                            website_filter
+                        )
                     )
                 )
                 email_found_count = email_found_fallback.scalar() or 0
@@ -1002,93 +1084,114 @@ async def get_pipeline_status(
                 email_found_count = 0
                 leads_count = 0
         
-        # Step 3.5: EMAILS FOUND (contact_email IS NOT NULL)
-        # Count all prospects with emails (regardless of verification status)
+        # Step 3.5: EMAILS FOUND (contact_email IS NOT NULL AND source_type='website')
+        # Count all website prospects with emails (regardless of verification status)
         emails_found = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.contact_email.isnot(None)
+                and_(
+                    Prospect.contact_email.isnot(None),
+                    website_filter
+                )
             )
         )
         emails_found_count = emails_found.scalar() or 0
         
-        # Step 4: VERIFIED = Prospects where verification_status == "verified"
-        # SINGLE SOURCE OF TRUTH: verification_status = "verified"
+        # Step 4: VERIFIED = Prospects where verification_status == "verified" AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND source_type='website'
         verified = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value
+                and_(
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    website_filter
+                )
             )
         )
         verified_count = verified.scalar() or 0
-        logger.info(f"📊 [PIPELINE STATUS] VERIFIED count: {verified_count} (verification_status = 'verified')")
+        logger.info(f"📊 [PIPELINE STATUS] VERIFIED count: {verified_count} (verification_status = 'verified' AND source_type='website')")
         
         # Also count verified with email (for backwards compatibility)
         emails_verified = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None)
+                and_(
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.contact_email.isnot(None),
+                    website_filter
+                )
             )
         )
         emails_verified_count = emails_verified.scalar() or 0
         
-        # Step 5: DRAFT-READY = Prospects where verification_status == "verified" AND email IS NOT NULL
-        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND contact_email IS NOT NULL
+        # Step 5: DRAFT-READY = Prospects where verification_status == "verified" AND email IS NOT NULL AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND contact_email IS NOT NULL AND source_type='website'
         draft_ready = await db.execute(
             select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None)
+                and_(
+                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                    Prospect.contact_email.isnot(None),
+                    website_filter
+                )
             )
         )
         draft_ready_count = draft_ready.scalar() or 0
-        logger.info(f"📊 [PIPELINE STATUS] DRAFT-READY count: {draft_ready_count} (verification_status = 'verified' AND contact_email IS NOT NULL)")
+        logger.info(f"📊 [PIPELINE STATUS] DRAFT-READY count: {draft_ready_count} (verification_status = 'verified' AND contact_email IS NOT NULL AND source_type='website')")
         
         # Backwards compatibility alias
         drafting_ready = draft_ready_count
         drafting_ready_count = draft_ready_count
         
-        # Step 6: DRAFTED = Prospects where draft_status = "drafted"
-        # SINGLE SOURCE OF TRUTH: draft_status = "drafted"
+        # Step 6: DRAFTED = Prospects where draft_status = "drafted" AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: draft_status = "drafted" AND source_type='website'
         drafted_count = 0
         try:
             drafted = await db.execute(
                 select(func.count(Prospect.id)).where(
-                    Prospect.draft_status == DraftStatus.DRAFTED.value
+                    and_(
+                        Prospect.draft_status == DraftStatus.DRAFTED.value,
+                        website_filter
+                    )
                 )
             )
             drafted_count = drafted.scalar() or 0
-            logger.info(f"📊 [PIPELINE STATUS] DRAFTED count: {drafted_count} (draft_status = 'drafted')")
+            logger.info(f"📊 [PIPELINE STATUS] DRAFTED count: {drafted_count} (draft_status = 'drafted' AND source_type='website')")
         except Exception as e:
             logger.error(f"❌ Error counting drafted prospects: {e}", exc_info=True)
             drafted_count = 0
         
-        # Step 7: SENT = Prospects where send_status = "sent"
-        # SINGLE SOURCE OF TRUTH: send_status = "sent"
+        # Step 7: SENT = Prospects where send_status = "sent" AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: send_status = "sent" AND source_type='website'
         sent_count = 0
         try:
             sent = await db.execute(
                 select(func.count(Prospect.id)).where(
-                    Prospect.send_status == SendStatus.SENT.value
+                    and_(
+                        Prospect.send_status == SendStatus.SENT.value,
+                        website_filter
+                    )
                 )
             )
             sent_count = sent.scalar() or 0
-            logger.info(f"📊 [PIPELINE STATUS] SENT count: {sent_count} (send_status = 'sent')")
+            logger.info(f"📊 [PIPELINE STATUS] SENT count: {sent_count} (send_status = 'sent' AND source_type='website')")
         except Exception as e:
             logger.error(f"❌ Error counting sent prospects: {e}", exc_info=True)
             sent_count = 0
         
-        # SEND READY = verified + drafted + not sent
-        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND draft_status = "drafted" AND send_status != "sent"
+        # SEND READY = verified + drafted + not sent AND source_type='website'
+        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND draft_status = "drafted" AND send_status != "sent" AND source_type='website'
         send_ready_count = 0
         try:
             send_ready = await db.execute(
                 select(func.count(Prospect.id)).where(
-                    Prospect.contact_email.isnot(None),
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.draft_status == DraftStatus.DRAFTED.value,
-                    Prospect.send_status != SendStatus.SENT.value
+                    and_(
+                        Prospect.contact_email.isnot(None),
+                        Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                        Prospect.draft_status == DraftStatus.DRAFTED.value,
+                        Prospect.send_status != SendStatus.SENT.value,
+                        website_filter
+                    )
                 )
             )
             send_ready_count = send_ready.scalar() or 0
-            logger.info(f"📊 [PIPELINE STATUS] SEND-READY count: {send_ready_count} (verified + drafted + not sent)")
+            logger.info(f"📊 [PIPELINE STATUS] SEND-READY count: {send_ready_count} (verified + drafted + not sent AND source_type='website')")
         except Exception as e:
             logger.error(f"❌ Error counting send-ready prospects: {e}", exc_info=True)
             send_ready_count = 0
