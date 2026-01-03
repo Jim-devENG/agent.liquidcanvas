@@ -43,14 +43,33 @@ def upgrade():
                      server_default='website', 
                      nullable=False)
         )
-        # Add CHECK constraint
-        op.execute(text("""
-            ALTER TABLE prospects 
-            ADD CONSTRAINT check_source_type 
-            CHECK (source_type IN ('website', 'social'))
-        """))
-        # Create index
-        op.create_index('ix_prospects_source_type', 'prospects', ['source_type'])
+        # Set default for existing rows
+        try:
+            op.execute(text("UPDATE prospects SET source_type = 'website' WHERE source_type IS NULL"))
+        except Exception as e:
+            print(f"⚠️  Warning setting default for source_type: {e}")
+        # Add CHECK constraint (drop first if exists)
+        try:
+            op.execute(text("ALTER TABLE prospects DROP CONSTRAINT IF EXISTS check_source_type"))
+        except Exception:
+            pass
+        try:
+            op.execute(text("""
+                ALTER TABLE prospects 
+                ADD CONSTRAINT check_source_type 
+                CHECK (source_type IN ('website', 'social'))
+            """))
+        except Exception as e:
+            print(f"⚠️  Warning adding check_source_type constraint: {e}")
+        # Create index (drop first if exists)
+        try:
+            op.drop_index('ix_prospects_source_type', table_name='prospects')
+        except Exception:
+            pass
+        try:
+            op.create_index('ix_prospects_source_type', 'prospects', ['source_type'])
+        except Exception as e:
+            print(f"⚠️  Warning creating index: {e}")
         print("✅ Added source_type column")
     else:
         print("ℹ️  source_type column already exists")
