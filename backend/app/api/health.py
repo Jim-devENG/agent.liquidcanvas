@@ -117,7 +117,6 @@ async def run_migrations(
     try:
         from alembic.config import Config
         from alembic import command
-        import os
         
         logger.info("🔄 [MIGRATION ENDPOINT] Running migrations via HTTP request...")
         logger.info("=" * 60)
