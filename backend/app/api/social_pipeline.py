@@ -62,22 +62,28 @@ async def get_social_pipeline_status(
             "followup_ready": int,  # sent AND last_sent < threshold AND source_type='social'
         }
     """
+    # CRITICAL: Wrap entire function to prevent ANY 500 errors
+    # Always return 200 with status="inactive" if schema is missing
     try:
         # CRITICAL: Check if source_type column exists
         # If migration hasn't run, return empty status instead of crashing
-        from sqlalchemy import text, inspect
-        from sqlalchemy.engine import Inspector
-        
-        # Check if column exists using raw SQL
-        column_check = await db.execute(
-            text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'prospects' 
-                AND column_name = 'source_type'
-            """)
-        )
-        column_exists = column_check.fetchone() is not None
+        column_exists = False
+        try:
+            from sqlalchemy import text
+            # Check if column exists using raw SQL
+            column_check = await db.execute(
+                text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'prospects' 
+                    AND column_name = 'source_type'
+                """)
+            )
+            column_exists = column_check.fetchone() is not None
+        except Exception as check_err:
+            # If checking for column fails, assume it doesn't exist
+            logger.warning(f"⚠️  [SOCIAL PIPELINE] Could not check for source_type column: {check_err}")
+            column_exists = False
         
         if not column_exists:
             logger.warning("⚠️  [SOCIAL PIPELINE] source_type column does not exist - migration not applied")
@@ -94,7 +100,22 @@ async def get_social_pipeline_status(
             }
         
         # Base filter: only social prospects
-        social_filter = Prospect.source_type == 'social'
+        # Wrap in try-catch in case the column access itself fails
+        try:
+            social_filter = Prospect.source_type == 'social'
+        except Exception as filter_err:
+            # If accessing source_type fails, return safe response
+            logger.error(f"❌ [SOCIAL PIPELINE] Error accessing source_type column: {filter_err}")
+            return {
+                "discovered": 0,
+                "reviewed": 0,
+                "qualified": 0,
+                "drafted": 0,
+                "sent": 0,
+                "followup_ready": 0,
+                "status": "inactive",
+                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
+            }
         
         # Count discovered profiles
         discovered_result = await db.execute(
