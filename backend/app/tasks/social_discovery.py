@@ -3,14 +3,23 @@ Social Discovery Task
 
 Processes social discovery jobs directly in backend.
 Completely separate from website discovery task.
+Uses adapter pattern to discover profiles from different platforms.
 """
 import asyncio
 import logging
 from uuid import UUID
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.db.database import AsyncSessionLocal
-from app.services.social.discovery_runner import SocialDiscoveryRunner
+from app.adapters.social_discovery import (
+    LinkedInDiscoveryAdapter,
+    InstagramDiscoveryAdapter,
+    FacebookDiscoveryAdapter,
+    TikTokDiscoveryAdapter
+)
+from app.models.prospect import Prospect, DiscoveryStatus
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +29,7 @@ async def discover_social_profiles_async(job_id: str) -> dict:
     Async function to discover social profiles for a job.
     
     This runs directly in the backend without needing a separate worker.
-    Completely separate from website discovery.
+    Uses adapter pattern to discover profiles from different platforms.
     
     Args:
         job_id: UUID string of the discovery job
@@ -28,9 +37,7 @@ async def discover_social_profiles_async(job_id: str) -> dict:
     Returns:
         Dict with success status and results
     """
-    from app.models.social import SocialDiscoveryJob, DiscoveryJobStatus
-    from sqlalchemy import select
-    from datetime import datetime, timezone
+    from app.models.job import Job
     
     async with AsyncSessionLocal() as db:
         try:
@@ -40,9 +47,7 @@ async def discover_social_profiles_async(job_id: str) -> dict:
             return {"error": "Invalid job ID format"}
         
         # Fetch job
-        result = await db.execute(
-            select(SocialDiscoveryJob).where(SocialDiscoveryJob.id == job_uuid)
-        )
+        result = await db.execute(select(Job).where(Job.id == job_uuid))
         job = result.scalar_one_or_none()
         
         if not job:
@@ -50,33 +55,96 @@ async def discover_social_profiles_async(job_id: str) -> dict:
             return {"error": "Job not found"}
         
         # Check if job was cancelled
-        if job.status == DiscoveryJobStatus.FAILED.value:
-            logger.info(f"⚠️  [SOCIAL DISCOVERY] Job {job_id} already failed, skipping")
-            return {"error": "Job already failed"}
+        if job.status == "cancelled":
+            logger.info(f"⚠️  [SOCIAL DISCOVERY] Job {job_id} was cancelled, skipping")
+            return {"error": "Job was cancelled"}
         
-        logger.info(f"🚀 [SOCIAL DISCOVERY] Starting discovery job {job_id} for platform {job.platform.value}")
+        # Update job status to running
+        job.status = "running"
+        start_time = datetime.now(timezone.utc)
+        await db.commit()
+        
+        params = job.params or {}
+        platform = params.get("platform", "").lower()
+        categories = params.get("categories", [])
+        locations = params.get("locations", [])
+        keywords = params.get("keywords", [])
+        max_results = params.get("max_results", 100)
+        
+        logger.info(f"🚀 [SOCIAL DISCOVERY] Starting discovery job {job_id} for platform {platform}")
+        logger.info(f"📋 [SOCIAL DISCOVERY] Categories: {categories}, Locations: {locations}, Keywords: {keywords}")
         
         try:
-            # Run discovery using platform-specific service
-            runner = SocialDiscoveryRunner()
-            await runner.run_discovery_job(job_uuid, db)
+            # Select adapter based on platform
+            adapter_map = {
+                'linkedin': LinkedInDiscoveryAdapter(),
+                'instagram': InstagramDiscoveryAdapter(),
+                'facebook': FacebookDiscoveryAdapter(),
+                'tiktok': TikTokDiscoveryAdapter(),
+            }
             
-            # Refresh job to get updated status
-            await db.refresh(job)
+            if platform not in adapter_map:
+                raise ValueError(f"Invalid platform: {platform}")
             
-            logger.info(f"✅ [SOCIAL DISCOVERY] Job {job_id} completed successfully")
+            adapter = adapter_map[platform]
+            
+            # Prepare adapter parameters
+            adapter_params = {
+                'categories': categories,
+                'locations': locations,
+                'keywords': keywords if isinstance(keywords, list) else [],
+                'max_results': max_results,
+            }
+            
+            # Run discovery using adapter (this will take time)
+            prospects = await adapter.discover(adapter_params, db)
+            
+            # Save prospects to database
+            saved_count = 0
+            for prospect in prospects:
+                # Ensure source_type is set
+                prospect.source_type = 'social'
+                prospect.source_platform = platform
+                prospect.discovery_status = DiscoveryStatus.DISCOVERED.value
+                prospect.approval_status = 'PENDING'
+                prospect.scrape_status = 'DISCOVERED'
+                db.add(prospect)
+                saved_count += 1
+            
+            await db.commit()
+            
+            # Update job status and result
+            job.status = "completed"
+            job.result = {
+                "prospects_count": saved_count,
+                "platform": platform,
+                "categories": categories,
+                "locations": locations
+            }
+            await db.commit()
+            
+            logger.info(f"✅ [SOCIAL DISCOVERY] Job {job_id} completed successfully - discovered {saved_count} profiles")
+            
+            # Trigger refresh event
+            if saved_count > 0:
+                # Dispatch event to refresh frontend
+                import sys
+                if 'asyncio' in sys.modules:
+                    # In async context, we can't easily dispatch events, but the frontend polls
+                    pass
+            
             return {
                 "success": True,
                 "job_id": job_id,
-                "results_count": job.results_count,
-                "status": job.status
+                "prospects_count": saved_count,
+                "status": "completed"
             }
             
         except Exception as e:
             logger.error(f"❌ [SOCIAL DISCOVERY] Job {job_id} failed: {e}", exc_info=True)
             
             # Update job status
-            job.status = DiscoveryJobStatus.FAILED.value
+            job.status = "failed"
             job.error_message = str(e)
             await db.commit()
             

@@ -306,43 +306,7 @@ async def discover_profiles(
     logger.info(f"🔍 [SOCIAL PIPELINE STAGE 1] Discovery request for {platform}")
     
     try:
-        # Select adapter based on platform
-        adapter_map = {
-            'linkedin': LinkedInDiscoveryAdapter(),
-            'instagram': InstagramDiscoveryAdapter(),
-            'facebook': FacebookDiscoveryAdapter(),
-            'tiktok': TikTokDiscoveryAdapter(),
-        }
-        
-        adapter = adapter_map[platform]
-        
-        # Prepare adapter parameters (platform-specific)
-        adapter_params = {
-            'categories': request.categories,
-            'locations': request.locations,
-            'keywords': request.keywords,
-            'max_results': request.max_results or 100,
-            **request.parameters  # Platform-specific parameters
-        }
-        
-        # Run discovery using adapter
-        prospects = await adapter.discover(adapter_params, db)
-        
-        # Save prospects to database
-        for prospect in prospects:
-            # Ensure source_type is set
-            prospect.source_type = 'social'
-            prospect.source_platform = platform
-            prospect.discovery_status = DiscoveryStatus.DISCOVERED.value
-            prospect.approval_status = 'PENDING'
-            prospect.scrape_status = 'DISCOVERED'
-            db.add(prospect)
-        
-        await db.commit()
-        
-        logger.info(f"✅ [SOCIAL PIPELINE STAGE 1] Discovered {len(prospects)} profiles for {platform}")
-        
-        # Create a job record (using existing Job model for consistency)
+        # Create discovery job with status "pending" (will be processed in background)
         from app.models import Job
         job = Job(
             job_type="social_discover",
@@ -351,21 +315,36 @@ async def discover_profiles(
                 "categories": request.categories,
                 "locations": request.locations,
                 "keywords": request.keywords,
-                "prospects_count": len(prospects),
+                "max_results": request.max_results or 100,
                 **request.parameters
             },
-            status="completed",
-            result={"prospects_count": len(prospects)}
+            status="pending"
         )
         db.add(job)
         await db.commit()
         await db.refresh(job)
         
+        # Start discovery task in background (like website discovery)
+        try:
+            from app.tasks.social_discovery import process_social_discovery_job
+            import asyncio
+            from app.task_manager import register_task
+            
+            task = asyncio.create_task(process_social_discovery_job(str(job.id)))
+            register_task(str(job.id), task)
+            logger.info(f"✅ [SOCIAL PIPELINE STAGE 1] Discovery job {job.id} started in background")
+        except Exception as e:
+            logger.error(f"❌ [SOCIAL PIPELINE STAGE 1] Failed to start discovery job: {e}", exc_info=True)
+            job.status = "failed"
+            job.error_message = str(e)
+            await db.commit()
+            raise HTTPException(status_code=500, detail=f"Failed to start discovery job: {str(e)}")
+        
         return SocialDiscoveryResponse(
             success=True,
             job_id=job.id,
-            message=f"Discovered {len(prospects)} profiles for {platform}",
-            profiles_count=len(prospects)
+            message=f"Discovery job started. Finding {platform} profiles in {len(request.categories)} categories and {len(request.locations)} locations.",
+            profiles_count=0  # Will be updated when job completes
         )
         
     except Exception as e:
