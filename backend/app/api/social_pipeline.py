@@ -220,7 +220,8 @@ async def get_social_pipeline_status(
             "drafted": drafted_count,
             "sent": sent_count,
             "followup_ready": followup_ready_count,
-            "status": "active"
+            "status": "active",
+            "platform": platform  # Include platform in response
         }
         
     except Exception as e:
