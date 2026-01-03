@@ -630,14 +630,6 @@ async def startup():
         logger.error("⚠️  Some features may not work until schema is fixed")
         logger.error("=" * 80)
         schema_valid = False
-        logger.error("=" * 80)
-        logger.error("❌ CRITICAL: Schema validation check failed")
-        logger.error(f"❌ Error: {validation_error}")
-        logger.error("=" * 80)
-        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
-        logger.error("⚠️  Some features may not work until schema is fixed")
-        logger.error("=" * 80)
-        schema_valid = False
     
     # Log final status
     if migration_success and schema_valid:
