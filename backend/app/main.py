@@ -274,9 +274,12 @@ async def startup():
         # Add a small delay after migrations
         await asyncio.sleep(1)
         
-        # TASK: Log database connection info and data count
+        # All post-migration database operations wrapped in try-except
+        # This ensures app starts even if any of these operations fail
         try:
-            from sqlalchemy import text
+            # TASK: Log database connection info and data count
+            try:
+                from sqlalchemy import text
             async with engine.begin() as conn:
                 # Log current database and server address
                 db_info_result = await conn.execute(
@@ -553,8 +556,16 @@ async def startup():
                                 logger.info("✅ Stage column backfilled based on email presence")
                         else:
                             logger.info(f"✅ {column_name} column already exists and is correct")
-        except Exception as e:
-            logger.error(f"Failed to check/add discovery_status column: {e}", exc_info=True)
+            except Exception as e:
+                logger.error(f"Failed to check/add discovery_status column: {e}", exc_info=True)
+        except Exception as post_migration_error:
+            logger.error("=" * 80)
+            logger.error("❌ CRITICAL: Post-migration database operations failed")
+            logger.error(f"❌ Error: {post_migration_error}")
+            logger.error("=" * 80)
+            logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+            logger.error("⚠️  Some database operations may not have completed")
+            logger.error("=" * 80)
     
     # CRITICAL: Run migrations BLOCKING - server won't accept requests until migrations complete
     # This ensures schema is ready before any API calls
@@ -580,9 +591,9 @@ async def startup():
         # Log error but don't exit - allow app to start
         migration_success = False
     
-        # Validate ALL tables exist after migrations
-        # Log errors but don't exit - allow app to start
-        schema_valid = False
+    # Validate ALL tables exist after migrations
+    # Log errors but don't exit - allow app to start
+    schema_valid = False
         try:
             from app.utils.schema_validator import validate_all_tables_exist, SchemaValidationError
             await validate_all_tables_exist(engine)
