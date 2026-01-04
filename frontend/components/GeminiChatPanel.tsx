@@ -109,7 +109,7 @@ export default function GeminiChatPanel({ prospectId, currentSubject, currentBod
           <div className="text-center py-8">
             <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-2" />
             <p className="text-sm text-gray-500">Start a conversation with Gemini</p>
-            <p className="text-xs text-gray-400 mt-1">Try: "Make this more engaging" or "Suggest a better subject line"</p>
+            <p className="text-xs text-gray-400 mt-1">Try: &quot;Make this more engaging&quot; or &quot;Suggest a better subject line&quot;</p>
           </div>
         ) : (
           messages.map((msg, idx) => (

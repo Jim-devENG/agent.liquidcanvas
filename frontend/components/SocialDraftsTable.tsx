@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { FileText, RefreshCw, ExternalLink, Send, Edit, X } from 'lucide-react'
+import { FileText, RefreshCw, ExternalLink, Send, Edit, X, Download } from 'lucide-react'
 import { listSocialDrafts, sendSocialProfiles, type SocialProfile } from '@/lib/api'
 
 export default function SocialDraftsTable() {
