@@ -557,22 +557,73 @@ async def list_websites(
 ):
     """
     List websites (prospects) with pagination - standardized format
+    
+    WEBSITE OUTREACH ONLY: Returns prospects where source_type='website' or source_type IS NULL
+    Excludes social profiles (LinkedIn, Instagram, Facebook, TikTok)
+    
     Returns: { data: Prospect[], page, limit, total, totalPages }
     """
     # Enforce max limit of 10
     limit = max(1, min(limit, 10))
     
-    # Call list_prospects with page-based pagination
-    result = await list_prospects(
-        skip=None,
-        limit=limit,
-        page=page,
-        status=None,
-        min_score=None,
-        has_email=None,
-        db=db,
-        current_user=current_user
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
     )
+    
+    try:
+        # Get total count
+        count_query = select(func.count(Prospect.id)).where(website_filter)
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Calculate pagination
+        skip = (page - 1) * limit
+        total_pages = (total + limit - 1) // limit if total > 0 else 0
+        
+        # Build query with website filter
+        query = select(Prospect).where(website_filter).order_by(Prospect.created_at.desc())
+        result = await db.execute(query.offset(skip).limit(limit))
+        prospects = result.scalars().all()
+        
+        # Convert to response format
+        prospect_responses = []
+        for p in prospects:
+            try:
+                response_dict = {
+                    "id": str(p.id),
+                    "domain": p.domain or "",
+                    "page_url": getattr(p, 'page_url', None),
+                    "page_title": getattr(p, 'page_title', None),
+                    "contact_email": getattr(p, 'contact_email', None),
+                    "discovery_category": getattr(p, 'discovery_category', None),
+                    "discovery_location": getattr(p, 'discovery_location', None),
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "scrape_status": getattr(p, 'scrape_status', None),
+                    "approval_status": getattr(p, 'approval_status', None),
+                }
+                prospect_responses.append(ProspectResponse(**response_dict))
+            except Exception as e:
+                logger.warning(f"⚠️  Skipping prospect {p.id} due to conversion error: {e}")
+                continue
+        
+        return {
+            "data": prospect_responses,
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "totalPages": total_pages
+        }
+    except Exception as e:
+        logger.error(f"❌ [WEBSITES] Error listing websites: {e}", exc_info=True)
+        return {
+            "data": [],
+            "page": page,
+            "limit": limit,
+            "total": 0,
+            "totalPages": 0
+        }
     
     # Return standardized format
     if result.get("success") and result.get("data"):
@@ -868,39 +919,54 @@ async def list_scraped_emails(
     """
     List prospects with scraped or enriched emails
     
-    SINGLE SOURCE OF TRUTH:
+    WEBSITE OUTREACH ONLY: Returns prospects where:
     - contact_email IS NOT NULL
     AND
     - scrape_status IN ("SCRAPED", "ENRICHED")
+    AND
+    - source_type='website' OR source_type IS NULL
     
-    This shows prospects that have been scraped or enriched, not manually added.
+    This shows website prospects that have been scraped or enriched, not manually added.
+    Excludes social profiles.
     """
     try:
         from app.models.prospect import ScrapeStatus
         
-        # SINGLE SOURCE OF TRUTH: contact_email IS NOT NULL AND scrape_status IN ("SCRAPED", "ENRICHED")
-        logger.info(f"🔍 [SCRAPED EMAILS] Querying prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
+        # CRITICAL: Filter by source_type='website' to separate from social outreach
+        website_filter = or_(
+            Prospect.source_type == 'website',
+            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+        )
+        
+        # SINGLE SOURCE OF TRUTH: contact_email IS NOT NULL AND scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
+        logger.info(f"🔍 [SCRAPED EMAILS] Querying website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
         
         # Get total count FIRST (before any filtering)
         count_query = select(func.count(Prospect.id)).where(
-            Prospect.contact_email.isnot(None),
-            Prospect.scrape_status.in_([
-                ScrapeStatus.SCRAPED.value,
-                ScrapeStatus.ENRICHED.value
-            ])
+            and_(
+                Prospect.contact_email.isnot(None),
+                Prospect.scrape_status.in_([
+                    ScrapeStatus.SCRAPED.value,
+                    ScrapeStatus.ENRICHED.value
+                ]),
+                website_filter
+            )
         )
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
-        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')")
+        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')")
         
-        # Build query
+        # Build query with website filter
         query = select(Prospect).where(
-            Prospect.contact_email.isnot(None),
-            Prospect.scrape_status.in_([
-                ScrapeStatus.SCRAPED.value,
-                ScrapeStatus.ENRICHED.value
-            ])
+            and_(
+                Prospect.contact_email.isnot(None),
+                Prospect.scrape_status.in_([
+                    ScrapeStatus.SCRAPED.value,
+                    ScrapeStatus.ENRICHED.value
+                ]),
+                website_filter
+            )
         ).order_by(Prospect.created_at.desc())
         
         # Get paginated results
