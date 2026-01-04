@@ -303,6 +303,33 @@ async def startup():
             except Exception as db_check_err:
                 logger.error(f"❌ Error checking database connection: {db_check_err}", exc_info=True)
             
+            # VERIFY: Check that social columns exist after migrations
+            try:
+                from sqlalchemy import text
+                async with engine.begin() as conn:
+                    # Check for all required social columns
+                    result = await conn.execute(
+                        text("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'prospects' 
+                            AND column_name IN ('source_type', 'source_platform', 'profile_url', 'username', 'display_name', 'follower_count', 'engagement_rate')
+                            ORDER BY column_name
+                        """)
+                    )
+                    existing_columns = {row[0] for row in result.fetchall()}
+                    required_columns = {'source_type', 'source_platform', 'profile_url', 'username', 'display_name', 'follower_count', 'engagement_rate'}
+                    missing_columns = required_columns - existing_columns
+                    
+                    if missing_columns:
+                        logger.warning(f"⚠️  Missing social columns after migration: {missing_columns}")
+                        logger.warning("⚠️  This may cause UndefinedColumnError during discovery")
+                        logger.warning("⚠️  Run 'alembic upgrade head' manually to fix")
+                    else:
+                        logger.info("✅ All social columns verified: source_type, source_platform, profile_url, username, display_name, follower_count, engagement_rate")
+            except Exception as social_check_err:
+                logger.error(f"❌ Error checking social columns: {social_check_err}", exc_info=True)
+            
             # EMERGENCY FIX: Check and add discovery_query_id column if missing
             try:
                 from sqlalchemy import text
