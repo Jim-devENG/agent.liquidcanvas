@@ -7,7 +7,8 @@ import {
   draftSocialProfiles, 
   sendSocialProfiles,
   reviewSocialProfiles,
-  createSocialFollowupsPipeline
+  createSocialFollowupsPipeline,
+  exportSocialProfilesCSV
 } from '@/lib/api'
 
 interface SocialProfile {
