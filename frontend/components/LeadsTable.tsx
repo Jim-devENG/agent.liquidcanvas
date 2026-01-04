@@ -466,6 +466,27 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </>
             )}
           </button>
+          <button
+            onClick={async () => {
+              try {
+                const blob = emailsOnly ? await exportScrapedEmailsCSV() : await exportLeadsCSV()
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `${emailsOnly ? 'scraped_emails' : 'leads'}_${new Date().toISOString().split('T')[0]}.csv`
+                document.body.appendChild(a)
+                a.click()
+                window.URL.revokeObjectURL(url)
+                document.body.removeChild(a)
+              } catch (error: any) {
+                alert(`Failed to export CSV: ${error.message}`)
+              }
+            }}
+            className="flex items-center space-x-1 px-2 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium transition-all duration-200"
+          >
+            <Download className="w-3 h-3" />
+            <span>Download CSV</span>
+          </button>
           <div className="flex items-center space-x-2">
           <button
             onClick={() => setShowManualActions(!showManualActions)}
