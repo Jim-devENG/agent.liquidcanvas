@@ -19,6 +19,7 @@ interface SocialProfile {
   location?: string
   category?: string
   engagement_score: number
+  contact_email?: string
   discovery_status: string
   outreach_status: string
   created_at: string
@@ -33,6 +34,13 @@ export default function SocialDiscoveredProfilesTable() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>('all')
+  
+  const platformIcons = {
+    linkedin: '💼',
+    instagram: '📷',
+    facebook: '👥',
+    tiktok: '🎵',
+  }
 
   const loadProfiles = async () => {
     try {
@@ -76,11 +84,33 @@ export default function SocialDiscoveredProfilesTable() {
     try {
       await reviewSocialProfiles(Array.from(selected), 'qualify')
       setSelected(new Set())
+      
+      // Initial refresh
       await loadProfiles()
+      
       // Refresh pipeline status
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
       }
+      
+      // Poll for updates (scraping happens in background)
+      // Refresh every 2 seconds for up to 30 seconds to catch scraping updates
+      let pollCount = 0
+      const maxPolls = 15 // 15 * 2 seconds = 30 seconds
+      const pollInterval = setInterval(async () => {
+        pollCount++
+        await loadProfiles()
+        
+        if (pollCount >= maxPolls) {
+          clearInterval(pollInterval)
+        }
+      }, 2000) // Poll every 2 seconds
+      
+      // Clear interval after 30 seconds
+      setTimeout(() => {
+        clearInterval(pollInterval)
+      }, 30000)
+      
     } catch (err: any) {
       setError(err.message || 'Failed to accept profiles')
     } finally {
@@ -191,19 +221,26 @@ export default function SocialDiscoveredProfilesTable() {
         </div>
       </div>
 
-      {/* Platform Filter */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      {/* Platform-Specific Tabs */}
+      <div className="mb-4 flex items-center space-x-2 border-b border-olive-200">
         {platforms.map((platform) => (
           <button
             key={platform.id}
             onClick={() => setSelectedPlatform(platform.id)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+            className={`px-4 py-2 rounded-t-lg text-xs font-semibold transition-all border-b-2 ${
               selectedPlatform === platform.id
-                ? 'bg-olive-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-olive-50 text-olive-700 border-olive-600'
+                : 'bg-white text-gray-600 border-transparent hover:text-olive-700 hover:bg-olive-50'
             }`}
           >
-            {platform.label}
+            {platform.id === 'all' ? (
+              platform.label
+            ) : (
+              <span className="flex items-center space-x-1">
+                <span>{platformIcons[platform.id]}</span>
+                <span>{platform.label}</span>
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -263,6 +300,13 @@ export default function SocialDiscoveredProfilesTable() {
                   <td className="py-2 px-3">{profile.category || '-'}</td>
                   <td className="py-2 px-3">{profile.followers_count.toLocaleString()}</td>
                   <td className="py-2 px-3">{profile.engagement_score.toFixed(2)}%</td>
+                  <td className="py-2 px-3">
+                    {profile.contact_email ? (
+                      <span className="text-green-600 font-medium">{profile.contact_email}</span>
+                    ) : (
+                      <span className="text-gray-400 text-xs">Scraping...</span>
+                    )}
+                  </td>
                   <td className="py-2 px-3">
                     <a
                       href={profile.profile_url}
