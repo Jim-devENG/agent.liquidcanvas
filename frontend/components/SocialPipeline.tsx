@@ -82,40 +82,21 @@ export default function SocialPipeline() {
 
   useEffect(() => {
     let abortController = new AbortController()
-    let debounceTimeout: NodeJS.Timeout | null = null
     
-    const loadStatusDebounced = () => {
-      abortController.abort()
-      abortController = new AbortController()
-      
-      if (debounceTimeout) {
-        clearTimeout(debounceTimeout)
-      }
-      
-      debounceTimeout = setTimeout(() => {
-        loadStatus()
-      }, 300)
-    }
-    
-    // Initial load
-    loadStatusDebounced()
-    
-    // Refresh every 10 seconds
-    const interval = setInterval(() => {
-      loadStatusDebounced()
-    }, 10000)
+    // Initial load only - no polling
+    loadStatus()
     
     // Listen for manual refresh requests
     const handleRefresh = () => {
-      loadStatusDebounced()
+      loadStatus()
     }
     
     // Listen for discovery completion to reset pipeline state
+    // Only reset if we have a confirmed new job ID
     const handleDiscoveryCompleted = () => {
-      console.log('🔄 Social discovery completed, resetting pipeline state...')
-      // Reset latest discovery job ID to trigger re-evaluation
-      setLatestDiscoveryJobId(null)
-      loadStatusDebounced()
+      console.log('🔄 Social discovery completed event received...')
+      // Reload status - discovery completion handler will handle job ID tracking
+      loadStatus()
     }
     
     if (typeof window !== 'undefined') {
@@ -125,10 +106,6 @@ export default function SocialPipeline() {
     
     return () => {
       abortController.abort()
-      if (debounceTimeout) {
-        clearTimeout(debounceTimeout)
-      }
-      clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('refreshSocialPipelineStatus', handleRefresh)
         window.removeEventListener('socialDiscoveryCompleted', handleDiscoveryCompleted)
