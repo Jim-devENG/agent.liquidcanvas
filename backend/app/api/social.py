@@ -305,6 +305,30 @@ async def list_profiles(
                 debug_result = await db.execute(debug_query)
                 debug_data = debug_result.fetchall()
                 logger.warning(f"⚠️  [SOCIAL PROFILES] Approval status breakdown for DISCOVERED profiles: {dict(debug_data)}")
+                
+                # Also check for any profiles with NULL approval_status
+                null_check_query = text("""
+                    SELECT COUNT(*) as count
+                    FROM prospects
+                    WHERE source_type = 'social'
+                    AND discovery_status = 'DISCOVERED'
+                    AND approval_status IS NULL
+                """)
+                null_result = await db.execute(null_check_query)
+                null_count = null_result.scalar() or 0
+                logger.warning(f"⚠️  [SOCIAL PROFILES] Profiles with NULL approval_status: {null_count}")
+                
+                # Check for profiles with 'approved' (case-sensitive)
+                approved_check_query = text("""
+                    SELECT COUNT(*) as count
+                    FROM prospects
+                    WHERE source_type = 'social'
+                    AND discovery_status = 'DISCOVERED'
+                    AND (approval_status = 'approved' OR approval_status = 'APPROVED')
+                """)
+                approved_result = await db.execute(approved_check_query)
+                approved_count = approved_result.scalar() or 0
+                logger.warning(f"⚠️  [SOCIAL PROFILES] Profiles with approved/APPROVED status: {approved_count}")
         
         response_data = {
             "data": [
