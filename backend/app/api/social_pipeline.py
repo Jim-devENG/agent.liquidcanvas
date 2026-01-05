@@ -515,7 +515,10 @@ async def scrape_social_profiles(
             and_(
                 Prospect.id.in_(request.profile_ids),
                 Prospect.source_type == 'social',
-                Prospect.approval_status == 'approved'
+                    or_(
+                        Prospect.approval_status == 'approved',
+                        Prospect.approval_status == 'APPROVED'
+                    )
             )
         )
     else:
@@ -523,7 +526,10 @@ async def scrape_social_profiles(
         query = select(Prospect).where(
             and_(
                 Prospect.source_type == 'social',
-                Prospect.approval_status == 'approved',
+                    or_(
+                        Prospect.approval_status == 'approved',
+                        Prospect.approval_status == 'APPROVED'
+                    ),
                 Prospect.scrape_status.in_(['DISCOVERED', 'NO_EMAIL_FOUND'])  # Not yet scraped or need re-scraping
             )
         )

@@ -241,21 +241,26 @@ async def list_profiles(
                 )
             elif discovery_status.lower() == 'leads' or discovery_status.lower() == 'approved':
                 # Show only approved profiles (Social Leads)
-                # Use case-insensitive comparison to handle any case variations
-                from sqlalchemy import func
+                # Check for both 'approved' and 'APPROVED' to handle case variations
                 query = query.where(
                     and_(
                         Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-                        func.lower(Prospect.approval_status) == 'approved'
+                        or_(
+                            Prospect.approval_status == 'approved',
+                            Prospect.approval_status == 'APPROVED'
+                        )
                     )
                 )
                 count_query = count_query.where(
                     and_(
                         Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-                        func.lower(Prospect.approval_status) == 'approved'
+                        or_(
+                            Prospect.approval_status == 'approved',
+                            Prospect.approval_status == 'APPROVED'
+                        )
                     )
                 )
-                logger.info(f"📊 [SOCIAL PROFILES] Filtering for Social Leads: approval_status='approved' (case-insensitive)")
+                logger.info(f"📊 [SOCIAL PROFILES] Filtering for Social Leads: approval_status IN ('approved', 'APPROVED')")
             else:
                 # Map discovery_status to Prospect.discovery_status
                 query = query.where(Prospect.discovery_status == discovery_status.upper())
