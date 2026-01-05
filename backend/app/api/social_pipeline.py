@@ -146,12 +146,15 @@ async def get_social_pipeline_status(
         )
         discovered_count = discovered_result.scalar() or 0
         
-        # Count reviewed/approved profiles
+        # Count reviewed/approved profiles - handle case variations
         reviewed_result = await db.execute(
             select(func.count(Prospect.id)).where(
                 and_(
                     social_filter,
-                    sql_func.lower(Prospect.approval_status) == 'approved'
+                    or_(
+                        Prospect.approval_status == 'approved',
+                        Prospect.approval_status == 'APPROVED'
+                    )
                 )
             )
         )
