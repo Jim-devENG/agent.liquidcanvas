@@ -415,67 +415,41 @@ async def review_profiles(
         
         await db.commit()
         
-        # If qualifying, trigger scraping in background to get real data
+        # If qualifying, create a scraping job that appears in the job log
         if request.action == "qualify":
-            # Import here to avoid circular imports
-            from app.services.social_profile_scraper import scrape_social_profile
+            from app.models.job import Job
             import asyncio
+            from app.task_manager import register_task
             
-            async def scrape_profiles_background():
-                """Scrape profiles in background to get real follower counts, engagement rates, and emails"""
-                from app.db.database import AsyncSessionLocal
-                async with AsyncSessionLocal() as scrape_db:
-                    try:
-                        for prospect in prospects:
-                            if prospect.approval_status == "approved" and prospect.profile_url and prospect.source_platform:
-                                try:
-                                    # Re-fetch prospect in new session
-                                    result = await scrape_db.execute(
-                                        select(Prospect).where(Prospect.id == prospect.id)
-                                    )
-                                    prospect_to_update = result.scalar_one_or_none()
-                                    if not prospect_to_update:
-                                        continue
-                                    
-                                    logger.info(f"🔍 [SOCIAL SCRAPE] Scraping {prospect_to_update.source_platform} profile: {prospect_to_update.profile_url}")
-                                    scrape_result = await scrape_social_profile(
-                                        prospect_to_update.profile_url,
-                                        prospect_to_update.source_platform
-                                    )
-                                    
-                                    if scrape_result.get("success"):
-                                        # Update prospect with real data
-                                        if scrape_result.get("follower_count"):
-                                            prospect_to_update.follower_count = scrape_result["follower_count"]
-                                        if scrape_result.get("engagement_rate"):
-                                            prospect_to_update.engagement_rate = scrape_result["engagement_rate"]
-                                        if scrape_result.get("email"):
-                                            prospect_to_update.contact_email = scrape_result["email"]
-                                            prospect_to_update.contact_method = "profile_scraping"
-                                        
-                                        # Update scrape status
-                                        if scrape_result.get("email"):
-                                            prospect_to_update.scrape_status = "SCRAPED"
-                                        else:
-                                            prospect_to_update.scrape_status = "NO_EMAIL_FOUND"
-                                        
-                                        await scrape_db.commit()
-                                        logger.info(f"✅ [SOCIAL SCRAPE] Updated profile {prospect_to_update.id} with real data: followers={prospect_to_update.follower_count}, engagement={prospect_to_update.engagement_rate}, email={prospect_to_update.contact_email}")
-                                    else:
-                                        logger.warning(f"⚠️  [SOCIAL SCRAPE] Failed to scrape {prospect_to_update.profile_url}: {scrape_result.get('error')}")
-                                        # Mark as attempted but failed
-                                        prospect_to_update.scrape_status = "NO_EMAIL_FOUND"
-                                        await scrape_db.commit()
-                                except Exception as scrape_err:
-                                    logger.error(f"❌ [SOCIAL SCRAPE] Error scraping profile {prospect.id}: {scrape_err}", exc_info=True)
-                                    continue
-                    except Exception as bg_err:
-                        logger.error(f"❌ [SOCIAL SCRAPE] Background scraping error: {bg_err}", exc_info=True)
+            # Create scraping job
+            scraping_job = Job(
+                job_type="social_scrape",
+                params={
+                    "profile_ids": [str(p.id) for p in prospects],
+                    "pipeline_mode": True,
+                },
+                status="pending"
+            )
             
-            # Start background scraping task
-            from app.db.database import AsyncSessionLocal
-            asyncio.create_task(scrape_profiles_background())
-            logger.info(f"🚀 [SOCIAL PIPELINE STAGE 2] Started background scraping for {len(prospects)} profiles")
+            db.add(scraping_job)
+            await db.commit()
+            await db.refresh(scraping_job)
+            
+            logger.info(f"📋 [SOCIAL PIPELINE STAGE 2] Created scraping job {scraping_job.id} for {len(prospects)} profiles")
+            
+            # Start scraping task in background
+            try:
+                from app.tasks.social_scraping import scrape_social_profiles_async
+                
+                task = asyncio.create_task(scrape_social_profiles_async(str(scraping_job.id)))
+                register_task(str(scraping_job.id), task)
+                
+                logger.info(f"🚀 [SOCIAL PIPELINE STAGE 2] Started scraping job {scraping_job.id} - check job log for progress")
+            except Exception as task_err:
+                logger.error(f"❌ [SOCIAL PIPELINE STAGE 2] Failed to start scraping task: {task_err}", exc_info=True)
+                scraping_job.status = "failed"
+                scraping_job.error_message = str(task_err)
+                await db.commit()
         
         logger.info(f"✅ [SOCIAL PIPELINE STAGE 2] Updated {updated_count} profiles: {request.action}")
         
