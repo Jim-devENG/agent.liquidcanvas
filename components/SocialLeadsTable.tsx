@@ -82,6 +82,21 @@ export default function SocialLeadsTable() {
     loadProfiles()
   }, [skip, selectedPlatform])
 
+  // Listen for refresh events
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('🔄 [SOCIAL LEADS] Refresh event received, reloading profiles...')
+      loadProfiles()
+    }
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('refreshSocialLeads', handleRefresh)
+      return () => {
+        window.removeEventListener('refreshSocialLeads', handleRefresh)
+      }
+    }
+  }, [])
+
   const handleSelect = (id: string) => {
     const newSelected = new Set(selected)
     if (newSelected.has(id)) {
@@ -542,4 +557,3 @@ export default function SocialLeadsTable() {
     </div>
   )
 }
-
