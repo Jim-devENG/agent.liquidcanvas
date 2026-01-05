@@ -15,6 +15,24 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# CANONICAL LIQUID CANVAS DESCRIPTION (NON-NEGOTIABLE)
+# This is the ONLY valid source of truth for Liquid Canvas positioning.
+# Must be used consistently across all drafting, Gemini prompts, and outreach logic.
+CANONICAL_LIQUID_CANVAS_DESCRIPTION = """Liquid Canvas is a mobile-to-TV streaming art platform with a curated gallery of over 6,000 pieces of art.
+Subscribers can create custom playlists and push art to any connected TV.
+Users can upload personal photos and videos, connect to the TVs of family and friends, and turn any TV into a connected picture frame.
+Liquid Canvas supports NFT display and sharing.
+It turns any TV into a work of art and transforms rooms into galleries.
+Liquid Canvas is like Spotify for TV art.
+
+Website: https://liquidcanvas.art
+
+CRITICAL POSITIONING RULES:
+- Liquid Canvas is a streaming art platform, NOT an art services company
+- Liquid Canvas is NOT a creative agency, design studio, or art consultancy
+- Emphasize: TV-based art streaming, playlists, connected TVs, personal + shared display, NFTs
+- Avoid generic "art collaboration" or "creative services" language"""
+
 
 def strip_markdown_formatting(text: str) -> str:
     """
@@ -85,15 +103,19 @@ class GeminiClient:
         """
         search_url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
         
-        search_prompt = """Search for information about Liquid Canvas (liquidcanvas.art). 
-Find out:
-1. What services they offer
-2. What type of art/creative work they do
-3. Their unique value proposition
-4. Any notable projects or work
-5. Their website URL: liquidcanvas.art
+        search_prompt = f"""Search for information about Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
-Return a concise summary (2-3 sentences) about Liquid Canvas that can be used in outreach emails."""
+CANONICAL DESCRIPTION (use this as reference):
+{CANONICAL_LIQUID_CANVAS_DESCRIPTION}
+
+Find out:
+1. Current features and capabilities
+2. Recent updates or new functionality
+3. User testimonials or reviews
+4. Any notable partnerships or integrations
+
+Return a concise summary (2-3 sentences) that confirms or supplements the canonical description above.
+IMPORTANT: Liquid Canvas is a streaming art platform, NOT an art services company or creative agency."""
         
         search_payload = {
             "contents": [{
@@ -129,8 +151,8 @@ Return a concise summary (2-3 sentences) about Liquid Canvas that can be used in
         except Exception as e:
             logger.warning(f"⚠️  Failed to search for Liquid Canvas info: {e}. Using default info.")
         
-        # Fallback default information
-        return """Liquid Canvas (liquidcanvas.art) is an art and creative services company specializing in innovative visual solutions and artistic collaborations. We offer custom creative services, digital art, and artistic partnerships for businesses and creators."""
+        # Fallback: Use canonical description
+        return CANONICAL_LIQUID_CANVAS_DESCRIPTION
     
     async def _fetch_website_content(self, page_url: Optional[str], domain: str) -> Optional[str]:
         """
@@ -280,7 +302,7 @@ Return a concise summary (2-3 sentences) about Liquid Canvas that can be used in
             platform_context = f"\nPLATFORM: {platform.title()}\nNote: Social media messages should be more casual, engaging, and platform-appropriate than email outreach."
         
         # Build complete prompt
-        prompt = f"""You are a professional outreach specialist helping refine a {message_type} for Liquid Canvas (liquidcanvas.art), an art and creative services company.{platform_context}
+        prompt = f"""You are a professional outreach specialist helping refine a {message_type} for Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.{platform_context}
 
 ABOUT LIQUID CANVAS (READ THIS FIRST):
 {liquid_canvas_info}
@@ -389,7 +411,7 @@ Return ONLY the positioning summary text, no additional formatting."""
             logger.warning(f"⚠️  Failed to build positioning summary: {e}")
         
         # Fallback summary
-        return f"This appears to be a {page_title or 'business'} in the {domain} domain. Liquid Canvas could offer creative services and artistic collaborations relevant to their needs."
+        return f"This appears to be a {page_title or 'business'} in the {domain} domain. Liquid Canvas, a mobile-to-TV streaming art platform, could help them display curated art collections, create custom playlists, and transform their spaces into galleries using connected TVs."
     
     async def compose_email(
         self,
@@ -448,7 +470,7 @@ Return ONLY the positioning summary text, no additional formatting."""
         context = "\n".join(context_parts) if context_parts else f"Website: {domain}"
         
         # Create prompt for structured JSON output
-        prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), an art and creative services company.
+        prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
 ABOUT LIQUID CANVAS (READ THIS FIRST):
 {liquid_canvas_info}
@@ -786,7 +808,7 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         liquid_canvas_info = await self._search_liquid_canvas_info()
         
         # Create prompt for follow-up email
-        prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), an art and creative services company.
+        prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
 About Liquid Canvas:
 {liquid_canvas_info}
