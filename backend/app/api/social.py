@@ -270,6 +270,69 @@ async def list_profiles(
         
         logger.info(f"📊 [SOCIAL PROFILES] RAW COUNT (before pagination): {total} social profiles")
         
+        # CRITICAL DEBUG: If discovery_status is 'leads' and total is 0, run diagnostic queries
+        if discovery_status and discovery_status.lower() in ['leads', 'approved'] and total == 0:
+            from sqlalchemy import text
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] No profiles found for Social Leads. Running diagnostic queries...")
+            
+            # Check total social profiles
+            total_social_query = text("""
+                SELECT COUNT(*) as count
+                FROM prospects
+                WHERE source_type = 'social'
+            """)
+            total_social_result = await db.execute(total_social_query)
+            total_social = total_social_result.scalar() or 0
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] Total social profiles in database: {total_social}")
+            
+            # Check DISCOVERED profiles
+            discovered_query = text("""
+                SELECT COUNT(*) as count
+                FROM prospects
+                WHERE source_type = 'social'
+                AND discovery_status = 'DISCOVERED'
+            """)
+            discovered_result = await db.execute(discovered_query)
+            discovered_count = discovered_result.scalar() or 0
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] DISCOVERED social profiles: {discovered_count}")
+            
+            # Check approval_status breakdown
+            approval_breakdown_query = text("""
+                SELECT approval_status, COUNT(*) as count
+                FROM prospects
+                WHERE source_type = 'social'
+                AND discovery_status = 'DISCOVERED'
+                GROUP BY approval_status
+            """)
+            approval_breakdown_result = await db.execute(approval_breakdown_query)
+            approval_breakdown = {str(row[0]) if row[0] else 'NULL': row[1] for row in approval_breakdown_result.fetchall()}
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] Approval status breakdown: {approval_breakdown}")
+            
+            # Check case-insensitive approved count
+            approved_ci_query = text("""
+                SELECT COUNT(*) as count
+                FROM prospects
+                WHERE source_type = 'social'
+                AND discovery_status = 'DISCOVERED'
+                AND approval_status IS NOT NULL
+                AND LOWER(approval_status) = 'approved'
+            """)
+            approved_ci_result = await db.execute(approved_ci_query)
+            approved_ci_count = approved_ci_result.scalar() or 0
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] Profiles matching Social Leads query (case-insensitive): {approved_ci_count}")
+            
+            # Get sample of all DISCOVERED profiles with their approval_status
+            sample_query = text("""
+                SELECT id, username, approval_status, discovery_status
+                FROM prospects
+                WHERE source_type = 'social'
+                AND discovery_status = 'DISCOVERED'
+                LIMIT 5
+            """)
+            sample_result = await db.execute(sample_query)
+            samples = [{"id": str(row[0]), "username": row[1], "approval_status": row[2], "discovery_status": row[3]} for row in sample_result.fetchall()]
+            logger.warning(f"🔍 [SOCIAL PROFILES DEBUG] Sample DISCOVERED profiles: {samples}")
+        
         # Get paginated results
         query = query.order_by(Prospect.created_at.desc()).offset(skip).limit(limit)
         result = await db.execute(query)
@@ -287,43 +350,6 @@ async def list_profiles(
             logger.warning(f"⚠️  [SOCIAL PROFILES] Query returned 0 profiles but total count is {total} - possible pagination issue")
         else:
             logger.warning(f"⚠️  [SOCIAL PROFILES] No profiles found with filters: platform={platform}, discovery_status={discovery_status}")
-            # Additional debug: Check what approval_status values actually exist
-            if discovery_status and discovery_status.lower() in ['leads', 'approved']:
-                from sqlalchemy import text
-                debug_query = text("""
-                    SELECT approval_status, COUNT(*) as count
-                    FROM prospects
-                    WHERE source_type = 'social'
-                    AND discovery_status = 'DISCOVERED'
-                    GROUP BY approval_status
-                """)
-                debug_result = await db.execute(debug_query)
-                debug_data = debug_result.fetchall()
-                logger.warning(f"⚠️  [SOCIAL PROFILES] Approval status breakdown for DISCOVERED profiles: {dict(debug_data)}")
-                
-                # Also check for any profiles with NULL approval_status
-                null_check_query = text("""
-                    SELECT COUNT(*) as count
-                    FROM prospects
-                    WHERE source_type = 'social'
-                    AND discovery_status = 'DISCOVERED'
-                    AND approval_status IS NULL
-                """)
-                null_result = await db.execute(null_check_query)
-                null_count = null_result.scalar() or 0
-                logger.warning(f"⚠️  [SOCIAL PROFILES] Profiles with NULL approval_status: {null_count}")
-                
-                # Check for profiles with 'approved' (case-sensitive)
-                approved_check_query = text("""
-                    SELECT COUNT(*) as count
-                    FROM prospects
-                    WHERE source_type = 'social'
-                    AND discovery_status = 'DISCOVERED'
-                    AND (approval_status = 'approved' OR approval_status = 'APPROVED')
-                """)
-                approved_result = await db.execute(approved_check_query)
-                approved_count = approved_result.scalar() or 0
-                logger.warning(f"⚠️  [SOCIAL PROFILES] Profiles with approved/APPROVED status: {approved_count}")
         
         response_data = {
             "data": [
