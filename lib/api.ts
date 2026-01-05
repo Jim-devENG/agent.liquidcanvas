@@ -1711,6 +1711,18 @@ export async function reviewSocialProfiles(profile_ids: string[], action: 'quali
   return res.json()
 }
 
+export async function scrapeSocialProfiles(profile_ids?: string[]): Promise<{ success: boolean; job_id: string; message: string; profiles_count: number }> {
+  const res = await authenticatedFetch(`${API_BASE}/social/pipeline/scrape`, {
+    method: 'POST',
+    body: JSON.stringify({ profile_ids: profile_ids || null }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to scrape profiles' }))
+    throw new Error(error.detail || 'Failed to scrape profiles')
+  }
+  return res.json()
+}
+
 export async function draftSocialProfiles(profile_ids?: string[], is_followup: boolean = false): Promise<{ success: boolean; drafts_created: number; message: string; job_id?: string }> {
   const res = await authenticatedFetch(`${API_BASE}/social/pipeline/draft`, {
     method: 'POST',

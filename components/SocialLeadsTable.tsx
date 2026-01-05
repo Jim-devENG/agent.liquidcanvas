@@ -9,6 +9,7 @@ import {
   exportSocialProfilesCSV,
   updateSocialProfileDraft,
   geminiChat,
+  scrapeSocialProfiles,
   type GeminiChatResponse
 } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
@@ -109,6 +110,34 @@ export default function SocialLeadsTable() {
     }
   }
 
+  const handleScrape = async () => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) {
+      setError('Please select at least one profile to scrape')
+      return
+    }
+
+    setActionLoading(true)
+    setError(null)
+    try {
+      const result = await scrapeSocialProfiles(ids)
+      setSelected(new Set())
+      await loadProfiles()
+      // Refresh pipeline status
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        // Refresh jobs to show the new scraping job
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
+      }
+      setError(`✅ Scraping job started for ${result.profiles_count} profile(s). Check job log for progress.`)
+      setTimeout(() => setError(null), 5000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to scrape profiles')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleSend = async (profileId?: string) => {
     const ids = profileId ? [profileId] : Array.from(selected)
     if (ids.length === 0) {
@@ -180,6 +209,15 @@ export default function SocialLeadsTable() {
         <div className="flex items-center gap-2 flex-wrap">
           {selected.size > 0 && (
             <>
+              <button
+                onClick={handleScrape}
+                disabled={actionLoading}
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                title="Scrape selected profiles to get real follower counts, engagement rates, and emails"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Scrape ({selected.size})
+              </button>
               <button
                 onClick={() => handleSend()}
                 disabled={actionLoading || isSending}
