@@ -268,22 +268,27 @@ async def list_profiles(
                 # - scrape_status (show even if not scraped yet)
                 # - engagement_rate (show even if NULL)
                 # Acceptance is the ONLY gate - if approved, show it
-                from sqlalchemy import func
+                # CRITICAL: Match the exact same logic as get_social_pipeline_status (reviewed count)
+                # Use explicit case matching to ensure consistency with Overview counts
                 query = query.where(
                     and_(
                         Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-                        Prospect.approval_status.isnot(None),  # Exclude NULL
-                        func.lower(Prospect.approval_status) == 'approved'
+                        or_(
+                            Prospect.approval_status == 'approved',
+                            Prospect.approval_status == 'APPROVED'
+                        )
                     )
                 )
                 count_query = count_query.where(
                     and_(
                         Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
-                        Prospect.approval_status.isnot(None),  # Exclude NULL
-                        func.lower(Prospect.approval_status) == 'approved'
+                        or_(
+                            Prospect.approval_status == 'approved',
+                            Prospect.approval_status == 'APPROVED'
+                        )
                     )
                 )
-                logger.info(f"📊 [SOCIAL PROFILES] Filtering for Social Leads: ALL approved profiles (inclusive, no job/qualification/scrape filters)")
+                logger.info(f"📊 [SOCIAL PROFILES] Filtering for Social Leads: ALL approved profiles (matching Overview reviewed count logic)")
             else:
                 # Map discovery_status to Prospect.discovery_status
                 query = query.where(Prospect.discovery_status == discovery_status.upper())
