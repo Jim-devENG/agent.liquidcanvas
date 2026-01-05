@@ -179,10 +179,16 @@ export default function SocialPipeline() {
       return
     }
     try {
-      // Get qualified profiles - this would come from the profiles table
-      // For now, this is a placeholder
-      alert('Drafting is handled from the Profiles tab. Select qualified profiles and click "Draft".')
-      await loadStatus()
+      // Auto-query all qualified profiles (profile_ids = undefined)
+      const result = await draftSocialProfiles(undefined, false)
+      alert(result.message || `Drafting job started for qualified profiles`)
+      // Refresh status after a short delay to allow job to start
+      setTimeout(() => {
+        loadStatus()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        }
+      }, 1000)
     } catch (err: any) {
       alert(err.message || 'Failed to create drafts')
     }
@@ -194,10 +200,16 @@ export default function SocialPipeline() {
       return
     }
     try {
-      // Get drafted profiles - this would come from the profiles table
-      // For now, this is a placeholder
-      alert('Sending is handled from the Profiles tab. Select drafted profiles and click "Send".')
-      await loadStatus()
+      // Auto-query all send-ready profiles (profile_ids = undefined)
+      const result = await sendSocialProfiles(undefined)
+      alert(result.message || `Sending job started for drafted profiles`)
+      // Refresh status after a short delay to allow job to start
+      setTimeout(() => {
+        loadStatus()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        }
+      }, 1000)
     } catch (err: any) {
       alert(err.message || 'Failed to send messages')
     }
@@ -209,10 +221,16 @@ export default function SocialPipeline() {
       return
     }
     try {
-      // Get sent profiles - this would come from the profiles table
-      // For now, this is a placeholder
-      alert('Follow-ups are handled from the Profiles tab. Select sent profiles and click "Create Follow-up".')
-      await loadStatus()
+      // Auto-query all follow-up-ready profiles (profile_ids = undefined)
+      const result = await createSocialFollowupsPipeline(undefined)
+      alert(result.message || `Follow-up drafting job started for sent profiles`)
+      // Refresh status after a short delay to allow job to start
+      setTimeout(() => {
+        loadStatus()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        }
+      }, 1000)
     } catch (err: any) {
       alert(err.message || 'Failed to create follow-ups')
     }
@@ -497,20 +515,32 @@ export default function SocialPipeline() {
                 </div>
               </div>
 
-              <button
-                onClick={step.ctaAction}
-                disabled={isLocked}
-                className={`w-full px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 ${
-                  isLocked
-                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                    : isCompleted
-                    ? 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
-                    : 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
-                }`}
-              >
-                <span>{step.ctaText}</span>
-                {!isLocked && <ArrowRight className="w-3 h-3" />}
-              </button>
+              <div className={`flex gap-2 ${step.viewText && step.viewAction ? 'flex-col' : ''}`}>
+                {step.viewText && step.viewAction && (
+                  <button
+                    onClick={step.viewAction}
+                    className="w-full px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-md"
+                  >
+                    <span>{step.viewText}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+                <button
+                  onClick={step.ctaAction}
+                  disabled={isLocked || !masterSwitchEnabled}
+                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 ${
+                    isLocked || !masterSwitchEnabled
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                      : isCompleted
+                      ? 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
+                      : 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
+                  }`}
+                  title={!masterSwitchEnabled ? 'Master switch must be enabled' : undefined}
+                >
+                  <span>{step.ctaText}</span>
+                  {!isLocked && masterSwitchEnabled && <ArrowRight className="w-3 h-3" />}
+                </button>
+              </div>
             </div>
           )
         })}

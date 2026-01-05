@@ -433,7 +433,7 @@ async def review_profiles(
 # ============================================
 
 class DraftRequest(BaseModel):
-    profile_ids: List[UUID]
+    profile_ids: Optional[List[UUID]] = None  # If None, auto-query all qualified profiles
     is_followup: bool = False
 
 
@@ -449,30 +449,61 @@ async def create_drafts(
     REUSES website drafting logic - filters by source_type='social'.
     Unlocked when qualified_count > 0.
     Drafts are saved to prospect.draft_body and prospect.draft_subject.
+    
+    If profile_ids provided, use those (manual selection).
+    If profile_ids empty or not provided, query all qualified profiles automatically.
     """
-    if not request.profile_ids:
-        raise HTTPException(status_code=400, detail="At least one profile ID is required")
+    # Check master switch
+    from app.api.scraper import check_master_switch
+    master_enabled = await check_master_switch(db)
+    if not master_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+        )
     
-    logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Creating drafts for {len(request.profile_ids)} profiles")
+    # Auto-query qualified profiles if profile_ids not provided
+    social_filter = Prospect.source_type == 'social'
     
-    try:
-        # Get approved social prospects (reuse website approval logic)
+    if request.profile_ids is not None and len(request.profile_ids) > 0:
+        # Manual selection: use provided profile_ids
+        logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Creating drafts for {len(request.profile_ids)} manually selected profiles")
         result = await db.execute(
             select(Prospect).where(
                 and_(
                     Prospect.id.in_(request.profile_ids),
-                    Prospect.source_type == 'social',
+                    social_filter,
                     Prospect.approval_status == 'approved'
                 )
             )
         )
         prospects = result.scalars().all()
-        
-        if len(prospects) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="No approved social profiles found. Profiles must be approved before drafting."
+    else:
+        # Auto-query: get all qualified (approved) social profiles that need drafting
+        logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Auto-querying qualified profiles for drafting")
+        result = await db.execute(
+            select(Prospect).where(
+                and_(
+                    social_filter,
+                    Prospect.approval_status == 'approved',
+                    or_(
+                        Prospect.draft_status.is_(None),
+                        Prospect.draft_status == 'pending'
+                    )
+                )
             )
+        )
+        prospects = result.scalars().all()
+    
+    if len(prospects) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No qualified social profiles found. Profiles must be reviewed and approved before drafting."
+        )
+    
+    logger.info(f"📝 [SOCIAL PIPELINE STAGE 3] Creating drafts for {len(prospects)} profiles")
+    
+    try:
         
         # Reuse website drafting task
         # Create a job for drafting
@@ -520,7 +551,7 @@ async def create_drafts(
 # ============================================
 
 class SendRequest(BaseModel):
-    profile_ids: List[UUID]
+    profile_ids: Optional[List[UUID]] = None  # If None, auto-query all send-ready profiles
 
 
 @router.post("/send")
@@ -535,19 +566,30 @@ async def send_messages(
     REUSES website sending logic - filters by source_type='social'.
     Unlocked when drafted_count > 0.
     Requires draft to exist (draft_subject and draft_body).
+    
+    If profile_ids provided, use those (manual selection).
+    If profile_ids empty or not provided, query all send-ready profiles automatically.
     """
-    if not request.profile_ids:
-        raise HTTPException(status_code=400, detail="At least one profile ID is required")
+    # Check master switch
+    from app.api.scraper import check_master_switch
+    master_enabled = await check_master_switch(db)
+    if not master_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+        )
     
-    logger.info(f"📧 [SOCIAL PIPELINE STAGE 4] Sending messages to {len(request.profile_ids)} profiles")
+    # Auto-query send-ready profiles if profile_ids not provided
+    social_filter = Prospect.source_type == 'social'
     
-    try:
-        # Get drafted social prospects (reuse website logic)
+    if request.profile_ids is not None and len(request.profile_ids) > 0:
+        # Manual selection: use provided profile_ids
+        logger.info(f"📧 [SOCIAL PIPELINE STAGE 4] Sending messages to {len(request.profile_ids)} manually selected profiles")
         result = await db.execute(
             select(Prospect).where(
                 and_(
                     Prospect.id.in_(request.profile_ids),
-                    Prospect.source_type == 'social',
+                    social_filter,
                     Prospect.draft_status == 'drafted',
                     Prospect.draft_subject.isnot(None),
                     Prospect.draft_body.isnot(None)
@@ -555,12 +597,34 @@ async def send_messages(
             )
         )
         prospects = result.scalars().all()
-        
-        if len(prospects) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="No drafted social profiles found. Profiles must be drafted before sending."
+    else:
+        # Auto-query: get all send-ready social profiles
+        logger.info(f"📧 [SOCIAL PIPELINE STAGE 4] Auto-querying send-ready profiles")
+        result = await db.execute(
+            select(Prospect).where(
+                and_(
+                    social_filter,
+                    Prospect.draft_status == 'drafted',
+                    Prospect.draft_subject.isnot(None),
+                    Prospect.draft_body.isnot(None),
+                    or_(
+                        Prospect.send_status.is_(None),
+                        Prospect.send_status != 'sent'
+                    )
+                )
             )
+        )
+        prospects = result.scalars().all()
+    
+    if len(prospects) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No send-ready social profiles found. Profiles must be drafted before sending."
+        )
+    
+    logger.info(f"📧 [SOCIAL PIPELINE STAGE 4] Sending messages to {len(prospects)} profiles")
+    
+    try:
         
         # Reuse website sending task
         from app.models import Job
@@ -617,31 +681,59 @@ async def create_followups(
     REUSES website follow-up logic - filters by source_type='social'.
     Unlocked when sent_count > 0.
     Automatically generates follow-up using Gemini (reuses website drafting).
+    
+    If profile_ids provided, use those (manual selection).
+    If profile_ids empty or not provided, query all follow-up-ready profiles automatically.
     """
-    if not request.profile_ids:
-        raise HTTPException(status_code=400, detail="At least one profile ID is required")
+    # Check master switch
+    from app.api.scraper import check_master_switch
+    master_enabled = await check_master_switch(db)
+    if not master_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+        )
     
-    logger.info(f"🔄 [SOCIAL PIPELINE STAGE 5] Creating follow-ups for {len(request.profile_ids)} profiles")
+    # Auto-query follow-up-ready profiles if profile_ids not provided
+    social_filter = Prospect.source_type == 'social'
     
-    try:
-        # Get sent social prospects (reuse website logic)
+    if request.profile_ids is not None and len(request.profile_ids) > 0:
+        # Manual selection: use provided profile_ids
+        logger.info(f"🔄 [SOCIAL PIPELINE STAGE 5] Creating follow-ups for {len(request.profile_ids)} manually selected profiles")
         result = await db.execute(
             select(Prospect).where(
                 and_(
                     Prospect.id.in_(request.profile_ids),
-                    Prospect.source_type == 'social',
+                    social_filter,
                     Prospect.send_status == 'sent',
                     Prospect.last_sent.isnot(None)
                 )
             )
         )
         prospects = result.scalars().all()
-        
-        if len(prospects) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="No sent social profiles found. Profiles must have sent messages before follow-ups."
+    else:
+        # Auto-query: get all sent social profiles ready for follow-up
+        logger.info(f"🔄 [SOCIAL PIPELINE STAGE 5] Auto-querying follow-up-ready profiles")
+        result = await db.execute(
+            select(Prospect).where(
+                and_(
+                    social_filter,
+                    Prospect.send_status == 'sent',
+                    Prospect.last_sent.isnot(None)
+                )
             )
+        )
+        prospects = result.scalars().all()
+    
+    if len(prospects) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No sent social profiles found. Profiles must have sent messages before follow-ups."
+        )
+    
+    logger.info(f"🔄 [SOCIAL PIPELINE STAGE 5] Creating follow-ups for {len(prospects)} profiles")
+    
+    try:
         
         # Reuse website drafting task with is_followup=True
         from app.models import Job

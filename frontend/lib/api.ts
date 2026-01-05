@@ -1699,10 +1699,10 @@ export async function reviewSocialProfiles(profile_ids: string[], action: 'quali
   return res.json()
 }
 
-export async function draftSocialProfiles(profile_ids: string[], is_followup: boolean = false): Promise<{ success: boolean; drafts_created: number; message: string }> {
+export async function draftSocialProfiles(profile_ids?: string[], is_followup: boolean = false): Promise<{ success: boolean; drafts_created: number; message: string; job_id?: string }> {
   const res = await authenticatedFetch(`${API_BASE}/social/pipeline/draft`, {
     method: 'POST',
-    body: JSON.stringify({ profile_ids, is_followup }),
+    body: JSON.stringify({ profile_ids: profile_ids || null, is_followup }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to create drafts' }))
@@ -1711,10 +1711,10 @@ export async function draftSocialProfiles(profile_ids: string[], is_followup: bo
   return res.json()
 }
 
-export async function sendSocialProfiles(profile_ids: string[]): Promise<{ success: boolean; messages_sent: number; message: string }> {
+export async function sendSocialProfiles(profile_ids?: string[]): Promise<{ success: boolean; messages_sent: number; message: string; job_id?: string }> {
   const res = await authenticatedFetch(`${API_BASE}/social/pipeline/send`, {
     method: 'POST',
-    body: JSON.stringify({ profile_ids }),
+    body: JSON.stringify({ profile_ids: profile_ids || null }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to send messages' }))
@@ -1723,10 +1723,10 @@ export async function sendSocialProfiles(profile_ids: string[]): Promise<{ succe
   return res.json()
 }
 
-export async function createSocialFollowupsPipeline(profile_ids: string[]): Promise<{ success: boolean; drafts_created: number; message: string }> {
+export async function createSocialFollowupsPipeline(profile_ids?: string[]): Promise<{ success: boolean; drafts_created: number; message: string; job_id?: string }> {
   const res = await authenticatedFetch(`${API_BASE}/social/pipeline/followup`, {
     method: 'POST',
-    body: JSON.stringify({ profile_ids }),
+    body: JSON.stringify({ profile_ids: profile_ids || null }),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to create followups' }))
