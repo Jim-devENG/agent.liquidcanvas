@@ -142,9 +142,12 @@ export default function SocialDiscovery() {
       )
       setJobs(socialJobs)
       
-      // Refresh pipeline status
+      // Refresh pipeline status and trigger all table refreshes
       if (typeof window !== 'undefined') {
+        // Trigger discovery completion event to reset pipeline state
+        window.dispatchEvent(new CustomEvent('socialDiscoveryCompleted'))
         window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
       }
     } catch (err: any) {
       setError(err.message || 'Failed to start discovery')
