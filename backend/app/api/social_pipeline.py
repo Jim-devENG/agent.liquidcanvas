@@ -467,6 +467,125 @@ async def review_profiles(
 
 
 # ============================================
+# PROFILE SCRAPING (Manual trigger for Social Leads)
+# ============================================
+
+class ScrapeProfilesRequest(BaseModel):
+    profile_ids: Optional[List[UUID]] = None  # If None, auto-query all approved profiles that need scraping
+
+
+class ScrapeProfilesResponse(BaseModel):
+    success: bool
+    job_id: UUID
+    message: str
+    profiles_count: int
+
+
+@router.post("/scrape", response_model=ScrapeProfilesResponse)
+async def scrape_social_profiles(
+    request: ScrapeProfilesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Scrape approved social profiles to extract real follower counts, engagement rates, and emails.
+    
+    This can be triggered manually from Social Leads for profiles that haven't been scraped yet.
+    
+    Requirements:
+    - Profiles must be approved (approval_status = 'approved')
+    - Profiles must have source_type = 'social'
+    - If profile_ids provided, scrape those specific profiles
+    - If profile_ids is None, auto-query all approved profiles that need scraping
+    """
+    # Check master switch
+    from app.api.scraper import check_master_switch
+    master_enabled = await check_master_switch(db)
+    if not master_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+        )
+    
+    # Get approved social profiles that need scraping
+    # Profiles that are approved but haven't been scraped yet (or scraping failed)
+    query = select(Prospect).where(
+        and_(
+            Prospect.source_type == 'social',
+            Prospect.approval_status == 'approved',
+            Prospect.scrape_status.in_(['DISCOVERED', 'NO_EMAIL_FOUND'])  # Not yet scraped or need re-scraping
+        )
+    )
+    
+    if request.profile_ids:
+        query = query.where(Prospect.id.in_(request.profile_ids))
+    
+    try:
+        result = await db.execute(query)
+        prospects = result.scalars().all()
+    except Exception as query_err:
+        logger.error(f"❌ [SOCIAL SCRAPING] Query error: {query_err}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database query failed: {str(query_err)}")
+    
+    if len(prospects) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No approved profiles available for scraping. All profiles may already be scraped."
+        )
+    
+    logger.info(f"🔍 [SOCIAL SCRAPING] Scraping {len(prospects)} approved social profiles")
+    
+    # Create scraping job
+    from app.models.job import Job
+    scraping_job = Job(
+        job_type="social_scrape",
+        params={
+            "profile_ids": [str(p.id) for p in prospects],
+            "pipeline_mode": True,
+        },
+        status="pending"
+    )
+    
+    try:
+        db.add(scraping_job)
+        await db.commit()
+        await db.refresh(scraping_job)
+    except Exception as commit_err:
+        logger.error(f"❌ [SOCIAL SCRAPING] Commit error: {commit_err}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create scraping job: {str(commit_err)}")
+    
+    # Start scraping task in background
+    try:
+        from app.tasks.social_scraping import scrape_social_profiles_async
+        import asyncio
+        from app.task_manager import register_task
+        
+        task = asyncio.create_task(scrape_social_profiles_async(str(scraping_job.id)))
+        register_task(str(scraping_job.id), task)
+        
+        logger.info(f"✅ [SOCIAL SCRAPING] Scraping job {scraping_job.id} started for {len(prospects)} profiles")
+        
+        return ScrapeProfilesResponse(
+            success=True,
+            job_id=scraping_job.id,
+            message=f"Scraping job started for {len(prospects)} profiles. Check job log for progress.",
+            profiles_count=len(prospects)
+        )
+    except Exception as e:
+        logger.error(f"❌ [SOCIAL SCRAPING] Failed to start scraping job: {e}", exc_info=True)
+        try:
+            await db.rollback()
+            scraping_job.status = "failed"
+            scraping_job.error_message = str(e)
+            await db.commit()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Failed to start scraping job: {str(e)}")
+
+
+# ============================================
 # STAGE 3: DRAFTING
 # ============================================
 

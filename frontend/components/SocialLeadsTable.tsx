@@ -9,6 +9,7 @@ import {
   exportSocialProfilesCSV,
   updateSocialProfileDraft,
   geminiChat,
+  scrapeSocialProfiles,
   type GeminiChatResponse
 } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
@@ -180,6 +181,15 @@ export default function SocialLeadsTable() {
         <div className="flex items-center gap-2 flex-wrap">
           {selected.size > 0 && (
             <>
+              <button
+                onClick={handleScrape}
+                disabled={actionLoading}
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                title="Scrape selected profiles to get real follower counts, engagement rates, and emails"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Scrape ({selected.size})
+              </button>
               <button
                 onClick={() => handleSend()}
                 disabled={actionLoading || isSending}
