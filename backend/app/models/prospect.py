@@ -181,6 +181,9 @@ class Prospect(Base):
     display_name = Column(String, nullable=True)  # Full name or display name
     follower_count = Column(Integer, nullable=True)  # Number of followers
     engagement_rate = Column(Numeric(5, 2), nullable=True)  # Engagement rate (0-100)
+    bio_text = Column(Text, nullable=True)  # Bio text from profile
+    external_links = Column(JSON, nullable=True)  # Link-in-bio URLs (array)
+    scraped_at = Column(DateTime(timezone=True), nullable=True)  # When profile was last scraped
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

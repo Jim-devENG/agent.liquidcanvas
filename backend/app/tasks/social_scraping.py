@@ -19,6 +19,7 @@ from app.db.database import AsyncSessionLocal
 from app.models.prospect import Prospect
 from app.models.job import Job
 from app.services.social_profile_scraper import scrape_social_profile
+from app.services.realtime_social_scraper import scrape_social_profile_realtime
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +124,31 @@ async def scrape_social_profiles_async(job_id: str) -> dict:
                     
                     logger.info(f"🔍 [SOCIAL SCRAPING] Scraping {prospect.source_platform} profile: {prospect.profile_url}")
                     
-                    scrape_result = await scrape_social_profile(
+                    # Use real-time scraping for better accuracy
+                    scrape_result = await scrape_social_profile_realtime(
                         prospect.profile_url,
-                        prospect.source_platform
+                        prospect.source_platform,
+                        use_proxy=False  # Set to True if proxy list is configured
                     )
                     
+                    # Fallback to basic scraping if real-time fails
+                    if not scrape_result.get("success"):
+                        logger.warning(f"⚠️  [SOCIAL SCRAPING] Real-time scraping failed, falling back to basic scraping")
+                        scrape_result = await scrape_social_profile(
+                            prospect.profile_url,
+                            prospect.source_platform
+                        )
+                    
                     if scrape_result.get("success"):
-                        # Update prospect with real data
+                        # Update prospect with real-time scraped data
                         updated = False
                         
-                        # Always update engagement_rate if provided (even if None, use default)
+                        # Update follower_count
+                        if scrape_result.get("follower_count"):
+                            prospect.follower_count = scrape_result["follower_count"]
+                            updated = True
+                        
+                        # Update engagement_rate
                         if scrape_result.get("engagement_rate") is not None:
                             prospect.engagement_rate = scrape_result["engagement_rate"]
                             updated = True
@@ -147,11 +163,15 @@ async def scrape_social_profiles_async(job_id: str) -> dict:
                             default_rate = platform_defaults.get(prospect.source_platform.lower(), 2.0)
                             prospect.engagement_rate = default_rate
                             updated = True
-                            logger.info(f"📊 [SOCIAL SCRAPING] Set default engagement rate {default_rate}% for {prospect.source_platform}")
                         
-                        # Update follower_count if found
-                        if scrape_result.get("follower_count"):
-                            prospect.follower_count = scrape_result["follower_count"]
+                        # Update bio_text
+                        if scrape_result.get("bio_text"):
+                            prospect.bio_text = scrape_result["bio_text"]
+                            updated = True
+                        
+                        # Update external_links
+                        if scrape_result.get("external_links"):
+                            prospect.external_links = scrape_result["external_links"]
                             updated = True
                         
                         # Update email if found
@@ -168,6 +188,11 @@ async def scrape_social_profiles_async(job_id: str) -> dict:
                             profiles_without_emails += 1
                             updated = True
                         
+                        # Update scraped_at timestamp
+                        from datetime import datetime, timezone
+                        prospect.scraped_at = datetime.now(timezone.utc)
+                        updated = True
+                        
                         if updated:
                             await db.commit()
                             profiles_scraped += 1
@@ -175,7 +200,9 @@ async def scrape_social_profiles_async(job_id: str) -> dict:
                                 f"✅ [SOCIAL SCRAPING] Updated profile {prospect.id}: "
                                 f"followers={prospect.follower_count or 'N/A'}, "
                                 f"engagement={prospect.engagement_rate or 'N/A'}%, "
-                                f"email={'found' if prospect.contact_email else 'not found'}"
+                                f"email={'found' if prospect.contact_email else 'not found'}, "
+                                f"bio={'found' if prospect.bio_text else 'not found'}, "
+                                f"links={len(prospect.external_links or [])}"
                             )
                     else:
                         error_msg = scrape_result.get("error", "Unknown error")

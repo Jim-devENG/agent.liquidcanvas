@@ -99,42 +99,33 @@ async def discover_social_profiles_async(job_id: str) -> dict:
             # Run discovery using adapter (this will take time)
             prospects = await adapter.discover(adapter_params, db)
             
-            # QUALIFICATION RULES: Filter profiles at discovery time
-            # Requirements:
-            # - Followers ≥ 1,000
-            # - Engagement rate ≥ platform minimum
+            # ACCEPTANCE & FILTERING RULES
+            # Requirements for eligibility (not for saving):
+            # - follower_count >= 1000 OR engagement_rate >= 1000 (if calculable)
+            # All profiles are saved, but eligibility controls pipeline actions
             MIN_FOLLOWERS = 1000
-            PLATFORM_MIN_ENGAGEMENT_RATES = {
-                'linkedin': 1.0,    # 1% minimum engagement rate
-                'instagram': 2.0,   # 2% minimum engagement rate
-                'facebook': 1.5,    # 1.5% minimum engagement rate
-                'tiktok': 3.0,      # 3% minimum engagement rate
-            }
+            MIN_ENGAGEMENT = 1000  # For engagement-based eligibility
             
-            min_engagement_rate = PLATFORM_MIN_ENGAGEMENT_RATES.get(platform, 1.0)
             qualified_count = 0
-            disqualified_count = 0
+            ineligible_count = 0
             
-            # Save only qualified prospects to database
+            # Save ALL profiles to database (do not filter out)
+            # Eligibility is checked at API/UI level, not at discovery time
             saved_count = 0
             for prospect in prospects:
-                # Check qualification rules
+                # Check eligibility (for reporting only, not filtering)
                 follower_count = prospect.follower_count or 0
                 engagement_rate = float(prospect.engagement_rate) if prospect.engagement_rate else 0.0
                 
-                # Filter out unqualified profiles
-                if follower_count < MIN_FOLLOWERS:
-                    disqualified_count += 1
-                    logger.debug(f"⚠️  [SOCIAL DISCOVERY] Profile {prospect.username} disqualified: {follower_count} followers < {MIN_FOLLOWERS}")
-                    continue
+                is_eligible = (follower_count >= MIN_FOLLOWERS) or (engagement_rate >= MIN_ENGAGEMENT)
                 
-                if engagement_rate < min_engagement_rate:
-                    disqualified_count += 1
-                    logger.debug(f"⚠️  [SOCIAL DISCOVERY] Profile {prospect.username} disqualified: {engagement_rate}% engagement < {min_engagement_rate}%")
-                    continue
+                if is_eligible:
+                    qualified_count += 1
+                else:
+                    ineligible_count += 1
+                    logger.debug(f"⚠️  [SOCIAL DISCOVERY] Profile {prospect.username} ineligible: {follower_count} followers, {engagement_rate}% engagement")
                 
-                # Profile is qualified - save it
-                qualified_count += 1
+                # Save ALL profiles regardless of eligibility
                 # Ensure source_type is set
                 prospect.source_type = 'social'
                 prospect.source_platform = platform
@@ -144,7 +135,7 @@ async def discover_social_profiles_async(job_id: str) -> dict:
                 db.add(prospect)
                 saved_count += 1
             
-            logger.info(f"📊 [SOCIAL DISCOVERY] Qualification results: {qualified_count} qualified, {disqualified_count} disqualified out of {len(prospects)} total")
+            logger.info(f"📊 [SOCIAL DISCOVERY] Eligibility results: {qualified_count} eligible, {ineligible_count} ineligible out of {saved_count} saved profiles")
             
             await db.commit()
             

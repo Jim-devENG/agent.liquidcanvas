@@ -279,15 +279,19 @@ async def list_profiles(
                     "username": p.username or "",
                     "full_name": p.display_name or "",
                     "profile_url": p.profile_url or "",
-                    "bio": p.page_title or "",  # Use page_title for bio
+                    "bio": p.bio_text or p.page_title or "",  # Use bio_text if available, fallback to page_title
                     "followers_count": p.follower_count or 0,
                     "location": p.discovery_location or "",
                     "category": p.discovery_category or "",
                     "engagement_score": float(p.engagement_rate) if p.engagement_rate else 0.0,
                     "contact_email": p.contact_email or "",  # Include email if scraped
+                    "external_links": p.external_links or [],  # Link-in-bio URLs
+                    "scraped_at": p.scraped_at.isoformat() if p.scraped_at else None,
                     "discovery_status": p.discovery_status or "DISCOVERED",
                     "outreach_status": p.outreach_status or "pending",
                     "created_at": p.created_at.isoformat() if p.created_at else None,
+                    # Eligibility: follower_count >= 1000 OR engagement_rate >= 1000 (if calculable)
+                    "is_eligible": (p.follower_count or 0) >= 1000 or (float(p.engagement_rate) if p.engagement_rate else 0) >= 1000,
                 }
                 for p in prospects
             ],
