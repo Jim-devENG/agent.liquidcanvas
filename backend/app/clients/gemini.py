@@ -238,13 +238,24 @@ You can:
 - Ensure Liquid Canvas is clearly introduced
 - Match the recipient's role/organization type
 
-OPTIONAL DRAFT SUGGESTION:
-If you want to suggest a complete rewrite of the draft, wrap it in these exact markers:
+DRAFT SUGGESTION (IMPORTANT):
+When the user asks you to:
+- "regenerate" or "regenerate the draft"
+- "rewrite" or "rewrite the draft"
+- "create a new version" or "generate a new draft"
+- "make it better" or "improve the draft"
+- Or any similar request to create/update the draft
+
+You MUST provide a complete draft suggestion wrapped in these exact markers:
 
 --- DRAFT SUGGESTION ---
 Subject: [your suggested subject line]
 Body: [your suggested body text]
 --- END DRAFT SUGGESTION ---
+
+For other conversational requests (questions, clarifications, explanations), respond conversationally without the draft markers.
+
+IMPORTANT: If the user's request implies they want a new or improved draft, ALWAYS include the draft suggestion markers.
 
 Draft suggestions are OPTIONAL. Only include them if you think a full rewrite would be helpful. Most responses should be conversational guidance without draft markers."""
         
