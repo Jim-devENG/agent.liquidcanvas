@@ -91,6 +91,8 @@ export default function SocialDiscoveredProfilesTable() {
       // Refresh pipeline status
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+        // Also trigger a refresh for Social Leads tab
+        window.dispatchEvent(new CustomEvent('refreshSocialLeads'))
       }
       
       // Poll for updates (scraping happens in background)

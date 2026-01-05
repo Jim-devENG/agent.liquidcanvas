@@ -292,6 +292,19 @@ async def list_profiles(
             logger.warning(f"⚠️  [SOCIAL PROFILES] Query returned 0 profiles but total count is {total} - possible pagination issue")
         else:
             logger.warning(f"⚠️  [SOCIAL PROFILES] No profiles found with filters: platform={platform}, discovery_status={discovery_status}")
+            # Additional debug: Check what approval_status values actually exist
+            if discovery_status and discovery_status.lower() in ['leads', 'approved']:
+                from sqlalchemy import text
+                debug_query = text("""
+                    SELECT approval_status, COUNT(*) as count
+                    FROM prospects
+                    WHERE source_type = 'social'
+                    AND discovery_status = 'DISCOVERED'
+                    GROUP BY approval_status
+                """)
+                debug_result = await db.execute(debug_query)
+                debug_data = debug_result.fetchall()
+                logger.warning(f"⚠️  [SOCIAL PROFILES] Approval status breakdown for DISCOVERED profiles: {dict(debug_data)}")
         
         response_data = {
             "data": [
