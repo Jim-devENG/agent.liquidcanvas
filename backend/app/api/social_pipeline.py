@@ -402,9 +402,11 @@ async def review_profiles(
         # Map action to approval_status (reuse website logic)
         if request.action == "qualify":
             # Qualify = approve (same as website outreach)
+            # When qualifying, trigger scraping to get real follower counts, engagement rates, and emails
             for prospect in prospects:
                 prospect.approval_status = "approved"
                 updated_count += 1
+                logger.info(f"🔍 [SOCIAL PIPELINE STAGE 2] Qualifying profile {prospect.id}, will trigger scraping")
         else:
             # Reject = rejected
             for prospect in prospects:
@@ -413,13 +415,74 @@ async def review_profiles(
         
         await db.commit()
         
+        # If qualifying, trigger scraping in background to get real data
+        if request.action == "qualify":
+            # Import here to avoid circular imports
+            from app.services.social_profile_scraper import scrape_social_profile
+            import asyncio
+            
+            async def scrape_profiles_background():
+                """Scrape profiles in background to get real follower counts, engagement rates, and emails"""
+                async with AsyncSessionLocal() as scrape_db:
+                    try:
+                        for prospect in prospects:
+                            if prospect.approval_status == "approved" and prospect.profile_url and prospect.source_platform:
+                                try:
+                                    # Re-fetch prospect in new session
+                                    result = await scrape_db.execute(
+                                        select(Prospect).where(Prospect.id == prospect.id)
+                                    )
+                                    prospect_to_update = result.scalar_one_or_none()
+                                    if not prospect_to_update:
+                                        continue
+                                    
+                                    logger.info(f"🔍 [SOCIAL SCRAPE] Scraping {prospect_to_update.source_platform} profile: {prospect_to_update.profile_url}")
+                                    scrape_result = await scrape_social_profile(
+                                        prospect_to_update.profile_url,
+                                        prospect_to_update.source_platform
+                                    )
+                                    
+                                    if scrape_result.get("success"):
+                                        # Update prospect with real data
+                                        if scrape_result.get("follower_count"):
+                                            prospect_to_update.follower_count = scrape_result["follower_count"]
+                                        if scrape_result.get("engagement_rate"):
+                                            prospect_to_update.engagement_rate = scrape_result["engagement_rate"]
+                                        if scrape_result.get("email"):
+                                            prospect_to_update.contact_email = scrape_result["email"]
+                                            prospect_to_update.contact_method = "profile_scraping"
+                                        
+                                        # Update scrape status
+                                        if scrape_result.get("email"):
+                                            prospect_to_update.scrape_status = "SCRAPED"
+                                        else:
+                                            prospect_to_update.scrape_status = "NO_EMAIL_FOUND"
+                                        
+                                        await scrape_db.commit()
+                                        logger.info(f"✅ [SOCIAL SCRAPE] Updated profile {prospect_to_update.id} with real data: followers={prospect_to_update.follower_count}, engagement={prospect_to_update.engagement_rate}, email={prospect_to_update.contact_email}")
+                                    else:
+                                        logger.warning(f"⚠️  [SOCIAL SCRAPE] Failed to scrape {prospect_to_update.profile_url}: {scrape_result.get('error')}")
+                                        # Mark as attempted but failed
+                                        prospect_to_update.scrape_status = "NO_EMAIL_FOUND"
+                                        await scrape_db.commit()
+                                except Exception as scrape_err:
+                                    logger.error(f"❌ [SOCIAL SCRAPE] Error scraping profile {prospect.id}: {scrape_err}", exc_info=True)
+                                    continue
+                    except Exception as bg_err:
+                        logger.error(f"❌ [SOCIAL SCRAPE] Background scraping error: {bg_err}", exc_info=True)
+            
+            # Start background scraping task
+            from app.db.database import AsyncSessionLocal
+            asyncio.create_task(scrape_profiles_background())
+            logger.info(f"🚀 [SOCIAL PIPELINE STAGE 2] Started background scraping for {len(prospects)} profiles")
+        
         logger.info(f"✅ [SOCIAL PIPELINE STAGE 2] Updated {updated_count} profiles: {request.action}")
         
         return {
             "success": True,
             "updated": updated_count,
             "action": request.action,
-            "message": f"Updated {updated_count} profile(s) - {request.action}"
+            "message": f"Updated {updated_count} profile(s) - {request.action}" + (" (scraping started in background)" if request.action == "qualify" else "")
         }
         
     except Exception as e:
