@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright browsers for social media scraping
+RUN pip install playwright && \
+    playwright install chromium && \
+    playwright install-deps chromium || true
+
 # Copy application code
 COPY . .
 
