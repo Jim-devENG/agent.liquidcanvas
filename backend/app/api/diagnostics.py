@@ -69,7 +69,7 @@ async def get_database_state(
             'source_type', 'source_platform', 'approval_status',
             'discovery_status', 'scrape_status', 'discovery_query_id',
             'profile_url', 'username', 'display_name', 'follower_count',
-            'engagement_rate'
+            'engagement_rate', 'bio_text', 'external_links', 'scraped_at'
         ]
         column_names = {col["name"] for col in columns}
         results["critical_columns_present"] = {
@@ -98,6 +98,142 @@ async def get_database_state(
         
     except Exception as e:
         logger.error(f"❌ [DIAGNOSTICS] Error getting database state: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Diagnostic query failed: {str(e)}")
+
+
+@router.get("/test-pipeline-queries")
+async def test_pipeline_queries(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    STEP 5: Test pipeline queries directly to identify the mismatch
+    
+    Returns:
+    - Raw SQL query results
+    - ORM query results
+    - Comparison showing where the mismatch occurs
+    """
+    try:
+        results = {}
+        
+        # Test 1: Simple COUNT
+        count_all = await db.execute(text("SELECT COUNT(*) FROM prospects"))
+        results["count_all"] = count_all.scalar() or 0
+        
+        # Test 2: COUNT with discovery_status filter
+        count_discovered = await db.execute(
+            text("SELECT COUNT(*) FROM prospects WHERE discovery_status = 'DISCOVERED'")
+        )
+        results["count_discovered"] = count_discovered.scalar() or 0
+        
+        # Test 3: COUNT with discovery_status + source_type filter
+        count_discovered_website = await db.execute(
+            text("""
+                SELECT COUNT(*) FROM prospects 
+                WHERE discovery_status = 'DISCOVERED'
+                AND (source_type = 'website' OR source_type IS NULL)
+            """)
+        )
+        results["count_discovered_website"] = count_discovered_website.scalar() or 0
+        
+        # Test 4: SELECT with discovery_status (no source_type filter) - what /api/pipeline/websites uses
+        select_discovered = await db.execute(
+            text("""
+                SELECT id, domain, page_url, discovery_status, source_type, source_platform
+                FROM prospects 
+                WHERE discovery_status = 'DISCOVERED'
+                LIMIT 10
+            """)
+        )
+        rows_discovered = select_discovered.fetchall()
+        results["select_discovered_count"] = len(rows_discovered)
+        results["select_discovered_sample"] = [
+            {
+                "id": str(row[0]),
+                "domain": row[1],
+                "page_url": row[2],
+                "discovery_status": row[3],
+                "source_type": row[4],
+                "source_platform": row[5]
+            }
+            for row in rows_discovered[:5]
+        ]
+        
+        # Test 5: SELECT with scrape_status filter (what /api/prospects/leads uses)
+        count_scraped = await db.execute(
+            text("""
+                SELECT COUNT(*) FROM prospects 
+                WHERE scrape_status IN ('SCRAPED', 'ENRICHED')
+                AND (source_type = 'website' OR source_type IS NULL)
+            """)
+        )
+        results["count_scraped_website"] = count_scraped.scalar() or 0
+        
+        select_scraped = await db.execute(
+            text("""
+                SELECT id, domain, scrape_status, source_type
+                FROM prospects 
+                WHERE scrape_status IN ('SCRAPED', 'ENRICHED')
+                AND (source_type = 'website' OR source_type IS NULL)
+                LIMIT 10
+            """)
+        )
+        rows_scraped = select_scraped.fetchall()
+        results["select_scraped_count"] = len(rows_scraped)
+        results["select_scraped_sample"] = [
+            {
+                "id": str(row[0]),
+                "domain": row[1],
+                "scrape_status": row[2],
+                "source_type": row[3]
+            }
+            for row in rows_scraped[:5]
+        ]
+        
+        # Test 6: Check source_type distribution
+        source_type_dist = await db.execute(
+            text("""
+                SELECT source_type, COUNT(*) as count
+                FROM prospects
+                GROUP BY source_type
+            """)
+        )
+        results["source_type_distribution"] = {
+            str(row[0]) if row[0] else 'NULL': row[1] 
+            for row in source_type_dist.fetchall()
+        }
+        
+        # Test 7: Check discovery_status distribution
+        discovery_status_dist = await db.execute(
+            text("""
+                SELECT discovery_status, COUNT(*) as count
+                FROM prospects
+                GROUP BY discovery_status
+            """)
+        )
+        results["discovery_status_distribution"] = {
+            str(row[0]) if row[0] else 'NULL': row[1] 
+            for row in discovery_status_dist.fetchall()
+        }
+        
+        # Test 8: Check scrape_status distribution
+        scrape_status_dist = await db.execute(
+            text("""
+                SELECT scrape_status, COUNT(*) as count
+                FROM prospects
+                GROUP BY scrape_status
+            """)
+        )
+        results["scrape_status_distribution"] = {
+            str(row[0]) if row[0] else 'NULL': row[1] 
+            for row in scrape_status_dist.fetchall()
+        }
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"❌ [DIAGNOSTICS] Error testing pipeline queries: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Diagnostic query failed: {str(e)}")
 
 
@@ -147,7 +283,7 @@ async def get_alembic_state(
             SELECT table_name
             FROM information_schema.tables
             WHERE table_schema = 'public'
-            AND table_name LIKE '%migration%' OR table_name LIKE '%alembic%'
+            AND (table_name LIKE '%migration%' OR table_name LIKE '%alembic%')
             ORDER BY table_name
         """))
         results["migration_artifacts"] = [row[0] for row in migration_artifacts.fetchall()]
@@ -378,6 +514,7 @@ async def get_full_forensics(
         all_tables = await get_all_tables(db, current_user)
         overview_source = await get_overview_data_source(db, current_user)
         db_identity = await get_database_identity(db, current_user)
+        test_queries = await test_pipeline_queries(db, current_user)
         
         # Classify incident
         classification = classify_incident(db_state, alembic_state, all_tables, overview_source)
@@ -388,6 +525,7 @@ async def get_full_forensics(
             "all_tables": all_tables,
             "overview_data_source": overview_source,
             "database_identity": db_identity,
+            "test_pipeline_queries": test_queries,
             "incident_classification": classification
         }
         
@@ -415,7 +553,7 @@ def classify_incident(db_state: Dict, alembic_state: Dict, all_tables: Dict, ove
         # Check if there are suspicious tables with data
         table_counts = all_tables.get("table_row_counts", {})
         for table, count in table_counts.items():
-            if isinstance(count, int) and count > 0 and 'old' in table.lower() or 'backup' in table.lower():
+            if isinstance(count, int) and count > 0 and ('old' in table.lower() or 'backup' in table.lower()):
                 classification["case"] = "A"
                 classification["evidence"].append(f"Table {table} has {count} rows but prospects is empty")
                 classification["root_cause"] = "Backend connected to wrong database instance"
@@ -459,4 +597,3 @@ def classify_incident(db_state: Dict, alembic_state: Dict, all_tables: Dict, ove
     classification["recovery_plan"] = "Review all diagnostic endpoints manually"
     
     return classification
-

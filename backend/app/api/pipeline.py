@@ -1312,8 +1312,10 @@ async def get_websites(
                         ORDER BY created_at DESC
                         LIMIT :limit OFFSET :skip
                     """)
+                    logger.info(f"🔍 [WEBSITES FALLBACK] Executing fallback query with limit={limit}, skip={skip}")
                     fallback_result = await db.execute(fallback_query, {"limit": limit, "skip": skip})
                     rows = fallback_result.fetchall()
+                    logger.info(f"📊 [WEBSITES FALLBACK] Fallback query returned {len(rows)} rows")
                     # Convert rows to Prospect-like objects
                     column_names = ['id', 'domain', 'page_url', 'page_title', 'contact_email', 'contact_method', 'da_est', 'score',
                                    'discovery_status', 'scrape_status', 'approval_status', 'verification_status', 'draft_status', 'send_status',
@@ -1343,9 +1345,11 @@ async def get_websites(
                     logger.info(f"📊 [WEBSITES] FALLBACK QUERY RESULT: Found {len(websites)} websites using fallback query (total available: {total})")
                 except Exception as fallback_err:
                     logger.error(f"❌ [WEBSITES] Fallback query also failed: {fallback_err}", exc_info=True)
-                    # Return empty results instead of crashing
+                    # CRITICAL: If fallback fails, we must either fix total or raise error
+                    # Setting total=0 prevents data integrity violation
+                    total = 0
                     websites = []
-                    logger.warning(f"⚠️  [WEBSITES] Returning empty results due to fallback query failure")
+                    logger.warning(f"⚠️  [WEBSITES] Fallback query failed, setting total=0 to prevent data integrity violation. Error: {fallback_err}")
             else:
                 # Re-raise if it's a different error
                 logger.error(f"❌ [WEBSITES] Query failed: {query_err}", exc_info=True)

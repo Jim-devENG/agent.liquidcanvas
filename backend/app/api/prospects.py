@@ -821,9 +821,11 @@ async def list_leads(
                     logger.info(f"📊 [LEADS] FALLBACK QUERY RESULT: Found {len(prospects)} prospects using fallback query (total available: {total})")
                 except Exception as fallback_err:
                     logger.error(f"❌ [LEADS] Fallback query also failed: {fallback_err}", exc_info=True)
-                    # Return empty results instead of crashing
+                    # CRITICAL: If fallback fails, we must either fix total or raise error
+                    # Setting total=0 prevents data integrity violation
+                    total = 0
                     prospects = []
-                    logger.warning(f"⚠️  [LEADS] Returning empty results due to fallback query failure")
+                    logger.warning(f"⚠️  [LEADS] Fallback query failed, setting total=0 to prevent data integrity violation. Error: {fallback_err}")
             else:
                 # Re-raise if it's a different error
                 logger.error(f"❌ [LEADS] Query failed: {query_err}", exc_info=True)
@@ -1092,9 +1094,11 @@ async def list_scraped_emails(
                     logger.info(f"📊 [SCRAPED EMAILS] FALLBACK QUERY RESULT: Found {len(prospects)} prospects using fallback query (total available: {total})")
                 except Exception as fallback_err:
                     logger.error(f"❌ [SCRAPED EMAILS] Fallback query also failed: {fallback_err}", exc_info=True)
-                    # Return empty results instead of crashing
+                    # CRITICAL: If fallback fails, we must either fix total or raise error
+                    # Setting total=0 prevents data integrity violation
+                    total = 0
                     prospects = []
-                    logger.warning(f"⚠️  [SCRAPED EMAILS] Returning empty results due to fallback query failure")
+                    logger.warning(f"⚠️  [SCRAPED EMAILS] Fallback query failed, setting total=0 to prevent data integrity violation. Error: {fallback_err}")
             else:
                 # Re-raise if it's a different error
                 raise
