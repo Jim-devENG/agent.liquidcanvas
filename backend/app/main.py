@@ -371,6 +371,21 @@ async def startup():
                     logger.info("✅ Database schema matches ORM models exactly")
                     logger.info("=" * 60)
                     
+                    # Additional schema consistency check (non-fatal, logs warning)
+                    try:
+                        from app.utils.schema_validator import get_full_schema_diagnostics
+                        diagnostics = await get_full_schema_diagnostics(engine)
+                        if not diagnostics.get("schema_match", False):
+                            logger.warning("=" * 80)
+                            logger.warning("⚠️  SCHEMA MISMATCH DETECTED (non-fatal)")
+                            logger.warning(f"⚠️  Missing columns: {', '.join(diagnostics.get('missing_columns', []))}")
+                            logger.warning("⚠️  This may cause query failures - ensure migrations have run")
+                            logger.warning("=" * 80)
+                        else:
+                            logger.info("✅ Schema consistency check passed - model columns match database")
+                    except Exception as diag_err:
+                        logger.warning(f"⚠️  Could not run schema diagnostics: {diag_err}")
+                    
                 except SystemExit:
                     raise  # Re-raise system exit
                 except Exception as validation_err:

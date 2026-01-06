@@ -7,7 +7,8 @@ matches the ORM models exactly. Any mismatch causes a hard failure.
 import logging
 from typing import Dict, List, Set
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
+from app.db.database import Base
 
 logger = logging.getLogger(__name__)
 
@@ -188,3 +189,119 @@ async def validate_alembic_version_table(db: AsyncSession) -> Dict:
         logger.error(f"❌ {error_msg}")
         logger.error("=" * 80)
         raise Exception(error_msg) from e
+
+
+async def get_full_schema_diagnostics(engine: AsyncEngine) -> Dict:
+    """
+    Get comprehensive schema diagnostics comparing database to ORM models.
+    
+    Args:
+        engine: AsyncEngine instance from app.db.database
+        
+    Returns:
+        JSON-serializable dict containing:
+        - alembic_revision: Current Alembic revision from alembic_version table
+        - database_name: Name of the connected database
+        - db_columns: List of columns in prospects table (from information_schema)
+        - model_columns: List of columns defined in Prospect model
+        - schema_match: Boolean indicating if model columns ⊆ db columns
+        - status: "ok" or "error"
+        - all_tables_valid: Boolean indicating if all required tables exist
+    """
+    try:
+        async with engine.begin() as conn:
+            diagnostics = {
+                "status": "ok",
+                "alembic_revision": None,
+                "database_name": None,
+                "db_columns": [],
+                "model_columns": [],
+                "schema_match": False,
+                "all_tables_valid": False,
+                "missing_columns": [],
+                "extra_columns": []
+            }
+            
+            # Get database name
+            try:
+                db_info_result = await conn.execute(text("SELECT current_database()"))
+                db_name = db_info_result.scalar()
+                diagnostics["database_name"] = db_name
+            except Exception as e:
+                logger.warning(f"Could not get database name: {e}")
+            
+            # Get Alembic revision
+            try:
+                version_result = await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+                version_row = version_result.fetchone()
+                if version_row:
+                    diagnostics["alembic_revision"] = version_row[0]
+            except Exception as e:
+                logger.warning(f"Could not get Alembic revision: {e}")
+            
+            # Get actual database columns from information_schema
+            try:
+                columns_result = await conn.execute(text("""
+                    SELECT column_name, data_type, is_nullable
+                    FROM information_schema.columns 
+                    WHERE table_name = 'prospects' 
+                    AND table_schema = 'public'
+                    ORDER BY column_name
+                """))
+                db_columns = [row[0] for row in columns_result.fetchall()]
+                diagnostics["db_columns"] = db_columns
+            except Exception as e:
+                logger.error(f"Could not get database columns: {e}")
+                diagnostics["status"] = "error"
+                diagnostics["error"] = f"Failed to read database columns: {str(e)}"
+                return diagnostics
+            
+            # Get model-defined columns from Base.metadata
+            try:
+                if "prospects" in Base.metadata.tables:
+                    prospects_table = Base.metadata.tables["prospects"]
+                    model_columns = [col.name for col in prospects_table.columns]
+                    diagnostics["model_columns"] = model_columns
+                else:
+                    logger.warning("prospects table not found in Base.metadata.tables")
+                    # Fallback: use REQUIRED_PROSPECT_COLUMNS
+                    diagnostics["model_columns"] = sorted(REQUIRED_PROSPECT_COLUMNS)
+            except Exception as e:
+                logger.error(f"Could not get model columns: {e}")
+                # Fallback: use REQUIRED_PROSPECT_COLUMNS
+                diagnostics["model_columns"] = sorted(REQUIRED_PROSPECT_COLUMNS)
+            
+            # Compare: model columns must be subset of db columns
+            db_columns_set = set(db_columns)
+            model_columns_set = set(diagnostics["model_columns"])
+            
+            missing_columns = model_columns_set - db_columns_set
+            extra_columns = db_columns_set - model_columns_set
+            
+            diagnostics["missing_columns"] = sorted(missing_columns)
+            diagnostics["extra_columns"] = sorted(extra_columns)
+            diagnostics["schema_match"] = len(missing_columns) == 0
+            
+            # Check if all required tables exist
+            try:
+                tables_result = await conn.execute(text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_type = 'BASE TABLE'
+                """))
+                existing_tables = {row[0] for row in tables_result.fetchall()}
+                required_tables = {'prospects', 'jobs', 'email_logs', 'settings', 'discovery_queries', 'alembic_version'}
+                diagnostics["all_tables_valid"] = required_tables.issubset(existing_tables)
+            except Exception as e:
+                logger.warning(f"Could not check required tables: {e}")
+            
+            return diagnostics
+            
+    except Exception as e:
+        logger.error(f"Schema diagnostics failed: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "error": str(e),
+            "message": "Could not get schema diagnostics"
+        }
