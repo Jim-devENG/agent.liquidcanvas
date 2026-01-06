@@ -787,26 +787,54 @@ async def startup():
     # CRITICAL: Run migrations BLOCKING - server won't accept requests until migrations complete
     # This ensures schema is ready before any API calls
     logger.info("⏳ Waiting for database migrations to complete...")
-    logger.info("📝 Alembic upgrade head runs automatically on every startup")
+    # Smart auto-migrate: Check schema first, then decide if migrations needed
+    if auto_migrate is None:  # Smart mode - check schema first
+        logger.info("🔍 Smart auto-migrate: Checking schema state...")
+        try:
+            # Quick schema check - see if bio_text column exists
+            from sqlalchemy import create_engine, text
+            database_url = os.getenv("DATABASE_URL")
+            if database_url:
+                sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://") if database_url.startswith("postgresql+asyncpg://") else database_url
+                sync_engine = create_engine(sync_url, pool_pre_ping=True)
+                try:
+                    with sync_engine.connect() as conn:
+                        # Check if bio_text column exists (indicator of schema mismatch)
+                        column_check = conn.execute(text("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'prospects' 
+                            AND column_name = 'bio_text'
+                        """))
+                        bio_text_exists = column_check.fetchone() is not None
+                        
+                        if not bio_text_exists:
+                            logger.warning("=" * 80)
+                            logger.warning("⚠️  Schema mismatch detected: bio_text column missing")
+                            logger.warning("🔄 Smart auto-migrate: Running migrations automatically...")
+                            logger.warning("=" * 80)
+                            auto_migrate = True  # Enable migrations for this startup
+                        else:
+                            logger.info("✅ Schema check passed - all required columns exist")
+                            auto_migrate = False  # No migrations needed
+                finally:
+                    sync_engine.dispose()
+            else:
+                logger.warning("⚠️  DATABASE_URL not set - skipping smart auto-migrate check")
+                auto_migrate = False
+        except Exception as schema_check_err:
+            logger.warning(f"⚠️  Could not check schema state: {schema_check_err}")
+            logger.warning("⚠️  Skipping smart auto-migrate - run migrations manually if needed")
+            auto_migrate = False
     
-    # Run migrations - log errors but don't exit
-    # Allow app to start even if migrations have issues (they can be fixed manually)
-    migration_success = False
-    try:
-        await run_database_setup()
-        logger.info("✅ Database migrations completed")
-        migration_success = True
-    except Exception as migration_error:
-        logger.error("=" * 80)
-        logger.error("❌ CRITICAL: Database migrations failed during startup")
-        logger.error(f"❌ Error: {migration_error}")
-        logger.error("=" * 80)
-        logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
-        logger.error("⚠️  Some features may not work until migrations are fixed")
-        logger.error("⚠️  Run 'alembic upgrade head' manually to fix")
-        logger.error("=" * 80)
-        # Log error but don't exit - allow app to start
-        migration_success = False
+    # Run migrations if AUTO_MIGRATE is enabled (explicitly or via smart mode)
+    if auto_migrate:
+        try:
+            await run_migrations_safely()
+            logger.info("✅ Database migrations completed")
+        except Exception as migration_err:
+            logger.error(f"❌ Migration execution failed: {migration_err}")
+            # Continue to start app even if migrations fail
     
     # Validate website tables exist after migrations
     # Social outreach now uses prospects table, so no separate validation needed
