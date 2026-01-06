@@ -789,8 +789,10 @@ async def list_leads(
                         ORDER BY created_at DESC
                         LIMIT :limit OFFSET :skip
                     """)
+                    logger.info(f"🔍 [LEADS FALLBACK] Executing fallback query with limit={limit}, skip={skip}")
                     fallback_result = await db.execute(fallback_query, {"limit": limit, "skip": skip})
                     rows = fallback_result.fetchall()
+                    logger.info(f"📊 [LEADS FALLBACK] Fallback query returned {len(rows)} rows")
                     # Convert rows to Prospect-like objects
                     prospects = []
                     column_names = ['id', 'domain', 'page_url', 'page_title', 'contact_email', 'contact_method', 'da_est', 'score',
@@ -1062,8 +1064,10 @@ async def list_scraped_emails(
                         ORDER BY created_at DESC
                         LIMIT :limit OFFSET :skip
                     """)
+                    logger.info(f"🔍 [SCRAPED EMAILS FALLBACK] Executing fallback query with limit={limit}, skip={skip}")
                     fallback_result = await db.execute(fallback_query, {"limit": limit, "skip": skip})
                     rows = fallback_result.fetchall()
+                    logger.info(f"📊 [SCRAPED EMAILS FALLBACK] Fallback query returned {len(rows)} rows")
                     # Convert rows to Prospect-like objects
                     prospects = []
                     column_names = ['id', 'domain', 'page_url', 'page_title', 'contact_email', 'contact_method', 'da_est', 'score',
