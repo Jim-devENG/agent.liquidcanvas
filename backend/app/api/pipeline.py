@@ -1380,6 +1380,11 @@ async def get_websites(
                 # Skip this prospect but continue with others
                 continue
         
+        # CRITICAL: If we have websites but no data after conversion, set total=0
+        if len(websites) > 0 and len(data) == 0:
+            logger.error(f"❌ [WEBSITES] CRITICAL: Query returned {len(websites)} websites but all conversions failed! This indicates a schema mismatch. Setting total=0 to prevent data integrity violation.")
+            total = 0
+        
         logger.info(f"✅ [WEBSITES] Returning {len(data)} websites (total: {total})")
         logger.info(f"📊 [WEBSITES] Response structure: data length={len(data)}, total={total}, skip={skip}, limit={limit}")
         
