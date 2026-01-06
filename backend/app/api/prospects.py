@@ -922,6 +922,11 @@ async def list_leads(
         logger.info(f"✅ [LEADS] Returning {len(prospect_responses)} leads (total: {total})")
         logger.info(f"📊 [LEADS] Response structure: data length={len(prospect_responses)}, total={total}, skip={skip}, limit={limit}")
         
+        # CRITICAL: Check if we have prospects but no responses (conversion failed)
+        if len(prospects) > 0 and len(prospect_responses) == 0:
+            logger.error(f"❌ [LEADS] CRITICAL: Query returned {len(prospects)} prospects but all conversions failed! This indicates a schema mismatch. Setting total=0 to prevent data integrity violation.")
+            total = 0
+        
         # Convert to dicts safely
         data_dicts = []
         for p in prospect_responses:
@@ -936,6 +941,11 @@ async def list_leads(
             except Exception as e:
                 logger.error(f"❌ Error converting prospect response to dict: {e}")
                 continue
+        
+        # CRITICAL: Final check - if we have responses but dict conversion failed
+        if len(prospect_responses) > 0 and len(data_dicts) == 0:
+            logger.error(f"❌ [LEADS] CRITICAL: Had {len(prospect_responses)} responses but all dict conversions failed! Setting total=0 to prevent data integrity violation.")
+            total = 0
         
         # Log first few items for debugging
         if len(data_dicts) > 0:
