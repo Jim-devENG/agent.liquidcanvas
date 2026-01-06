@@ -1296,50 +1296,56 @@ async def get_websites(
             error_str = str(query_err).lower()
             if 'bio_text' in error_str or 'external_links' in error_str or 'scraped_at' in error_str:
                 logger.warning(f"⚠️  [WEBSITES] Missing columns detected (bio_text/external_links/scraped_at). Migration add_realtime_scraping_fields not applied. Using fallback query.")
-                # Use raw SQL query that excludes missing columns
-                fallback_query = text("""
-                    SELECT id, domain, page_url, page_title, contact_email, contact_method, da_est, score,
-                           discovery_status, scrape_status, approval_status, verification_status, draft_status, send_status,
-                           stage, outreach_status, last_sent, followups_sent, draft_subject, draft_body, final_body,
-                           thread_id, sequence_index, is_manual, discovery_query_id, discovery_category, discovery_location,
-                           discovery_keywords, scrape_payload, scrape_source_url, verification_confidence, verification_payload,
-                           dataforseo_payload, snov_payload, serp_intent, serp_confidence, serp_signals,
-                           source_type, source_platform, profile_url, username, display_name, follower_count, engagement_rate,
-                           created_at, updated_at
-                    FROM prospects
-                    WHERE discovery_status = 'DISCOVERED'
-                    ORDER BY created_at DESC
-                    LIMIT :limit OFFSET :skip
-                """)
-                fallback_result = await db.execute(fallback_query, {"limit": limit, "skip": skip})
-                rows = fallback_result.fetchall()
-                # Convert rows to Prospect-like objects
-                column_names = ['id', 'domain', 'page_url', 'page_title', 'contact_email', 'contact_method', 'da_est', 'score',
-                               'discovery_status', 'scrape_status', 'approval_status', 'verification_status', 'draft_status', 'send_status',
-                               'stage', 'outreach_status', 'last_sent', 'followups_sent', 'draft_subject', 'draft_body', 'final_body',
-                               'thread_id', 'sequence_index', 'is_manual', 'discovery_query_id', 'discovery_category', 'discovery_location',
-                               'discovery_keywords', 'scrape_payload', 'scrape_source_url', 'verification_confidence', 'verification_payload',
-                               'dataforseo_payload', 'snov_payload', 'serp_intent', 'serp_confidence', 'serp_signals',
-                               'source_type', 'source_platform', 'profile_url', 'username', 'display_name', 'follower_count', 'engagement_rate',
-                               'created_at', 'updated_at']
-                for row in rows:
-                    try:
-                        # Create a minimal Prospect object from row data
-                        # Access row as tuple or Row object
-                        row_data = tuple(row) if hasattr(row, '__iter__') else row
-                        prospect = Prospect()
-                        for i, col_name in enumerate(column_names):
-                            if i < len(row_data):
-                                try:
-                                    setattr(prospect, col_name, row_data[i])
-                                except Exception as attr_err:
-                                    logger.warning(f"⚠️  [WEBSITES FALLBACK] Could not set {col_name} on prospect: {attr_err}")
-                                    continue
-                        websites.append(prospect)
-                    except Exception as row_err:
-                        logger.error(f"❌ [WEBSITES FALLBACK] Error converting row to Prospect: {row_err}", exc_info=True)
-                        continue
-                logger.info(f"📊 [WEBSITES] FALLBACK QUERY RESULT: Found {len(websites)} websites using fallback query (total available: {total})")
+                try:
+                    # Use raw SQL query that excludes missing columns
+                    fallback_query = text("""
+                        SELECT id, domain, page_url, page_title, contact_email, contact_method, da_est, score,
+                               discovery_status, scrape_status, approval_status, verification_status, draft_status, send_status,
+                               stage, outreach_status, last_sent, followups_sent, draft_subject, draft_body, final_body,
+                               thread_id, sequence_index, is_manual, discovery_query_id, discovery_category, discovery_location,
+                               discovery_keywords, scrape_payload, scrape_source_url, verification_confidence, verification_payload,
+                               dataforseo_payload, snov_payload, serp_intent, serp_confidence, serp_signals,
+                               source_type, source_platform, profile_url, username, display_name, follower_count, engagement_rate,
+                               created_at, updated_at
+                        FROM prospects
+                        WHERE discovery_status = 'DISCOVERED'
+                        ORDER BY created_at DESC
+                        LIMIT :limit OFFSET :skip
+                    """)
+                    fallback_result = await db.execute(fallback_query, {"limit": limit, "skip": skip})
+                    rows = fallback_result.fetchall()
+                    # Convert rows to Prospect-like objects
+                    column_names = ['id', 'domain', 'page_url', 'page_title', 'contact_email', 'contact_method', 'da_est', 'score',
+                                   'discovery_status', 'scrape_status', 'approval_status', 'verification_status', 'draft_status', 'send_status',
+                                   'stage', 'outreach_status', 'last_sent', 'followups_sent', 'draft_subject', 'draft_body', 'final_body',
+                                   'thread_id', 'sequence_index', 'is_manual', 'discovery_query_id', 'discovery_category', 'discovery_location',
+                                   'discovery_keywords', 'scrape_payload', 'scrape_source_url', 'verification_confidence', 'verification_payload',
+                                   'dataforseo_payload', 'snov_payload', 'serp_intent', 'serp_confidence', 'serp_signals',
+                                   'source_type', 'source_platform', 'profile_url', 'username', 'display_name', 'follower_count', 'engagement_rate',
+                                   'created_at', 'updated_at']
+                    for row in rows:
+                        try:
+                            # Create a minimal Prospect object from row data
+                            # Access row as tuple or Row object
+                            row_data = tuple(row) if hasattr(row, '__iter__') else row
+                            prospect = Prospect()
+                            for i, col_name in enumerate(column_names):
+                                if i < len(row_data):
+                                    try:
+                                        setattr(prospect, col_name, row_data[i])
+                                    except Exception as attr_err:
+                                        logger.warning(f"⚠️  [WEBSITES FALLBACK] Could not set {col_name} on prospect: {attr_err}")
+                                        continue
+                            websites.append(prospect)
+                        except Exception as row_err:
+                            logger.error(f"❌ [WEBSITES FALLBACK] Error converting row to Prospect: {row_err}", exc_info=True)
+                            continue
+                    logger.info(f"📊 [WEBSITES] FALLBACK QUERY RESULT: Found {len(websites)} websites using fallback query (total available: {total})")
+                except Exception as fallback_err:
+                    logger.error(f"❌ [WEBSITES] Fallback query also failed: {fallback_err}", exc_info=True)
+                    # Return empty results instead of crashing
+                    websites = []
+                    logger.warning(f"⚠️  [WEBSITES] Returning empty results due to fallback query failure")
             else:
                 # Re-raise if it's a different error
                 logger.error(f"❌ [WEBSITES] Query failed: {query_err}", exc_info=True)
