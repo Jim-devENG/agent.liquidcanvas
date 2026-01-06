@@ -182,34 +182,9 @@ async def list_profiles(
     try:
         logger.info(f"📊 [SOCIAL PROFILES] Request: skip={skip}, limit={limit}, platform={platform}, discovery_status={discovery_status}")
         
-        # CRITICAL: Check if source_type column exists before using it
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception as check_err:
-            logger.warning(f"⚠️  [SOCIAL PROFILES] Could not check for source_type column: {check_err}")
-            column_exists = False
-        
-        if not column_exists:
-            logger.warning("⚠️  [SOCIAL PROFILES] source_type column does not exist - migration not applied")
-            logger.warning("⚠️  [SOCIAL PROFILES] Returning empty list - migration add_social_columns_to_prospects needs to run")
-            return {
-                "data": [],
-                "total": 0,
-                "skip": skip,
-                "limit": limit,
-                "status": "inactive",
-                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
-            }
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, the query will fail loudly with HTTP 500
+        # This is intentional - schema mismatches must be fixed, not silently ignored
         
         # Base filter: only social prospects
         query = select(Prospect).where(Prospect.source_type == 'social')
