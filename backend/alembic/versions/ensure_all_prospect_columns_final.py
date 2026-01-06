@@ -20,7 +20,9 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = 'ensure_all_prospect_columns_final'
-down_revision = 'add_realtime_scraping_fields'  # Chain after realtime scraping fields
+# Try to chain after add_social_columns_to_prospects (which has down_revision = 'add_pipeline_status_fields')
+# If that doesn't exist, Alembic will find the correct parent
+down_revision = 'add_social_columns_to_prospects'  # Chain after social columns migration
 branch_labels = None
 depends_on = None
 
