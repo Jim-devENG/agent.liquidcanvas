@@ -1026,7 +1026,7 @@ async def list_scraped_emails(
             if 'bio_text' in error_str or 'external_links' in error_str or 'scraped_at' in error_str:
                 logger.warning(f"⚠️  [SCRAPED EMAILS] Missing columns detected (bio_text/external_links/scraped_at). Migration add_realtime_scraping_fields not applied. Using fallback query.")
                 # Use raw SQL query that excludes missing columns
-            from sqlalchemy import text
+                from sqlalchemy import text
                 fallback_query = text("""
                     SELECT id, domain, page_url, page_title, contact_email, contact_method, da_est, score,
                            discovery_status, scrape_status, approval_status, verification_status, draft_status, send_status,
