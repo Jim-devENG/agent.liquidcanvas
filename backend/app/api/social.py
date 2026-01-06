@@ -407,30 +407,14 @@ async def list_profiles(
     except HTTPException:
         raise
     except Exception as e:
-        # Check if error is related to missing column
-        error_str = str(e).lower()
-        if 'source_type' in error_str or 'column' in error_str or 'does not exist' in error_str or 'undefinedcolumn' in error_str:
-            logger.warning(f"⚠️  [SOCIAL PROFILES] Database schema error (likely missing columns): {e}")
-            logger.warning("⚠️  [SOCIAL PROFILES] Returning empty list instead of 500")
-            return {
-                "data": [],
-                "total": 0,
-                "skip": skip,
-                "limit": limit,
-                "status": "inactive",
-                "message": "Social outreach columns not initialized. Please run migration: alembic upgrade head"
-            }
-        else:
-            # For other errors, still return safe response but log the error
-            logger.error(f"❌ [SOCIAL PROFILES] Unexpected error listing profiles: {e}", exc_info=True)
-            return {
-                "data": [],
-                "total": 0,
-                "skip": skip,
-                "limit": limit,
-                "status": "inactive",
-                "message": f"Failed to list profiles: {str(e)}. Please check backend logs."
-            }
+        # SCHEMA ERRORS MUST FAIL LOUDLY - no silent failures
+        # If schema is wrong, raise HTTP 500 with clear error message
+        logger.error(f"❌ [SOCIAL PROFILES] Database query failed: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}. This indicates a schema mismatch - ensure migrations have run successfully."
+        )
 
 
 # ============================================
@@ -915,31 +899,8 @@ async def list_drafted_profiles(
     REUSES prospects table - filters by source_type='social' AND draft_status='drafted'.
     """
     try:
-        # Check if source_type column exists
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception:
-            column_exists = False
-        
-        if not column_exists:
-            return {
-                "data": [],
-                "total": 0,
-                "skip": skip,
-                "limit": limit,
-                "status": "inactive",
-                "message": "Social outreach columns not initialized"
-            }
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, queries will fail loudly with HTTP 500
         
         # Base filter: social AND drafted
         query = select(Prospect).where(
@@ -998,16 +959,16 @@ async def list_drafted_profiles(
             "limit": limit,
             "status": "active"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ [SOCIAL DRAFTS] Error listing drafted profiles: {e}", exc_info=True)
-        return {
-            "data": [],
-            "total": 0,
-            "skip": skip,
-            "limit": limit,
-            "status": "inactive",
-            "message": f"Failed to list drafted profiles: {str(e)}"
-        }
+        # SCHEMA ERRORS MUST FAIL LOUDLY - no silent failures
+        logger.error(f"❌ [SOCIAL DRAFTS] Database query failed: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}. This indicates a schema mismatch - ensure migrations have run successfully."
+        )
 
 
 # ============================================
@@ -1028,31 +989,8 @@ async def list_sent_profiles(
     REUSES prospects table - filters by source_type='social' AND send_status='sent'.
     """
     try:
-        # Check if source_type column exists
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception:
-            column_exists = False
-        
-        if not column_exists:
-            return {
-                "data": [],
-                "total": 0,
-                "skip": skip,
-                "limit": limit,
-                "status": "inactive",
-                "message": "Social outreach columns not initialized"
-            }
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, queries will fail loudly with HTTP 500
         
         # Base filter: social AND sent
         query = select(Prospect).where(
@@ -1082,6 +1020,15 @@ async def list_sent_profiles(
         result = await db.execute(query)
         prospects = result.scalars().all()
         
+        # CRITICAL: Verify data integrity - total must match actual data
+        if total > 0 and len(prospects) == 0:
+            logger.error(f"❌ [SOCIAL SENT] DATA INTEGRITY VIOLATION: total={total} but query returned 0 rows")
+            await db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Data integrity violation: COUNT query returned {total} but SELECT query returned 0 rows. This indicates a schema mismatch or query error. Ensure migrations have run successfully."
+            )
+        
         return {
             "data": [
                 {
@@ -1108,16 +1055,16 @@ async def list_sent_profiles(
             "limit": limit,
             "status": "active"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"❌ [SOCIAL SENT] Error listing sent profiles: {e}", exc_info=True)
-        return {
-            "data": [],
-            "total": 0,
-            "skip": skip,
-            "limit": limit,
-                "status": "inactive",
-                "message": f"Failed to list sent profiles: {str(e)}"
-            }
+        # SCHEMA ERRORS MUST FAIL LOUDLY - no silent failures
+        logger.error(f"❌ [SOCIAL SENT] Database query failed: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database query failed: {str(e)}. This indicates a schema mismatch - ensure migrations have run successfully."
+        )
 
 
 # ============================================
@@ -1139,24 +1086,8 @@ async def export_profiles_csv(
     Returns CSV file with all matching profiles (no pagination limit).
     """
     try:
-        # Check if source_type column exists
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception:
-            column_exists = False
-        
-        if not column_exists:
-            raise HTTPException(status_code=400, detail="Social outreach columns not initialized")
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, queries will fail loudly with HTTP 500
         
         query = select(Prospect).where(Prospect.source_type == 'social')
         
@@ -1222,23 +1153,8 @@ async def export_drafts_csv(
     Export drafted social profiles to CSV.
     """
     try:
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception:
-            column_exists = False
-        
-        if not column_exists:
-            raise HTTPException(status_code=400, detail="Social outreach columns not initialized")
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, queries will fail loudly with HTTP 500
         
         query = select(Prospect).where(
             and_(
@@ -1305,23 +1221,8 @@ async def export_sent_csv(
     Export sent social profiles to CSV.
     """
     try:
-        column_exists = False
-        try:
-            from sqlalchemy import text
-            column_check = await db.execute(
-                text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'prospects' 
-                    AND column_name = 'source_type'
-                """)
-            )
-            column_exists = column_check.fetchone() is not None
-        except Exception:
-            column_exists = False
-        
-        if not column_exists:
-            raise HTTPException(status_code=400, detail="Social outreach columns not initialized")
+        # SCHEMA MUST BE CORRECT - migrations run on startup ensure all columns exist
+        # If source_type column doesn't exist, queries will fail loudly with HTTP 500
         
         query = select(Prospect).where(
             and_(
