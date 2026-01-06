@@ -828,13 +828,24 @@ async def startup():
             auto_migrate = False
     
     # Run migrations if AUTO_MIGRATE is enabled (explicitly or via smart mode)
+    migration_success = False
     if auto_migrate:
         try:
             await run_migrations_safely()
             logger.info("✅ Database migrations completed")
+            migration_success = True
         except Exception as migration_err:
-            logger.error(f"❌ Migration execution failed: {migration_err}")
-            # Continue to start app even if migrations fail
+            logger.error("=" * 80)
+            logger.error("❌ CRITICAL: Migration execution failed")
+            logger.error(f"❌ Error type: {type(migration_err).__name__}")
+            logger.error(f"❌ Error message: {str(migration_err)}")
+            logger.error("=" * 80)
+            logger.error("⚠️  APPLICATION WILL CONTINUE TO START")
+            logger.error("⚠️  Some features may not work until migrations are fixed")
+            logger.error("⚠️  Run 'alembic upgrade head' manually to fix")
+            logger.error("=" * 80)
+            migration_success = False
+            # Continue to start app even if migrations fail - DO NOT EXIT
     
     # Validate website tables exist after migrations
     # Social outreach now uses prospects table, so no separate validation needed
