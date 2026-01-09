@@ -41,8 +41,49 @@ else:
 
 # Convert postgresql:// to postgresql+asyncpg:// if needed
 # Also properly encode special characters in password to prevent URL parsing issues
-from urllib.parse import urlparse, urlunparse, quote_plus
+from urllib.parse import quote
 
+def encode_password_in_url(url: str) -> str:
+    """
+    Manually extract and encode the password in a database URL.
+    This is necessary because urlparse can fail on URLs with special characters.
+    """
+    try:
+        # Find the scheme (postgresql://, postgresql+asyncpg://, etc.)
+        scheme_end = url.find("://")
+        if scheme_end == -1:
+            return url  # Not a valid URL format
+        
+        scheme = url[:scheme_end + 3]
+        rest = url[scheme_end + 3:]
+        
+        # Find the @ symbol which separates credentials from host
+        at_pos = rest.find("@")
+        if at_pos == -1:
+            return url  # No credentials, return as-is
+        
+        credentials = rest[:at_pos]
+        host_and_path = rest[at_pos + 1:]
+        
+        # Split username and password
+        colon_pos = credentials.find(":")
+        if colon_pos == -1:
+            return url  # No password, return as-is
+        
+        username = credentials[:colon_pos]
+        password = credentials[colon_pos + 1:]
+        
+        # URL-encode the password (use quote, not quote_plus, for passwords)
+        encoded_password = quote(password, safe="")
+        
+        # Reconstruct the URL
+        encoded_url = f"{scheme}{username}:{encoded_password}@{host_and_path}"
+        return encoded_url
+    except Exception as e:
+        logger.warning(f"Could not encode password in URL, using as-is: {e}")
+        return url
+
+# Convert scheme first
 if raw_database_url.startswith("postgresql://"):
     temp_url = raw_database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 elif raw_database_url.startswith("postgres://"):
@@ -51,25 +92,11 @@ elif raw_database_url.startswith("postgresql+asyncpg://"):
     temp_url = raw_database_url
 else:
     temp_url = raw_database_url
-    logger.info("Using DATABASE_URL as-is (already in correct format)")
 
-# Parse and properly encode the password to handle special characters
-# This is critical for Supabase passwords with special chars like '!'
-try:
-    parsed = urlparse(temp_url)
-    if parsed.password:
-        # URL-encode the password to handle special characters
-        encoded_password = quote_plus(parsed.password)
-        netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
-        if parsed.port:
-            netloc += f":{parsed.port}"
-        DATABASE_URL = urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
-        logger.info("Properly encoded password in DATABASE_URL")
-    else:
-        DATABASE_URL = temp_url
-except Exception as e:
-    logger.warning(f"Could not parse DATABASE_URL for encoding, using as-is: {e}")
-    DATABASE_URL = temp_url
+# Encode password to handle special characters (critical for Supabase)
+DATABASE_URL = encode_password_in_url(temp_url)
+if DATABASE_URL != temp_url:
+    logger.info("Properly encoded password in DATABASE_URL to handle special characters")
 
 # Note: SSL for asyncpg is configured via connect_args, not URL parameters
 # We'll handle SSL in the engine creation below
