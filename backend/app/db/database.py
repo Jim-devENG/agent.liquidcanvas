@@ -151,7 +151,7 @@ except Exception as e:
 # Note: SSL for asyncpg is configured via connect_args, not URL parameters
 # We'll handle SSL in the engine creation below
 
-# Log connection details (without password)
+# Log connection details (without password) - enhanced verification
 if "@" in DATABASE_URL:
     try:
         # Extract host and port for logging
@@ -160,9 +160,16 @@ if "@" in DATABASE_URL:
             host_port_db = parts[1]
             if "/" in host_port_db:
                 host_port = host_port_db.split("/")[0]
-                logger.info(f"Attempting to connect to database at: {host_port}")
-    except Exception:
-        pass
+                logger.info(f"📊 Attempting to connect to database at: {host_port}")
+                # Verify hostname is complete (not truncated)
+                hostname = host_port.split(":")[0]
+                if ".supabase.co" in hostname:
+                    if len(hostname.split(".")) < 4:
+                        logger.error(f"❌ CRITICAL: Hostname appears truncated! Expected full Supabase hostname, got: {hostname}")
+                    else:
+                        logger.info(f"✅ Hostname appears complete: {hostname}")
+    except Exception as e:
+        logger.error(f"❌ Error extracting connection details: {e}", exc_info=True)
 
 # CRITICAL: Lazy engine initialization to prevent conflicts with Alembic
 # Alembic imports this module but uses its own sync engine
