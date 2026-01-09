@@ -189,6 +189,57 @@ if "?" in DATABASE_URL:
         if "sslmode=" in query_string:
             logger.info("ℹ️  Removed sslmode query parameter (SSL configured via connect_args instead)")
 
+# CRITICAL: Resolve Supabase hostname to IPv4 address
+# Render cannot reach IPv6 addresses, so we must use IPv4
+# Resolve hostname before engine creation to force IPv4 connection
+if "@" in DATABASE_URL and ".supabase.co" in DATABASE_URL:
+    try:
+        import socket
+        # Extract hostname and port from URL
+        # Format: postgresql+asyncpg://user:pass@host:port/db?query
+        scheme_part = DATABASE_URL.split("://")[0] + "://"
+        rest_after_scheme = DATABASE_URL.split("://")[1]
+        
+        # Split credentials from host/path
+        if "@" not in rest_after_scheme:
+            raise ValueError("Invalid URL format: no @ found")
+        
+        creds_part = rest_after_scheme.split("@")[0]
+        host_path_part = rest_after_scheme.split("@")[1]
+        
+        # Extract hostname and port from host_path_part
+        # host_path_part could be: "host:port/db" or "host:port/db?query" or "host:port"
+        if "/" in host_path_part:
+            host_port_part = host_path_part.split("/")[0]
+            path_part = "/" + "/".join(host_path_part.split("/")[1:])  # Keep /db?query or /db
+        else:
+            host_port_part = host_path_part
+            path_part = ""
+        
+        if ":" in host_port_part:
+            hostname, port_str = host_port_part.rsplit(":", 1)
+            port = int(port_str)
+        else:
+            hostname = host_port_part
+            port = 5432
+        
+        # Resolve to IPv4 address
+        logger.info(f"🔍 Resolving {hostname} to IPv4 address...")
+        addr_info = socket.getaddrinfo(hostname, port, socket.AF_INET, socket.SOCK_STREAM)
+        if addr_info:
+            ipv4_address = addr_info[0][4][0]
+            logger.info(f"✅ Resolved {hostname} to IPv4: {ipv4_address}")
+            
+            # Reconstruct URL with IPv4 address
+            DATABASE_URL = f"{scheme_part}{creds_part}@{ipv4_address}:{port}{path_part}"
+            logger.info(f"✅ Modified DATABASE_URL to use IPv4 address: {ipv4_address}:{port}")
+        else:
+            logger.warning(f"⚠️  Could not resolve hostname to IPv4 address")
+    except Exception as resolve_err:
+        logger.error(f"❌ Failed to resolve Supabase hostname to IPv4: {resolve_err}")
+        logger.error("⚠️  Connection may fail if IPv6 is not available on Render")
+        # Continue with original URL - might work if DNS returns IPv4
+
 # Log the hostname to verify it's correct (without exposing password)
 try:
     if "@" in DATABASE_URL:
@@ -259,7 +310,7 @@ def _get_engine():
                         "ssl": ssl.create_default_context()
                     }
                     if is_supabase:
-                        logger.info("✅ Configured SSL for Supabase connection")
+                        logger.info("✅ Configured SSL for Supabase connection (IPv4 address resolved)")
                     elif requires_ssl:
                         logger.info("✅ Configured SSL (sslmode=require was in connection string)")
                 
