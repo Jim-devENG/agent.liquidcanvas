@@ -40,15 +40,36 @@ else:
     logger.warning("⚠️  DATABASE_URL environment variable not set!")
 
 # Convert postgresql:// to postgresql+asyncpg:// if needed
+# Also properly encode special characters in password to prevent URL parsing issues
+from urllib.parse import urlparse, urlunparse, quote_plus
+
 if raw_database_url.startswith("postgresql://"):
-    DATABASE_URL = raw_database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    logger.info("Converted postgresql:// to postgresql+asyncpg://")
+    temp_url = raw_database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 elif raw_database_url.startswith("postgres://"):
-    DATABASE_URL = raw_database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    logger.info("Converted postgres:// to postgresql+asyncpg://")
+    temp_url = raw_database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_database_url.startswith("postgresql+asyncpg://"):
+    temp_url = raw_database_url
 else:
-    DATABASE_URL = raw_database_url
+    temp_url = raw_database_url
     logger.info("Using DATABASE_URL as-is (already in correct format)")
+
+# Parse and properly encode the password to handle special characters
+# This is critical for Supabase passwords with special chars like '!'
+try:
+    parsed = urlparse(temp_url)
+    if parsed.password:
+        # URL-encode the password to handle special characters
+        encoded_password = quote_plus(parsed.password)
+        netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        DATABASE_URL = urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+        logger.info("Properly encoded password in DATABASE_URL")
+    else:
+        DATABASE_URL = temp_url
+except Exception as e:
+    logger.warning(f"Could not parse DATABASE_URL for encoding, using as-is: {e}")
+    DATABASE_URL = temp_url
 
 # Note: SSL for asyncpg is configured via connect_args, not URL parameters
 # We'll handle SSL in the engine creation below
