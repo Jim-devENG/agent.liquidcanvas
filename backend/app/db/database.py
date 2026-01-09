@@ -82,13 +82,25 @@ def _get_engine():
             _engine_lock = threading.Lock()
         with _engine_lock:
             if _engine_instance is None:
+                # Supabase requires SSL connections - configure for asyncpg
+                connect_args = {}
+                if ".supabase.co" in DATABASE_URL:
+                    # asyncpg uses ssl context for SSL connections
+                    # For Supabase, we need to require SSL
+                    import ssl
+                    connect_args = {
+                        "ssl": ssl.create_default_context()
+                    }
+                    logger.info("Configured SSL for Supabase connection")
+                
                 _engine_instance = create_async_engine(
                     DATABASE_URL,
                     echo=False,  # Set to False in production (was True for debugging)
                     future=True,
                     pool_pre_ping=True,
                     pool_size=10,
-                    max_overflow=20
+                    max_overflow=20,
+                    connect_args=connect_args
                 )
     return _engine_instance
 
