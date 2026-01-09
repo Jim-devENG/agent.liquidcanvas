@@ -68,16 +68,29 @@ def encode_password_in_url(url: str) -> str:
         host_and_path = rest[at_pos + 1:]
         
         # Split username and password
-        colon_pos = credentials.find(":")
-        if colon_pos == -1:
+        # IMPORTANT: Use rsplit with maxsplit=1 to handle passwords that might contain ':'
+        if ":" not in credentials:
             logger.debug("No password found in URL (no : in credentials)")
             return url  # No password, return as-is
         
-        username = credentials[:colon_pos]
-        password = credentials[colon_pos + 1:]
+        # Use rsplit to get the LAST colon (in case password contains colons)
+        parts = credentials.rsplit(":", 1)
+        if len(parts) != 2:
+            logger.warning(f"Unexpected credentials format, using as-is")
+            return url
+        
+        username = parts[0]
+        password = parts[1]
         
         # Log (without exposing password) for debugging
-        logger.debug(f"Encoding password for user: {username}, host: {host_and_path.split('/')[0]}")
+        original_host = host_and_path.split("/")[0].split(":")[0]
+        logger.info(f"🔐 Encoding password for user: {username}, host: {original_host}")
+        logger.debug(f"Password length: {len(password)} characters")
+        
+        # Check if password is already URL-encoded (contains %)
+        if "%" in password:
+            logger.info("ℹ️  Password appears to already be URL-encoded, skipping re-encoding")
+            return url
         
         # URL-encode the password (use quote, not quote_plus, for passwords)
         # quote() properly handles special characters like !, @, #, etc.
@@ -89,11 +102,13 @@ def encode_password_in_url(url: str) -> str:
         # Verify the hostname is preserved
         if "@" in encoded_url:
             encoded_host = encoded_url.split("@")[1].split("/")[0].split(":")[0]
-            original_host = host_and_path.split("/")[0].split(":")[0]
             if encoded_host != original_host:
-                logger.error(f"Hostname mismatch after encoding! Original: {original_host}, Encoded: {encoded_host}")
+                logger.error(f"❌ CRITICAL: Hostname mismatch after encoding!")
+                logger.error(f"   Original: {original_host}")
+                logger.error(f"   Encoded:  {encoded_host}")
+                logger.error(f"   This will cause connection failures!")
             else:
-                logger.debug(f"Password encoded successfully, hostname preserved: {encoded_host}")
+                logger.info(f"✅ Password encoded successfully, hostname preserved: {encoded_host}")
         
         return encoded_url
     except Exception as e:
@@ -114,15 +129,24 @@ else:
 DATABASE_URL = encode_password_in_url(temp_url)
 if DATABASE_URL != temp_url:
     logger.info("✅ Properly encoded password in DATABASE_URL to handle special characters")
-    # Log the hostname to verify it's correct (without exposing password)
-    try:
-        if "@" in DATABASE_URL:
-            host_part = DATABASE_URL.split("@")[1].split("/")[0]
-            logger.info(f"📊 Connection target: {host_part}")
-    except Exception:
-        pass
 else:
-    logger.debug("No password encoding needed (or no password found)")
+    logger.info("ℹ️  No password encoding applied (password may already be encoded or not present)")
+
+# Log the hostname to verify it's correct (without exposing password)
+try:
+    if "@" in DATABASE_URL:
+        host_part = DATABASE_URL.split("@")[1].split("/")[0]
+        logger.info(f"📊 Connection target: {host_part}")
+        # Verify hostname is complete (not truncated)
+        if ".supabase.co" in host_part:
+            if len(host_part.split(".")) < 4:
+                logger.error(f"❌ CRITICAL: Hostname appears truncated! Expected full Supabase hostname, got: {host_part}")
+            else:
+                logger.info(f"✅ Hostname appears complete: {host_part}")
+    else:
+        logger.warning("⚠️  No @ symbol found in DATABASE_URL - cannot extract hostname")
+except Exception as e:
+    logger.error(f"❌ Error extracting hostname: {e}", exc_info=True)
 
 # Note: SSL for asyncpg is configured via connect_args, not URL parameters
 # We'll handle SSL in the engine creation below
