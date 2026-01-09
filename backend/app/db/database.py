@@ -50,15 +50,8 @@ else:
     DATABASE_URL = raw_database_url
     logger.info("Using DATABASE_URL as-is (already in correct format)")
 
-# Supabase requires SSL connections - add SSL parameters if not present
-# Check if this is a Supabase connection (contains .supabase.co)
-if ".supabase.co" in DATABASE_URL and "sslmode" not in DATABASE_URL:
-    # Add SSL parameters for Supabase
-    if "?" in DATABASE_URL:
-        DATABASE_URL += "&sslmode=require"
-    else:
-        DATABASE_URL += "?sslmode=require"
-    logger.info("Added SSL parameters for Supabase connection")
+# Note: SSL for asyncpg is configured via connect_args, not URL parameters
+# We'll handle SSL in the engine creation below
 
 # Log connection details (without password)
 if "@" in DATABASE_URL:
