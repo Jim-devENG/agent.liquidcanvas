@@ -798,9 +798,30 @@ async def startup():
         try:
             # Quick schema check - see if bio_text column exists
             from sqlalchemy import create_engine, text
+            from urllib.parse import urlparse, urlunparse, quote_plus
             database_url = os.getenv("DATABASE_URL")
             if database_url:
-                sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://") if database_url.startswith("postgresql+asyncpg://") else database_url
+                # Convert asyncpg URL to sync URL for schema check
+                # Properly handle special characters in password by using urllib.parse
+                if database_url.startswith("postgresql+asyncpg://"):
+                    # Remove the +asyncpg part
+                    sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+                elif database_url.startswith("postgresql://"):
+                    sync_url = database_url
+                else:
+                    sync_url = database_url
+                
+                # Parse URL to ensure proper encoding of special characters
+                # This is critical for Supabase passwords with special chars like '!'
+                parsed = urlparse(sync_url)
+                if parsed.password:
+                    # URL-encode the password if it contains special characters
+                    encoded_password = quote_plus(parsed.password)
+                    netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
+                    if parsed.port:
+                        netloc += f":{parsed.port}"
+                    sync_url = urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+                
                 sync_engine = create_engine(sync_url, pool_pre_ping=True)
                 try:
                     with sync_engine.connect() as conn:
