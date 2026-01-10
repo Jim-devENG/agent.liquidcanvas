@@ -494,9 +494,15 @@ def _get_engine():
                         logger.info("✅ Using connection pooler (port 6543)")
                         logger.info("ℹ️  Pooler should handle IPv4 connections automatically")
                     elif ":5432" in connection_target:
-                        logger.error("❌ Using direct connection (port 5432) - this will fail!")
-                        logger.error("❌ Direct connection only supports IPv6, which Render cannot reach")
-                        logger.error("❌ Please update DATABASE_URL to use port 6543 (connection pooler)")
+                        # Check if it's Render PostgreSQL (internal network - OK) or external (Supabase - might fail)
+                        if ".render.com" in connection_target:
+                            logger.info("✅ Using Render PostgreSQL (port 5432) - internal network, should work fine")
+                        elif ".supabase.co" in connection_target:
+                            logger.error("❌ Using Supabase direct connection (port 5432) - this will fail!")
+                            logger.error("❌ Supabase direct connection only supports IPv6, which Render cannot reach")
+                            logger.error("❌ Please update DATABASE_URL to use port 6543 (connection pooler) or switch to Render PostgreSQL")
+                        else:
+                            logger.info(f"ℹ️  Using direct connection (port 5432) on hostname: {connection_target}")
                     else:
                         logger.warning(f"⚠️  Unknown port in connection target: {connection_target}")
                 

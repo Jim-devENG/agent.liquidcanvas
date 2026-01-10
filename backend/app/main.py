@@ -233,10 +233,15 @@ async def startup():
                 
                 # Run migrations - catch SystemExit from Alembic to prevent app crash
                 try:
+                    logger.info("🚀 Starting migration upgrade to head...")
                     command.upgrade(alembic_cfg, "head")
                     logger.info("=" * 60)
                     logger.info("✅ Database migrations completed successfully")
                     logger.info("=" * 60)
+                except Exception as migration_run_error:
+                    # Catch any exceptions during migration execution
+                    logger.error(f"❌ Migration execution error: {migration_run_error}")
+                    raise
                 except SystemExit as sys_exit:
                     # Alembic may call sys.exit() on errors - catch and convert to exception
                     exit_code = sys_exit.code if hasattr(sys_exit, 'code') else 1
