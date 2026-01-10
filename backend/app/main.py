@@ -212,9 +212,16 @@ async def startup():
             database_url = os.getenv("DATABASE_URL")
             if database_url:
                 if database_url.startswith("postgresql+asyncpg://"):
+                    # Convert to sync format and remove unsupported parameters
                     sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+                    # Remove pgbouncer and sslmode parameters (not supported by psycopg2)
+                    if "?" in sync_url:
+                        base_url, query_string = sync_url.split("?", 1)
+                        query_params = [p for p in query_string.split("&") 
+                                      if not p.lower().startswith(("pgbouncer=", "sslmode="))]
+                        sync_url = f"{base_url}?{'&'.join(query_params)}" if query_params else base_url
                     alembic_cfg.set_main_option("sqlalchemy.url", sync_url)
-                    logger.info("✅ Converted asyncpg URL to psycopg2 format for Alembic")
+                    logger.info("✅ Converted asyncpg URL to psycopg2 format for Alembic (removed unsupported params)")
             
             # Change to the directory containing alembic.ini
             alembic_dir = os.path.dirname(os.path.abspath(alembic_ini_path))
@@ -273,7 +280,13 @@ async def startup():
             
             # Convert asyncpg URL to psycopg2 for sync operations
             sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://") if database_url.startswith("postgresql+asyncpg://") else database_url
-            sync_engine = create_engine(sync_url, pool_pre_ping=True)
+            # Remove pgbouncer and sslmode parameters (not supported by psycopg2)
+            if "?" in sync_url:
+                base_url, query_string = sync_url.split("?", 1)
+                query_params = [p for p in query_string.split("&") 
+                              if not p.lower().startswith(("pgbouncer=", "sslmode="))]
+                sync_url = f"{base_url}?{'&'.join(query_params)}" if query_params else base_url
+            sync_engine = create_engine(sync_url, pool_pre_ping=True, connect_args={"sslmode": "require"} if ".supabase.co" in sync_url else {})
             
             try:
                 with sync_engine.connect() as conn:
@@ -806,6 +819,12 @@ async def startup():
                 if database_url.startswith("postgresql+asyncpg://"):
                     # Remove the +asyncpg part
                     sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+                    # Remove pgbouncer and sslmode parameters (not supported by psycopg2)
+                    if "?" in sync_url:
+                        base_url, query_string = sync_url.split("?", 1)
+                        query_params = [p for p in query_string.split("&") 
+                                      if not p.lower().startswith(("pgbouncer=", "sslmode="))]
+                        sync_url = f"{base_url}?{'&'.join(query_params)}" if query_params else base_url
                 elif database_url.startswith("postgresql://"):
                     sync_url = database_url
                 else:

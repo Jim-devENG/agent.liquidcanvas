@@ -492,8 +492,13 @@ def _get_engine():
                     logger.info(f"🔗 Attempting to connect to: {connection_target}")
                     if ":6543" in connection_target:
                         logger.info("✅ Using connection pooler (port 6543)")
+                        logger.info("ℹ️  Pooler should handle IPv4 connections automatically")
                     elif ":5432" in connection_target:
-                        logger.warning("⚠️  Using direct connection (port 5432) - may fail if IPv6 unavailable")
+                        logger.error("❌ Using direct connection (port 5432) - this will fail!")
+                        logger.error("❌ Direct connection only supports IPv6, which Render cannot reach")
+                        logger.error("❌ Please update DATABASE_URL to use port 6543 (connection pooler)")
+                    else:
+                        logger.warning(f"⚠️  Unknown port in connection target: {connection_target}")
                 
                 _engine_instance = create_async_engine(
                     DATABASE_URL,
