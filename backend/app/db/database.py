@@ -363,20 +363,35 @@ def _resolve_to_ipv4_sync(url: str) -> str:
                     logger.error("⚠️  Will attempt connection with hostname (connection may fail if IPv6 unavailable)")
         
         # Final check: SUPABASE_IPV4 env var as absolute last resort
+        # Extract port and path again in case we're here from timeout/other errors
         fallback_ip = os.getenv("SUPABASE_IPV4")
         if fallback_ip:
-            logger.warning(f"⚠️  All DNS resolution failed. Using SUPABASE_IPV4 environment variable: {fallback_ip}")
+            logger.warning(f"⚠️  All DNS resolution attempts failed. Using SUPABASE_IPV4 environment variable: {fallback_ip}")
+            # Re-extract components to build URL
             scheme_part = url.split("://")[0] + "://"
             rest_after_scheme = url.split("://")[1]
             creds_part = rest_after_scheme.split("@")[0]
             host_path_part = rest_after_scheme.split("@")[1]
             if "/" in host_path_part:
+                host_port_part = host_path_part.split("/")[0]
                 path_part = "/" + "/".join(host_path_part.split("/")[1:])
             else:
+                host_port_part = host_path_part
                 path_part = ""
+            
+            # Extract port from original URL
+            if ":" in host_port_part:
+                _, port_str = host_port_part.rsplit(":", 1)
+                port = int(port_str)
+            else:
+                port = 5432
+            
             resolved_url = f"{scheme_part}{creds_part}@{fallback_ip}:{port}{path_part}"
             logger.info(f"✅ Using IPv4 from SUPABASE_IPV4 env var: {fallback_ip}:{port}")
             return resolved_url
+        else:
+            logger.warning(f"⚠️  No SUPABASE_IPV4 environment variable set. You can set it to bypass DNS resolution.")
+            logger.warning(f"⚠️  Will attempt connection with original hostname (may fail if IPv6 unavailable on Render)")
         
         return url  # Return original URL if all resolution attempts fail
     except Exception as resolve_err:
