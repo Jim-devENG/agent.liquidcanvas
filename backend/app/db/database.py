@@ -290,7 +290,11 @@ def _resolve_to_ipv4_sync(url: str) -> str:
         for attempt in range(max_retries):
             try:
                 # Strategy 1: Use getaddrinfo with AF_INET (IPv4 only)
+                # Add timeout to prevent hanging
+                socket.setdefaulttimeout(5)  # 5 second timeout
                 addr_info = socket.getaddrinfo(hostname, port, socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+                socket.setdefaulttimeout(None)  # Reset timeout
+                
                 if addr_info:
                     ipv4_address = addr_info[0][4][0]
                     logger.info(f"✅ Resolved {hostname} to IPv4: {ipv4_address} (attempt {attempt + 1})")
@@ -299,9 +303,12 @@ def _resolve_to_ipv4_sync(url: str) -> str:
                     resolved_url = f"{scheme_part}{creds_part}@{ipv4_address}:{port}{path_part}"
                     logger.info(f"✅ Using IPv4 address for connection: {ipv4_address}:{port}")
                     return resolved_url
+                else:
+                    logger.warning(f"⚠️  getaddrinfo returned empty result for {hostname} (attempt {attempt + 1})")
                     
             except socket.gaierror as gai_err:
                 # DNS error - retry with exponential backoff
+                socket.setdefaulttimeout(None)  # Reset timeout
                 if attempt < max_retries - 1:
                     wait_time = wait_base * (2 ** attempt)  # 1s, 2s, 4s, 8s, 16s
                     logger.warning(f"⚠️  DNS resolution failed (attempt {attempt + 1}/{max_retries}): {gai_err}")
@@ -312,17 +319,40 @@ def _resolve_to_ipv4_sync(url: str) -> str:
                     
                     # Last resort: Try gethostbyname (deprecated but sometimes works)
                     try:
-                        logger.info("🔄 Trying fallback DNS resolution method...")
+                        logger.info("🔄 Trying fallback DNS resolution method (gethostbyname)...")
+                        socket.setdefaulttimeout(5)
                         ipv4_address = socket.gethostbyname(hostname)
+                        socket.setdefaulttimeout(None)
                         logger.info(f"✅ Fallback resolution succeeded: {hostname} -> {ipv4_address}")
                         resolved_url = f"{scheme_part}{creds_part}@{ipv4_address}:{port}{path_part}"
                         logger.info(f"✅ Using IPv4 address from fallback: {ipv4_address}:{port}")
                         return resolved_url
                     except Exception as fallback_err:
+                        socket.setdefaulttimeout(None)
                         logger.error(f"❌ Fallback DNS resolution also failed: {fallback_err}")
-                        logger.error("⚠️  Will attempt connection with hostname (connection may fail if IPv6 unavailable)")
                         
+                        # Last last resort: Check if SUPABASE_IPV4 env var is set
+                        fallback_ip = os.getenv("SUPABASE_IPV4")
+                        if fallback_ip:
+                            logger.warning(f"⚠️  Using SUPABASE_IPV4 environment variable: {fallback_ip}")
+                            resolved_url = f"{scheme_part}{creds_part}@{fallback_ip}:{port}{path_part}"
+                            logger.info(f"✅ Using IPv4 from SUPABASE_IPV4 env var: {fallback_ip}:{port}")
+                            return resolved_url
+                        else:
+                            logger.error("⚠️  No SUPABASE_IPV4 env var set. Will attempt connection with hostname (may fail with IPv6)")
+                        
+            except socket.timeout:
+                socket.setdefaulttimeout(None)
+                if attempt < max_retries - 1:
+                    wait_time = wait_base * (2 ** attempt)
+                    logger.warning(f"⚠️  DNS resolution timed out (attempt {attempt + 1}/{max_retries})")
+                    logger.info(f"⏳ Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"❌ DNS resolution timed out after {max_retries} attempts")
+                    
             except Exception as resolve_err:
+                socket.setdefaulttimeout(None)
                 if attempt < max_retries - 1:
                     wait_time = wait_base * (2 ** attempt)
                     logger.warning(f"⚠️  Unexpected error during resolution (attempt {attempt + 1}/{max_retries}): {resolve_err}")
@@ -331,6 +361,22 @@ def _resolve_to_ipv4_sync(url: str) -> str:
                 else:
                     logger.error(f"❌ Failed to resolve {hostname} to IPv4: {resolve_err}")
                     logger.error("⚠️  Will attempt connection with hostname (connection may fail if IPv6 unavailable)")
+        
+        # Final check: SUPABASE_IPV4 env var as absolute last resort
+        fallback_ip = os.getenv("SUPABASE_IPV4")
+        if fallback_ip:
+            logger.warning(f"⚠️  All DNS resolution failed. Using SUPABASE_IPV4 environment variable: {fallback_ip}")
+            scheme_part = url.split("://")[0] + "://"
+            rest_after_scheme = url.split("://")[1]
+            creds_part = rest_after_scheme.split("@")[0]
+            host_path_part = rest_after_scheme.split("@")[1]
+            if "/" in host_path_part:
+                path_part = "/" + "/".join(host_path_part.split("/")[1:])
+            else:
+                path_part = ""
+            resolved_url = f"{scheme_part}{creds_part}@{fallback_ip}:{port}{path_part}"
+            logger.info(f"✅ Using IPv4 from SUPABASE_IPV4 env var: {fallback_ip}:{port}")
+            return resolved_url
         
         return url  # Return original URL if all resolution attempts fail
     except Exception as resolve_err:
