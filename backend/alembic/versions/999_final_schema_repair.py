@@ -56,6 +56,13 @@ def upgrade() -> None:
             'nullable': False,
             'default': '0',
             'index': False
+        },
+        {
+            'name': 'discovery_query_id',
+            'type': 'UUID',
+            'nullable': True,
+            'default': None,
+            'index': True  # Has index in model
         }
     ]
     
@@ -116,12 +123,26 @@ def upgrade() -> None:
         else:
             print(f"✅ Column {col_name} already exists")
     
-    # Ensure thread_id index exists (even if column already existed)
-    try:
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_thread_id ON prospects(thread_id)"))
-        print("✅ Verified thread_id index exists")
-    except Exception as e:
-        print(f"⚠️  Could not ensure thread_id index: {e}")
+    # Ensure indexes exist (even if columns already existed)
+    indexes_to_ensure = [
+        ('thread_id', 'ix_prospects_thread_id'),
+        ('discovery_query_id', 'ix_prospects_discovery_query_id')
+    ]
+    
+    for col_name, index_name in indexes_to_ensure:
+        try:
+            # Check if column exists first
+            col_check = conn.execute(text(f"""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = '{col_name}'
+            """))
+            if col_check.fetchone():
+                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {index_name} ON prospects({col_name})"))
+                print(f"✅ Verified {col_name} index exists")
+        except Exception as e:
+            print(f"⚠️  Could not ensure {col_name} index: {e}")
     
     conn.commit()
     print("✅ Schema repair complete - all required columns verified")
