@@ -205,7 +205,6 @@ async def list_profiles(
                 # Visibility is inclusive - show all profiles regardless of qualification/scrape status
                 # Only exclude profiles that are already approved (they belong in Social Leads)
                 # This ensures existing data is visible even if approval_status is NULL or unexpected values
-                from sqlalchemy import func
                 query = query.where(
                     and_(
                         Prospect.discovery_status == DiscoveryStatus.DISCOVERED.value,
