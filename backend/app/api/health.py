@@ -16,7 +16,48 @@ import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-router = APIRouter()  # No prefix - routes are /health, /health/ready, /health/migrate
+router = APIRouter()
+
+
+@router.post("/fix-discovery-query-id")
+async def fix_discovery_query_id_column():
+    """
+    Manually fix discovery_query_id column if missing.
+    This endpoint can be called to add the column immediately.
+    """
+    try:
+        from sqlalchemy import text
+        from app.db.database import AsyncSessionLocal
+        
+        async with AsyncSessionLocal() as db:
+            # Check if column exists
+            result = await db.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'prospects' 
+                AND column_name = 'discovery_query_id'
+                AND table_schema = 'public'
+            """))
+            row = result.fetchone()
+            if not row:
+                await db.execute(text("ALTER TABLE prospects ADD COLUMN discovery_query_id UUID"))
+                await db.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_discovery_query_id ON prospects(discovery_query_id)"))
+                await db.commit()
+                return {
+                    "success": True,
+                    "message": "Successfully added discovery_query_id column and index"
+                }
+            else:
+                return {
+                    "success": True,
+                    "message": "Column discovery_query_id already exists"
+                }
+    except Exception as e:
+        logger.error(f"Error fixing discovery_query_id column: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e)
+        }  # No prefix - routes are /health, /health/ready, /health/migrate
 
 
 @router.get("/health")
