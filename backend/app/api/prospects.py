@@ -1619,12 +1619,30 @@ async def compose_email(
         )
     else:
         # Initial email - use regular compose
+        # Get category from prospect (discovery_category or inferred from domain/title)
+        category = prospect.discovery_category
+        if not category:
+            # Try to infer from page_title or domain
+            title_lower = (prospect.page_title or "").lower()
+            domain_lower = (prospect.domain or "").lower()
+            if "museum" in title_lower or "museum" in domain_lower:
+                category = "Museum"
+            elif "gallery" in title_lower or "gallery" in domain_lower:
+                category = "Art Gallery"
+            elif "interior design" in title_lower or "interior decor" in title_lower:
+                category = "Interior Design"
+            elif "parenting" in title_lower or "mom" in title_lower:
+                category = "Parenting"
+            elif "nft" in title_lower or "nft" in domain_lower:
+                category = "NFTs"
+        
         gemini_result = await client.compose_email(
             domain=prospect.domain,
             page_title=prospect.page_title,
             page_url=prospect.page_url,
             page_snippet=page_snippet,
-            contact_name=contact_name
+            contact_name=contact_name,
+            category=category
         )
     
     if not gemini_result.get("success"):

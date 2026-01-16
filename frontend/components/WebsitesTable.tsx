@@ -34,8 +34,10 @@ export default function WebsitesTable() {
 
   // Available categories
   const availableCategories = [
-    'Art Gallery', 'Museums', 'Art Studio', 'Art School', 'Art Fair', 
-    'Art Dealer', 'Art Consultant', 'Art Publisher', 'Art Magazine'
+    'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development', 
+    'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor', 
+    'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
+    'Parenting', 'NFTs', 'Museum'
   ]
 
   const loadWebsites = async () => {

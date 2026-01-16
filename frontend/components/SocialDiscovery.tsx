@@ -20,7 +20,8 @@ export default function SocialDiscovery() {
 
   const availableCategories = [
     'Art Gallery', 'Museums', 'Art Studio', 'Art School', 'Art Fair', 
-    'Art Dealer', 'Art Consultant', 'Art Publisher', 'Art Magazine'
+    'Art Dealer', 'Art Consultant', 'Art Publisher', 'Art Magazine',
+    'Photographer', 'Painters', 'Digital Artists', 'Fine Artists'
   ]
 
   const availableLocations = [

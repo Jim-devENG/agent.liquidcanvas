@@ -800,7 +800,7 @@ async def send_emails(
     - send_status != 'sent'
     
     If prospect_ids provided, use those (manual selection).
-    If prospect_ids empty or not provided, query all send-ready prospects automatically.
+    Manual selection only - automatic sending has been removed.
     """
     # Check master switch
     master_enabled = await check_master_switch(db)
@@ -820,48 +820,33 @@ async def send_emails(
         Prospect.source_type.is_(None)  # Legacy prospects (default to website)
     )
     
-    if request.prospect_ids is not None and len(request.prospect_ids) > 0:
-        # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
-        result = await db.execute(
-            select(Prospect).where(
-                and_(
-                    Prospect.id.in_(request.prospect_ids),
-                    Prospect.contact_email.isnot(None),
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.draft_subject.isnot(None),
-                    Prospect.draft_body.isnot(None),
-                    Prospect.send_status != SendStatus.SENT.value,
-                    website_filter  # Only website prospects
-                )
+    # Manual selection only - automatic sending removed
+    if request.prospect_ids is None or len(request.prospect_ids) == 0:
+        raise HTTPException(
+            status_code=422,
+            detail="prospect_ids is required. Manual selection only - automatic sending has been removed."
+        )
+    
+    # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
+    result = await db.execute(
+        select(Prospect).where(
+            and_(
+                Prospect.id.in_(request.prospect_ids),
+                Prospect.contact_email.isnot(None),
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.draft_subject.isnot(None),
+                Prospect.draft_body.isnot(None),
+                Prospect.send_status != SendStatus.SENT.value,
+                website_filter  # Only website prospects
+            )
         )
     )
     prospects = result.scalars().all()
     
     if len(prospects) != len(request.prospect_ids):
         raise HTTPException(
-                status_code=422,
-                detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
-            )
-    else:
-        # Automatic: query all send-ready WEBSITE prospects
-        result = await db.execute(
-            select(Prospect).where(
-                and_(
-                    Prospect.contact_email.isnot(None),
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.draft_subject.isnot(None),
-                    Prospect.draft_body.isnot(None),
-                    Prospect.send_status != SendStatus.SENT.value,
-                    website_filter  # Only website prospects
-                )
-            )
-        )
-        prospects = result.scalars().all()
-        
-        if len(prospects) == 0:
-            raise HTTPException(
-                status_code=422,
-                detail="No prospects ready for sending. Ensure prospects have verified email, draft subject, and draft body."
+            status_code=422,
+            detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
         )
     
     logger.info(f"📧 [PIPELINE STEP 7] Sending emails for {len(prospects)} send-ready prospects (data-driven)")

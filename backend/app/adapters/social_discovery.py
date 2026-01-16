@@ -67,15 +67,17 @@ class LinkedInDiscoveryAdapter:
             logger.info("🔍 [LINKEDIN DISCOVERY] Using DataForSEO to search for LinkedIn profiles")
             logger.info(f"📋 [LINKEDIN DISCOVERY] Categories: {categories}, Locations: {locations}")
             
-            # Build search queries: "site:linkedin.com/in/ [category] [location]"
+            # Build search queries: Focus on contact persons - "site:linkedin.com/in/ [category] [location] contact person"
             search_queries = []
             for category in categories:
                 for location in locations:
-                    # Try multiple query formats for better results
-                    query1 = f'site:linkedin.com/in/ "{category}" "{location}"'
-                    query2 = f"site:linkedin.com/in/ {category} {location}"
-                    query3 = f'"{category}" "{location}" site:linkedin.com/in/'
-                    search_queries.extend([query1, query2, query3])
+                    # Try multiple query formats focused on finding contact persons
+                    query1 = f'site:linkedin.com/in/ "{category}" "{location}" "contact person"'
+                    query2 = f'site:linkedin.com/in/ "{category}" "{location}" contact'
+                    query3 = f"site:linkedin.com/in/ {category} {location} contact person"
+                    query4 = f'site:linkedin.com/in/ "{category}" "{location}" person'
+                    query5 = f'"{category}" "{location}" contact person site:linkedin.com/in/'
+                    search_queries.extend([query1, query2, query3, query4, query5])
             
             # Limit queries to avoid excessive API calls (but allow more combinations)
             search_queries = search_queries[:30]  # Increased to get more results
@@ -253,12 +255,15 @@ class InstagramDiscoveryAdapter:
             
             logger.info("🔍 [INSTAGRAM DISCOVERY] Using DataForSEO to search for Instagram profiles")
             
-            # Build search queries: "site:instagram.com [category] [location]"
+            # Build search queries: Focus on contact persons - "site:instagram.com [category] [location] contact person"
             search_queries = []
             for category in categories:
                 for location in locations:
-                    query = f"site:instagram.com {category} {location}"
-                    search_queries.append(query)
+                    # Focus on finding contact persons
+                    query1 = f'site:instagram.com "{category}" "{location}" contact person'
+                    query2 = f"site:instagram.com {category} {location} contact"
+                    query3 = f'site:instagram.com "{category}" "{location}" person'
+                    search_queries.extend([query1, query2, query3])
             
             search_queries = search_queries[:20]  # Increased from 10
             
@@ -397,12 +402,15 @@ class TikTokDiscoveryAdapter:
             
             logger.info("🔍 [TIKTOK DISCOVERY] Using DataForSEO to search for TikTok profiles")
             
-            # Build search queries: "site:tiktok.com/@ [category] [location]"
+            # Build search queries: Focus on contact persons - "site:tiktok.com/@ [category] [location] contact person"
             search_queries = []
             for category in categories:
                 for location in locations:
-                    query = f"site:tiktok.com/@ {category} {location}"
-                    search_queries.append(query)
+                    # Focus on finding contact persons
+                    query1 = f'site:tiktok.com/@ "{category}" "{location}" contact person'
+                    query2 = f"site:tiktok.com/@ {category} {location} contact"
+                    query3 = f'site:tiktok.com/@ "{category}" "{location}" person'
+                    search_queries.extend([query1, query2, query3])
             
             search_queries = search_queries[:20]  # Increased from 10
             
@@ -540,12 +548,15 @@ class FacebookDiscoveryAdapter:
             
             logger.info("🔍 [FACEBOOK DISCOVERY] Using DataForSEO to search for Facebook pages")
             
-            # Build search queries: "site:facebook.com [category] [location]"
+            # Build search queries: Focus on contact persons - "site:facebook.com [category] [location] contact person"
             search_queries = []
             for category in categories:
                 for location in locations:
-                    query = f"site:facebook.com {category} {location}"
-                    search_queries.append(query)
+                    # Focus on finding contact persons
+                    query1 = f'site:facebook.com "{category}" "{location}" contact person'
+                    query2 = f"site:facebook.com {category} {location} contact"
+                    query3 = f'site:facebook.com "{category}" "{location}" person'
+                    search_queries.extend([query1, query2, query3])
             
             search_queries = search_queries[:20]  # Increased from 10
             

@@ -103,18 +103,23 @@ class GeminiClient:
         """
         search_url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
         
-        search_prompt = f"""Search for information about Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
+        search_prompt = f"""Search DEEPLY into the internet for comprehensive information about Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
 CANONICAL DESCRIPTION (use this as reference):
 {CANONICAL_LIQUID_CANVAS_DESCRIPTION}
 
-Find out:
-1. Current features and capabilities
-2. Recent updates or new functionality
-3. User testimonials or reviews
-4. Any notable partnerships or integrations
+Search VERY DEEPLY - not just surface search. Look into:
+1. Current features and capabilities (search multiple sources, forums, reviews)
+2. Recent updates or new functionality (check changelogs, release notes, blog posts)
+3. User testimonials or reviews (search review sites, social media, forums, Reddit)
+4. Any notable partnerships or integrations (search news articles, press releases, partnership announcements)
+5. Community discussions and feedback (search forums, social media discussions, user groups)
+6. Technical documentation and API information (if available)
+7. Competitor comparisons and market positioning
 
-Return a concise summary (2-3 sentences) that confirms or supplements the canonical description above.
+Use deep web search - go beyond the first page of results. Search multiple sources, forums, review sites, social media, and community discussions.
+
+Return a comprehensive summary (4-6 sentences) that confirms or supplements the canonical description above with deep insights.
 IMPORTANT: Liquid Canvas is a streaming art platform, NOT an art services company or creative agency."""
         
         search_payload = {
@@ -124,11 +129,16 @@ IMPORTANT: Liquid Canvas is a streaming art platform, NOT an art services compan
                 }]
             }],
             "tools": [{
-                "googleSearchRetrieval": {}
+                "googleSearchRetrieval": {
+                    "dynamicRetrievalConfig": {
+                        "mode": "MODE_DYNAMIC",
+                        "dynamicThreshold": 0.3
+                    }
+                }
             }],
             "generationConfig": {
                 "temperature": 0.3,
-                "maxOutputTokens": 512
+                "maxOutputTokens": 1024
             }
         }
         
@@ -419,7 +429,8 @@ Return ONLY the positioning summary text, no additional formatting."""
         page_title: Optional[str] = None,
         page_url: Optional[str] = None,
         page_snippet: Optional[str] = None,
-        contact_name: Optional[str] = None
+        contact_name: Optional[str] = None,
+        category: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Compose an email using Gemini API with Liquid Canvas information.
@@ -428,10 +439,11 @@ Return ONLY the positioning summary text, no additional formatting."""
         
         Args:
             domain: Website domain
-            page_title: Page title
+            page_title: Page title (business/organization name)
             page_url: Page URL
             page_snippet: Page description/snippet
             contact_name: Contact name (if available)
+            category: Category of the prospect (e.g., "Museum", "Art Gallery", "Interior Design", etc.)
         
         Returns:
             Dictionary with subject and body
@@ -455,9 +467,12 @@ Return ONLY the positioning summary text, no additional formatting."""
         )
         
         # STEP 4: Build context for the email
+        # Extract business/organization name from page_title
+        business_name = page_title or domain or "Business"
+        
         context_parts = []
         if page_title:
-            context_parts.append(f"Website Title: {page_title}")
+            context_parts.append(f"Business/Organization Name: {page_title}")
         if domain:
             context_parts.append(f"Domain: {domain}")
         if page_snippet:
@@ -466,10 +481,50 @@ Return ONLY the positioning summary text, no additional formatting."""
             context_parts.append(f"URL: {page_url}")
         if website_content:
             context_parts.append(f"Website Content Preview: {website_content[:500]}...")
+        if contact_name:
+            context_parts.append(f"Contact Name: {contact_name}")
+        if category:
+            context_parts.append(f"Category: {category}")
         
         context = "\n".join(context_parts) if context_parts else f"Website: {domain}"
         
-        # Create prompt for structured JSON output
+        # Create category-specific context for ALL categories
+        category_context = ""
+        if category:
+            category_lower = category.lower()
+            if "museum" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a museum named '{business_name}'. Use the museum name '{business_name}' in the email to personalize it. Reference the museum's collection, exhibitions, or mission when relevant. Liquid Canvas can help museums display their collections on TVs throughout the facility."
+            elif "art gallery" in category_lower or "gallery" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an art gallery named '{business_name}'. Use the gallery name '{business_name}' in the email to personalize it. Reference their exhibitions, artist roster, or curation style when relevant. Liquid Canvas can help galleries showcase artwork on connected TVs."
+            elif "interior design" in category_lower or "interior decor" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an interior design business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their design style, portfolio, or client work when relevant. Liquid Canvas can help interior designers create beautiful art displays for their clients' spaces."
+            elif "home decor" in category_lower or "holiday decor" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a home decor business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their products, style, or seasonal offerings when relevant. Liquid Canvas can help enhance home decor with curated art displays."
+            elif "parenting" in category_lower or "mom" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a parenting/mom blog or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their content, community, or parenting focus when relevant. Liquid Canvas can help families create beautiful art displays in their homes."
+            elif "nft" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an NFT platform or business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their NFT collection, platform, or digital art focus when relevant. Liquid Canvas supports NFT display and sharing."
+            elif "photographer" in category_lower or "photography" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a photographer named '{business_name}'. Use their name '{business_name}' in the email to personalize it. Reference their photography style, portfolio, or specialty when relevant. Liquid Canvas can help photographers display their work on connected TVs."
+            elif "painter" in category_lower or "artist" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an artist/painter named '{business_name}'. Use their name '{business_name}' in the email to personalize it. Reference their artistic style, portfolio, or exhibitions when relevant. Liquid Canvas can help artists showcase their work on connected TVs."
+            elif "dog" in category_lower or "cat" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a pet-related business or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their pet focus, products, or community when relevant. Liquid Canvas can help create beautiful art displays for pet-friendly spaces."
+            elif "holiday" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a holiday-focused business or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their holiday focus, products, or seasonal offerings when relevant. Liquid Canvas can help create festive art displays for holiday celebrations."
+            elif "home tech" in category_lower or "tech" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a home tech business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their tech products, smart home solutions, or innovation focus when relevant. Liquid Canvas integrates with smart home systems for art display."
+            elif "audio visual" in category_lower or "av" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an audio-visual business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their AV solutions, home theater systems, or technology focus when relevant. Liquid Canvas can integrate with AV systems for art display."
+            else:
+                # Generic category context
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is in the '{category}' category and their business/organization is named '{business_name}'. Use the business name '{business_name}' in the email to personalize it. Reference their specific focus, products, or services when relevant."
+        
+        # Contact name context
+        contact_context = ""
+        if contact_name:
+            contact_context = f"\n\nCONTACT NAME:\nThe recipient's name is '{contact_name}'. Use this name to personalize the greeting (e.g., 'Hello {contact_name},' or 'Dear {contact_name},')."
+        
         prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
 ABOUT LIQUID CANVAS (READ THIS FIRST):
@@ -479,6 +534,8 @@ Website: https://liquidcanvas.art
 
 POSITIONING SUMMARY (How to approach this recipient):
 {positioning_summary}
+{category_context}
+{contact_context}
 
 RECIPIENT'S WEBSITE CONTEXT:
 {context}
@@ -493,6 +550,8 @@ Compose a personalized outreach email that:
 6. Includes a clear call-to-action
 7. Is warm but not overly salesy
 8. Uses the Liquid Canvas information to make the email authentic and specific
+{f"9. Use the business/organization name '{business_name}' throughout the email to personalize it" if business_name else ""}
+{f"10. Use the contact name '{contact_name}' in the greeting to personalize the email" if contact_name else ""}
 
 CRITICAL: The email MUST clearly introduce Liquid Canvas. Do not assume they know who we are.
 
@@ -753,7 +812,8 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         page_title: Optional[str] = None,
         page_url: Optional[str] = None,
         page_snippet: Optional[str] = None,
-        contact_name: Optional[str] = None
+        contact_name: Optional[str] = None,
+        category: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Compose a follow-up email using Gemini API with memory of previous emails
@@ -765,10 +825,11 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
                 - body: str
                 - sent_at: str (ISO timestamp)
                 - sequence_index: int (0 = initial, 1+ = follow-up)
-            page_title: Page title
+            page_title: Page title (business/organization name)
             page_url: Page URL
             page_snippet: Page description/snippet
             contact_name: Contact name (if available)
+            category: Category of the prospect (e.g., "Museum", "Art Gallery", "Interior Design", etc.)
         
         Returns:
             Dictionary with subject and body
@@ -776,15 +837,22 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
         
         # Build context for the email
+        # Extract business/organization name from page_title
+        business_name = page_title or domain or "Business"
+        
         context_parts = []
         if page_title:
-            context_parts.append(f"Website Title: {page_title}")
+            context_parts.append(f"Business/Organization Name: {page_title}")
         if domain:
             context_parts.append(f"Domain: {domain}")
         if page_snippet:
             context_parts.append(f"Description: {page_snippet}")
         if page_url:
             context_parts.append(f"URL: {page_url}")
+        if contact_name:
+            context_parts.append(f"Contact Name: {contact_name}")
+        if category:
+            context_parts.append(f"Category: {category}")
         
         context = "\n".join(context_parts) if context_parts else f"Website: {domain}"
         
@@ -807,6 +875,42 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         # Search for Liquid Canvas information (cache it to avoid repeated searches)
         liquid_canvas_info = await self._search_liquid_canvas_info()
         
+        # Create category-specific context (same logic as compose_email)
+        category_context = ""
+        if category:
+            category_lower = category.lower()
+            if "museum" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a museum named '{business_name}'. Use the museum name '{business_name}' in the email to personalize it."
+            elif "art gallery" in category_lower or "gallery" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an art gallery named '{business_name}'. Use the gallery name '{business_name}' in the email to personalize it."
+            elif "interior design" in category_lower or "interior decor" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an interior design business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "home decor" in category_lower or "holiday decor" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a home decor business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "parenting" in category_lower or "mom" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a parenting/mom blog or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "nft" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an NFT platform or business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "photographer" in category_lower or "photography" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a photographer named '{business_name}'. Use their name '{business_name}' in the email to personalize it."
+            elif "painter" in category_lower or "artist" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an artist/painter named '{business_name}'. Use their name '{business_name}' in the email to personalize it."
+            elif "dog" in category_lower or "cat" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a pet-related business or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "holiday" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a holiday-focused business or resource named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "home tech" in category_lower or "tech" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is a home tech business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            elif "audio visual" in category_lower or "av" in category_lower:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is an audio-visual business named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+            else:
+                category_context = f"\n\nCATEGORY CONTEXT:\nThis recipient is in the '{category}' category and their business/organization is named '{business_name}'. Use the business name '{business_name}' in the email to personalize it."
+        
+        # Contact name context
+        contact_context = ""
+        if contact_name:
+            contact_context = f"\n\nCONTACT NAME:\nThe recipient's name is '{contact_name}'. Use this name to personalize the greeting."
+        
         # Create prompt for follow-up email
         prompt = f"""You are a professional outreach specialist for Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
@@ -819,6 +923,8 @@ Your task is to compose a SHORT, PLAYFUL, LIGHT, WITTY follow-up email. This is 
 
 Context about their website:
 {context}
+{category_context}
+{contact_context}
 
 Previous emails in this thread:
 {previous_emails_text}
