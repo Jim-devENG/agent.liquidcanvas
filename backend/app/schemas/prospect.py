@@ -33,6 +33,8 @@ class ProspectResponse(BaseModel):
     serp_signals: Optional[list[str]] = None  # List of signals that led to intent classification
     # Pipeline status fields - required for Leads tab filtering
     discovery_status: Optional[str] = None
+    discovery_category: Optional[str] = None  # Category from discovery query
+    discovery_location: Optional[str] = None  # Location from discovery query
     approval_status: Optional[str] = None
     scrape_status: Optional[str] = None  # Legacy: scraping step status
     verification_status: Optional[str] = None
