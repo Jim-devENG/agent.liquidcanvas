@@ -1010,6 +1010,7 @@ async def list_scraped_emails(
             prospects = result.scalars().all()
         except Exception as query_err:
             error_str = str(query_err).lower()
+            logger.error(f"❌ [SCRAPED EMAILS] Query error: {query_err}", exc_info=True)
             if "undefinedcolumn" in error_str or "does not exist" in error_str or "bio_text" in error_str:
                 logger.error(f"❌ [SCRAPED EMAILS] Schema mismatch detected: {query_err}")
                 await db.rollback()
@@ -1017,7 +1018,11 @@ async def list_scraped_emails(
                     status_code=500,
                     detail=f"Database schema mismatch: Missing required columns. Please run migrations: 'alembic upgrade head' or use the /api/health/migrate endpoint. Error: {str(query_err)}"
                 )
-            raise  # Re-raise other errors
+            await db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Internal server error while querying scraped emails: {str(query_err)}"
+            )
         
         logger.info(f"📊 [SCRAPED EMAILS] QUERY RESULT: Found {len(prospects)} prospects from database query (total available: {total})")
         
