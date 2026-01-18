@@ -736,8 +736,11 @@ async def list_leads(
         # Add category filter if provided (case-insensitive)
         category_filter = None
         if category and category.lower() != 'all':
-            # Use case-insensitive comparison
-            category_filter = func.lower(Prospect.discovery_category) == category.lower()
+            # Use case-insensitive comparison, handle NULL values
+            category_filter = and_(
+                Prospect.discovery_category.isnot(None),
+                func.lower(Prospect.discovery_category) == category.lower()
+            )
             logger.info(f"🔍 [LEADS] Filtering by category: {category} (case-insensitive)")
         
         # Build base filters
@@ -971,8 +974,11 @@ async def list_scraped_emails(
         # Add category filter if provided (case-insensitive)
         category_filter = None
         if category and category.lower() != 'all':
-            # Use case-insensitive comparison
-            category_filter = func.lower(Prospect.discovery_category) == category.lower()
+            # Use case-insensitive comparison, handle NULL values
+            category_filter = and_(
+                Prospect.discovery_category.isnot(None),
+                func.lower(Prospect.discovery_category) == category.lower()
+            )
             logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category} (case-insensitive)")
         
         # SINGLE SOURCE OF TRUTH: contact_email IS NOT NULL AND scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
