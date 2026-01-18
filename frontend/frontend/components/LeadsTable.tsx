@@ -919,27 +919,27 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       {/* Compose / Review Modal */}
       {activeProspect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass rounded-3xl shadow-2xl w-full max-w-7xl max-height-[90vh] max-h-[90vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-liquid-50/50 to-purple-50/30">
+          <div className="glass rounded-xl shadow-2xl w-full max-w-3xl max-h-[75vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200/50 bg-gradient-to-r from-liquid-50/50 to-purple-50/30">
               <div>
-                <h3 className="text-xl font-bold liquid-gradient-text">
+                <h3 className="text-base font-bold liquid-gradient-text">
                   Review Draft Email
                 </h3>
-                <p className="text-xs text-gray-600 mt-1 font-medium">
+                <p className="text-xs text-gray-600 mt-0.5 font-medium">
                   {activeProspect.domain} — {activeProspect.contact_email}
                 </p>
               </div>
               <button
                 onClick={closeComposeModal}
-                className="p-2 rounded-xl hover:bg-white/80 text-gray-500 transition-all duration-200 hover:scale-110"
+                className="p-1.5 rounded-lg hover:bg-white/80 text-gray-500 transition-all duration-200 hover:scale-110"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex-1 overflow-hidden flex">
               {/* Left: Gemini Chat */}
-              <div className="w-1/3 border-r flex flex-col">
+              <div className="w-2/5 border-r flex flex-col">
                 <GeminiChatPanel
                   prospectId={activeProspect.id}
                   currentSubject={draftSubject}
@@ -953,7 +953,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <div className="flex border-b">
                   <button
                     onClick={() => setActiveTab('edit')}
-                    className={`px-4 py-2 text-sm font-medium ${
+                    className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'edit'
                         ? 'border-b-2 border-olive-600 text-olive-600'
                         : 'text-gray-600 hover:text-gray-900'
@@ -963,7 +963,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   </button>
                   <button
                     onClick={() => setActiveTab('preview')}
-                    className={`px-4 py-2 text-sm font-medium ${
+                    className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'preview'
                         ? 'border-b-2 border-olive-600 text-olive-600'
                         : 'text-gray-600 hover:text-gray-900'
@@ -973,43 +973,43 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-3">
                   {activeTab === 'edit' ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Subject
                         </label>
                         <input
                           type="text"
                           value={draftSubject}
                           onChange={(e) => setDraftSubject(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
                           placeholder="Email subject..."
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Message Body
                         </label>
                         <textarea
                           value={draftBody}
                           onChange={(e) => setDraftBody(e.target.value)}
-                          rows={15}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          rows={10}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
                           placeholder="Write your message here..."
                         />
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Subject:</h4>
-                        <p className="text-sm text-gray-900">{draftSubject || '(No subject)'}</p>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-1">Subject:</h4>
+                        <p className="text-xs text-gray-900">{draftSubject || '(No subject)'}</p>
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Body:</h4>
-                        <div className="text-sm text-gray-900 whitespace-pre-wrap">{draftBody || '(No body)'}</div>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-1">Body:</h4>
+                        <div className="text-xs text-gray-900 whitespace-pre-wrap">{draftBody || '(No body)'}</div>
                       </div>
                     </div>
                   )}
@@ -1017,16 +1017,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </div>
             </div>
 
-            <div className="border-t p-4 flex items-center justify-end gap-2">
+            <div className="border-t p-2.5 flex items-center justify-end gap-2">
               <button
                 onClick={closeComposeModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveDraft}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
               >
                 Save Draft
               </button>
@@ -1034,16 +1034,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <button
                   onClick={handleSendNow}
                   disabled={isSending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-3 h-3 animate-spin" />
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
+                      <Send className="w-3 h-3" />
                       Send
                     </>
                   )}
