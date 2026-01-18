@@ -946,6 +946,7 @@ async def list_leads(
 async def list_scraped_emails(
     skip: int = 0,
     limit: int = 50,
+    category: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
