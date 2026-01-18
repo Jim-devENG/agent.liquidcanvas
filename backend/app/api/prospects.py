@@ -972,16 +972,6 @@ async def list_scraped_emails(
             Prospect.source_type.is_(None)  # Legacy prospects (default to website)
         )
         
-        # Add category filter if provided (case-insensitive)
-        category_filter = None
-        if category and category.lower() != 'all':
-            # Use case-insensitive comparison, handle NULL values
-            category_filter = and_(
-                Prospect.discovery_category.isnot(None),
-                func.lower(Prospect.discovery_category) == category.lower()
-            )
-            logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category} (case-insensitive)")
-        
         # SINGLE SOURCE OF TRUTH: contact_email IS NOT NULL AND scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
         logger.info(f"🔍 [SCRAPED EMAILS] Querying website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
         
@@ -995,16 +985,19 @@ async def list_scraped_emails(
             website_filter
         ]
         
-        # Add category filter if provided
-        if category_filter:
-            base_filters.append(category_filter)
+        # Add category filter if provided (case-insensitive, handle NULL values)
+        if category and category.lower() != 'all':
+            logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category} (case-insensitive)")
+            # Add NULL check and case-insensitive comparison directly to base_filters
+            base_filters.append(Prospect.discovery_category.isnot(None))
+            base_filters.append(func.lower(Prospect.discovery_category) == category.lower())
         
         # Get total count FIRST (before any filtering)
         count_query = select(func.count(Prospect.id)).where(and_(*base_filters))
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
-        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')" + (f" and category='{category}'" if category_filter else ""))
+        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')" + (f" and category='{category}'" if (category and category.lower() != 'all') else ""))
         
         # Build query with website filter
         query = select(Prospect).where(and_(*base_filters)).order_by(Prospect.created_at.desc())
