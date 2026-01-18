@@ -13,7 +13,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "lucide-react": "^0.294.0",
- m    "@tanstack/react-table": "^8.10.7",
+    "@tanstack/react-table": "^8.10.7",
     "tailwindcss": "^3.3.6",
     "postcss": "^8.4.32",
     "autoprefixer": "^10.4.16"
