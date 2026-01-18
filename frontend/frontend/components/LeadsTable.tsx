@@ -725,7 +725,37 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       />
                     </td>
                     <td className="py-2 px-3 text-xs">
-                      <span className="text-gray-700 font-medium">{prospect.discovery_category || 'N/A'}</span>
+                      <select
+                        value={prospect.discovery_category || ''}
+                        onChange={async (e) => {
+                          const newCategory = e.target.value
+                          if (newCategory !== prospect.discovery_category) {
+                            try {
+                              await updateProspectCategory({
+                                prospect_ids: [prospect.id],
+                                category: newCategory || ''
+                              })
+                              // Reload to show updated category
+                              setTimeout(() => {
+                                loadProspects().catch(err => console.error('Error reloading prospects:', err))
+                              }, 300)
+                            } catch (err: any) {
+                              setError(err.message || 'Failed to update category')
+                            }
+                          }
+                        }}
+                        className={`text-xs px-2 py-1 border rounded-lg focus:ring-olive-500 focus:border-olive-500 hover:bg-gray-50 cursor-pointer transition-colors ${
+                          prospect.discovery_category 
+                            ? 'border-olive-300 bg-olive-50/30 text-gray-900 font-medium' 
+                            : 'border-gray-300 bg-white text-gray-500'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <option value="">-- Select Category --</option>
+                        {availableCategories.map((cat) => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="py-2 px-3 text-xs">
                       <div className="flex items-center space-x-2">
