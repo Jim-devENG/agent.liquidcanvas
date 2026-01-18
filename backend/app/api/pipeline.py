@@ -1646,6 +1646,8 @@ async def auto_categorize_all(
     
     for prospect in prospects:
         original_category = prospect.discovery_category
+        new_category = None
+        
         # First try to get category from discovery_query
         if prospect.discovery_query_id:
             try:
@@ -1660,10 +1662,8 @@ async def auto_categorize_all(
                 )
                 query_category = result.scalar_one_or_none()
                 if query_category:
-                    prospect.discovery_category = query_category
-                    categorized_count += 1
+                    new_category = query_category
                     logger.info(f"✅ [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Inherited category '{query_category}' from discovery query")
-                    continue
                 else:
                     logger.debug(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): discovery_query_id exists but query has no category")
             except Exception as query_err:
@@ -1672,15 +1672,29 @@ async def auto_categorize_all(
             logger.debug(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): No discovery_query_id")
         
         # If no category from discovery_query, try auto-categorization
-        category = await auto_categorize_prospect(prospect, db)
-        if category:
-            prospect.discovery_category = category
+        if not new_category:
+            new_category = await auto_categorize_prospect(prospect, db)
+            if new_category:
+                logger.info(f"✅ [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Auto-categorized as '{new_category}'")
+            else:
+                logger.warning(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Could not determine category (domain: {prospect.domain}, title: {prospect.page_title or 'N/A'})")
+        
+        # Update category if we found one
+        if new_category and new_category != original_category:
+            prospect.discovery_category = new_category
             categorized_count += 1
-            logger.info(f"✅ [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Auto-categorized as '{category}'")
-        else:
-            logger.warning(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Could not determine category (domain: {prospect.domain}, title: {prospect.page_title or 'N/A'})")
+            # Explicitly mark as modified
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(prospect, 'discovery_category')
     
-    await db.commit()
+    # Commit all changes
+    try:
+        await db.commit()
+        logger.info(f"✅ [AUTO CATEGORIZE] Committed {categorized_count} category updates to database")
+    except Exception as commit_err:
+        logger.error(f"❌ [AUTO CATEGORIZE] Failed to commit changes: {commit_err}")
+        await db.rollback()
+        raise
     
     logger.info(f"✅ [AUTO CATEGORIZE] Automatically categorized {categorized_count} of {len(prospects)} prospects")
     

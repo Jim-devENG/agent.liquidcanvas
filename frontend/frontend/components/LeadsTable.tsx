@@ -433,12 +433,35 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     setError(null)
     try {
       const result = await autoCategorizeAll()
-      setTimeout(() => {
-        loadProspects().catch(err => console.error('Error reloading prospects:', err))
-      }, 500)
-      setError(`✅ ${result.message}`)
+      console.log('✅ [AUTO CATEGORIZE] Result:', result)
+      setError(`✅ ${result.message} - Refreshing...`)
+      
+      // Reset to first page
+      setSkip(0)
+      
+      // Wait for backend to commit, then reload multiple times to ensure we get fresh data
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [AUTO CATEGORIZE] First refresh complete')
+        } catch (err) {
+          console.error('❌ [AUTO CATEGORIZE] Error on first refresh:', err)
+        }
+      }, 1000)
+      
+      // Second refresh after a bit more time to ensure database is updated
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [AUTO CATEGORIZE] Second refresh complete')
+        } catch (err) {
+          console.error('❌ [AUTO CATEGORIZE] Error on second refresh:', err)
+        }
+      }, 2500)
+      
       setTimeout(() => setError(null), 5000)
     } catch (err: any) {
+      console.error('❌ [AUTO CATEGORIZE] Error:', err)
       setError(err.message || 'Failed to auto-categorize')
     } finally {
       setIsAutoCategorizing(false)
