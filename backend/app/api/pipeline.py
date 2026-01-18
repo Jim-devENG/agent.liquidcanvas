@@ -1624,25 +1624,61 @@ async def auto_categorize_all(
     Automatically categorize all prospects that don't have a category.
     Uses heuristics based on domain, title, and URL to determine category.
     """
-    logger.info("🤖 [AUTO CATEGORIZE] Starting automatic categorization of all uncategorized prospects")
+    logger.info("🤖 [AUTO CATEGORIZE] Starting automatic categorization - updating from discovery queries and pattern matching")
     
-    # Get all prospects without categories
-    result = await db.execute(
-        select(Prospect).where(
-            or_(
-                Prospect.discovery_category.is_(None),
-                Prospect.discovery_category == '',
-                Prospect.discovery_category == 'N/A',
-                Prospect.discovery_category == 'Unknown'
-            )
-        )
+    # First, check how many total prospects exist and their category status
+    total_result = await db.execute(select(func.count(Prospect.id)))
+    total_prospects = total_result.scalar_one()
+    
+    # Check category distribution
+    category_dist = await db.execute(
+        select(Prospect.discovery_category, func.count(Prospect.id)).group_by(Prospect.discovery_category)
     )
-    prospects = result.scalars().all()
+    category_counts = {cat or 'NULL': count for cat, count in category_dist.all()}
+    logger.info(f"📊 [AUTO CATEGORIZE] Total prospects: {total_prospects}, Category distribution: {category_counts}")
     
-    logger.info(f"📊 [AUTO CATEGORIZE] Found {len(prospects)} uncategorized prospects")
+    # Strategy 1: Get prospects with discovery_query_id that need category updates
+    # This ensures all prospects inherit their discovery query category
+    from app.models.discovery_query import DiscoveryQuery
+    
+    prospects_with_query = await db.execute(
+        select(Prospect).where(
+            Prospect.discovery_query_id.isnot(None)
+        ).limit(1000)  # Limit to avoid memory issues
+    )
+    prospects = prospects_with_query.scalars().all()
+    logger.info(f"📊 [AUTO CATEGORIZE] Found {len(prospects)} prospects with discovery_query_id")
+    
+    # Strategy 2: Also get uncategorized prospects without discovery_query_id
+    uncategorized_result = await db.execute(
+        select(Prospect).where(
+            and_(
+                Prospect.discovery_query_id.is_(None),
+                or_(
+                    Prospect.discovery_category.is_(None),
+                    Prospect.discovery_category == '',
+                    func.lower(Prospect.discovery_category) == 'n/a',
+                    Prospect.discovery_category == 'N/A',
+                    func.lower(Prospect.discovery_category) == 'unknown',
+                    Prospect.discovery_category == 'Unknown',
+                    func.trim(Prospect.discovery_category) == ''  # Also catch whitespace-only
+                )
+            )
+        ).limit(1000)
+    )
+    uncategorized = uncategorized_result.scalars().all()
+    logger.info(f"📊 [AUTO CATEGORIZE] Found {len(uncategorized)} uncategorized prospects without discovery_query_id")
+    
+    # Combine both lists (avoid duplicates)
+    prospect_ids = {p.id for p in prospects}
+    for p in uncategorized:
+        if p.id not in prospect_ids:
+            prospects.append(p)
+            prospect_ids.add(p.id)
+    
+    logger.info(f"📊 [AUTO CATEGORIZE] Processing {len(prospects)} total prospects")
     
     categorized_count = 0
-    from app.models.discovery_query import DiscoveryQuery
     
     for prospect in prospects:
         original_category = prospect.discovery_category
