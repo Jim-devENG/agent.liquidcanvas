@@ -68,11 +68,32 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       let leads = Array.isArray(response?.data) ? response.data : []
       
-      // Filter by category if selected
+      // Log categories in the data for debugging
       if (selectedCategory !== 'all') {
-        leads = leads.filter((p: Prospect) => 
-          p.discovery_category === selectedCategory || p.discovery_category?.toLowerCase() === selectedCategory.toLowerCase()
-        )
+        const categoriesInData = [...new Set(leads.map((p: Prospect) => p.discovery_category).filter(Boolean))]
+        console.log(`🔍 [FILTER] Filtering for category: "${selectedCategory}"`)
+        console.log(`🔍 [FILTER] Categories found in current page:`, categoriesInData)
+        console.log(`🔍 [FILTER] Total items before filter:`, leads.length)
+      }
+      
+      // Filter by category if selected (case-insensitive, trimmed)
+      if (selectedCategory !== 'all') {
+        const normalizedSelected = selectedCategory.trim().toLowerCase()
+        leads = leads.filter((p: Prospect) => {
+          if (!p.discovery_category) return false
+          const normalizedCategory = p.discovery_category.trim().toLowerCase()
+          const matches = normalizedCategory === normalizedSelected
+          if (matches) {
+            console.log(`✅ [FILTER] Match found: "${p.discovery_category}" matches "${selectedCategory}" for ${p.domain}`)
+          }
+          return matches
+        })
+        console.log(`🔍 [FILTER] Items after filter:`, leads.length)
+        
+        // If no results on current page, warn user
+        if (leads.length === 0 && response.total > 0) {
+          console.warn(`⚠️ [FILTER] No "${selectedCategory}" prospects found on current page. They may be on other pages. Total prospects: ${response.total}`)
+        }
       }
       
       // Sort by category in ascending order
@@ -90,6 +111,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         isArray: Array.isArray(response?.data),
         firstItem: response?.data?.[0]
       })
+      
+      // Log all unique categories in the current page for debugging
+      const categoriesInPage = [...new Set(leads.map((p: Prospect) => p.discovery_category).filter(Boolean))]
+      console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Categories in current page:`, categoriesInPage)
       
       // CRITICAL: If backend says there's data but we got empty array, this is an error
       if (response?.total > 0 && (!response?.data || response.data.length === 0)) {
@@ -109,8 +134,14 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       setProspects(leads)
       setTotal(selectedCategory === 'all' ? (response.total ?? leads.length) : leads.length)
-      // Clear error on successful load (even if empty data)
-      setError(null)
+      
+      // Show helpful message if filtering and no results on current page
+      if (selectedCategory !== 'all' && leads.length === 0 && response.total > 0) {
+        setError(`No "${selectedCategory}" prospects found on this page. Try navigating to other pages or check if the category name matches exactly.`)
+      } else {
+        // Clear error on successful load (even if empty data)
+        setError(null)
+      }
       // Empty data is not an error, it's a valid state
     } catch (error: any) {
       // CRITICAL: Do not suppress errors - log them clearly
