@@ -1598,7 +1598,31 @@ async def auto_categorize_all(
     logger.info(f"📊 [AUTO CATEGORIZE] Found {len(prospects)} uncategorized prospects")
     
     categorized_count = 0
+    from app.models.discovery_query import DiscoveryQuery
+    
     for prospect in prospects:
+        # First try to get category from discovery_query
+        if prospect.discovery_query_id:
+            try:
+                result = await db.execute(
+                    select(DiscoveryQuery.category).where(
+                        DiscoveryQuery.id == prospect.discovery_query_id,
+                        DiscoveryQuery.category.isnot(None),
+                        DiscoveryQuery.category != '',
+                        DiscoveryQuery.category != 'N/A',
+                        DiscoveryQuery.category != 'Unknown'
+                    )
+                )
+                query_category = result.scalar_one_or_none()
+                if query_category:
+                    prospect.discovery_category = query_category
+                    categorized_count += 1
+                    logger.debug(f"✅ [AUTO CATEGORIZE] Inherited category '{query_category}' from discovery query for prospect {prospect.id}")
+                    continue
+            except Exception as query_err:
+                logger.warning(f"⚠️  [AUTO CATEGORIZE] Error getting category from discovery query for prospect {prospect.id}: {query_err}")
+        
+        # If no category from discovery_query, try auto-categorization
         category = await auto_categorize_prospect(prospect, db)
         if category:
             prospect.discovery_category = category

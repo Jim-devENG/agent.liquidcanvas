@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from app.db.database import AsyncSessionLocal
 from app.models.prospect import Prospect, ScrapeStatus, ProspectStage
 from app.models.job import Job
+from app.models.discovery_query import DiscoveryQuery
 from app.services.enrichment import _scrape_emails_from_domain
 from app.api.pipeline import auto_categorize_prospect
 
@@ -100,17 +101,40 @@ async def scrape_prospects_async(job_id: str):
                         prospect.scrape_payload = emails_by_page
                         prospect.scrape_status = ScrapeStatus.SCRAPED.value
                         
-                        # CRITICAL: Auto-categorize based on domain during scraping
+                        # CRITICAL: Inherit category from discovery query if not already set
                         if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
-                            try:
-                                category = await auto_categorize_prospect(prospect, db)
-                                if category:
-                                    prospect.discovery_category = category
-                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' during scraping")
-                                else:
-                                    logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
-                            except Exception as cat_err:
-                                logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                            # First try to get category from discovery_query
+                            if prospect.discovery_query_id:
+                                try:
+                                    result = await db.execute(
+                                        select(DiscoveryQuery.category).where(
+                                            DiscoveryQuery.id == prospect.discovery_query_id,
+                                            DiscoveryQuery.category.isnot(None),
+                                            DiscoveryQuery.category != '',
+                                            DiscoveryQuery.category != 'N/A',
+                                            DiscoveryQuery.category != 'Unknown'
+                                        )
+                                    )
+                                    query_category = result.scalar_one_or_none()
+                                    if query_category:
+                                        prospect.discovery_category = query_category
+                                        logger.info(f"🏷️  [SCRAPING] Inherited category '{query_category}' from discovery query for {prospect.domain}")
+                                except Exception as query_err:
+                                    logger.warning(f"⚠️  [SCRAPING] Error getting category from discovery query: {query_err}")
+                            
+                            # If still no category, try auto-categorization as fallback
+                            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                                try:
+                                    category = await auto_categorize_prospect(prospect, db)
+                                    if category:
+                                        prospect.discovery_category = category
+                                        logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' during scraping")
+                                    else:
+                                        logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
+                                except Exception as cat_err:
+                                    logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                        else:
+                            logger.debug(f"✅ [SCRAPING] Preserving existing category '{prospect.discovery_category}' for {prospect.domain}")
                         
                         # Set stage to EMAIL_FOUND (explicit promotion to LEAD happens separately)
                         try:
@@ -141,17 +165,40 @@ async def scrape_prospects_async(job_id: str):
                         prospect.scrape_status = ScrapeStatus.NO_EMAIL_FOUND.value
                         prospect.scrape_payload = {}
                         
-                        # CRITICAL: Auto-categorize based on domain even if no email found
+                        # CRITICAL: Inherit category from discovery query if not already set
                         if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
-                            try:
-                                category = await auto_categorize_prospect(prospect, db)
-                                if category:
-                                    prospect.discovery_category = category
-                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' (no email found)")
-                                else:
-                                    logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
-                            except Exception as cat_err:
-                                logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                            # First try to get category from discovery_query
+                            if prospect.discovery_query_id:
+                                try:
+                                    result = await db.execute(
+                                        select(DiscoveryQuery.category).where(
+                                            DiscoveryQuery.id == prospect.discovery_query_id,
+                                            DiscoveryQuery.category.isnot(None),
+                                            DiscoveryQuery.category != '',
+                                            DiscoveryQuery.category != 'N/A',
+                                            DiscoveryQuery.category != 'Unknown'
+                                        )
+                                    )
+                                    query_category = result.scalar_one_or_none()
+                                    if query_category:
+                                        prospect.discovery_category = query_category
+                                        logger.info(f"🏷️  [SCRAPING] Inherited category '{query_category}' from discovery query for {prospect.domain} (no email found)")
+                                except Exception as query_err:
+                                    logger.warning(f"⚠️  [SCRAPING] Error getting category from discovery query: {query_err}")
+                            
+                            # If still no category, try auto-categorization as fallback
+                            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                                try:
+                                    category = await auto_categorize_prospect(prospect, db)
+                                    if category:
+                                        prospect.discovery_category = category
+                                        logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' (no email found)")
+                                    else:
+                                        logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain} (no email found)")
+                                except Exception as cat_err:
+                                    logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization (no email): {cat_err}")
+                        else:
+                            logger.debug(f"✅ [SCRAPING] Preserving existing category '{prospect.discovery_category}' for {prospect.domain} (no email found)")
                         
                         # Set stage to SCRAPED (not LEAD, since no email found)
                         try:

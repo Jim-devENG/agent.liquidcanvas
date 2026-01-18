@@ -727,37 +727,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       />
                     </td>
                     <td className="py-2 px-3 text-xs">
-                      <select
-                        value={prospect.discovery_category || ''}
-                        onChange={async (e) => {
-                          const newCategory = e.target.value
-                          if (newCategory !== prospect.discovery_category) {
-                            try {
-                              await updateProspectCategory({
-                                prospect_ids: [prospect.id],
-                                category: newCategory || ''
-                              })
-                              // Reload to show updated category
-                              setTimeout(() => {
-                                loadProspects().catch(err => console.error('Error reloading prospects:', err))
-                              }, 300)
-                            } catch (err: any) {
-                              setError(err.message || 'Failed to update category')
-                            }
-                          }
-                        }}
-                        className={`text-xs px-2 py-1 border rounded-lg focus:ring-olive-500 focus:border-olive-500 hover:bg-gray-50 cursor-pointer transition-colors ${
-                          prospect.discovery_category 
-                            ? 'border-olive-300 bg-olive-50/30 text-gray-900 font-medium' 
-                            : 'border-gray-300 bg-white text-gray-500'
-                        }`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <option value="">-- Select Category --</option>
-                        {availableCategories.map((cat) => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
+                      <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                        prospect.discovery_category 
+                          ? 'bg-olive-100 text-olive-800 border border-olive-300' 
+                          : 'bg-gray-100 text-gray-500 border border-gray-300'
+                      }`}>
+                        {prospect.discovery_category || 'N/A'}
+                      </span>
                     </td>
                     <td className="py-2 px-3 text-xs">
                       <div className="flex items-center space-x-2">
