@@ -1483,76 +1483,120 @@ async def auto_categorize_prospect(prospect: Prospect, db: AsyncSession) -> Opti
     
     # Comprehensive category detection patterns
     # Order matters - more specific patterns first
+    # Categories must match frontend available categories
     category_patterns = {
-        'Museums': [
+        'Museum': [
             # Domain patterns
             'museum', 'museums', 'museo', 'museu', 'muse', 'museet',
             # Title/URL patterns
             'art museum', 'gallery museum', 'contemporary museum', 'modern museum',
             'museum of art', 'art collection', 'permanent collection'
         ],
-        'Art Gallery': [
+        'Art': [
             # Domain patterns
             'gallery', 'galleries', 'galerie', 'galeria', 'galerija',
+            'studio', 'studios', 'atelier', 'ateliers',
+            'art', 'arts', 'artwork', 'artworks',
             # Title/URL patterns
             'art gallery', 'contemporary art', 'fine art gallery', 'art space',
             'exhibition space', 'art showroom', 'gallery space', 'art room',
-            'contemporary gallery', 'modern gallery', 'fine art', 'art display'
-        ],
-        'Art Studio': [
-            # Domain patterns
-            'studio', 'studios', 'atelier', 'ateliers',
-            # Title/URL patterns
+            'contemporary gallery', 'modern gallery', 'fine art', 'art display',
             'art studio', 'artist studio', 'creative studio', 'painting studio',
-            'sculpture studio', 'artists studio', 'working studio', 'art workshop'
-        ],
-        'Art School': [
-            # Domain patterns
-            'school', 'academy', 'academie', 'academia', 'institute', 'institution',
-            'college', 'university', 'univ', 'edu',
-            # Title/URL patterns
-            'art school', 'art academy', 'art institute', 'art education',
-            'art college', 'art program', 'art courses', 'art classes',
-            'art training', 'art degree', 'fine arts', 'visual arts school'
-        ],
-        'Art Fair': [
-            # Domain patterns
-            'fair', 'fairs', 'expo', 'exhibition', 'exhibitions', 'show', 'shows',
-            # Title/URL patterns
+            'sculpture studio', 'artists studio', 'working studio', 'art workshop',
             'art fair', 'art exhibition', 'art show', 'art expo', 'art market',
             'art event', 'art festival', 'biennale', 'biennial', 'art week'
         ],
-        'Art Dealer': [
+        'Interior Design': [
             # Domain patterns
-            'dealer', 'dealers', 'broker', 'brokers', 'trader', 'traders',
-            'auction', 'auctions', 'sotheby', 'christie', 'bonham',
+            'interior', 'interiors', 'design', 'designer', 'designers',
             # Title/URL patterns
-            'art dealer', 'art broker', 'art trader', 'art sales', 'art buying',
-            'art selling', 'art investment', 'art collector', 'art collection'
+            'interior design', 'interior designer', 'home design', 'space design',
+            'interior decorator', 'interior decoration', 'home styling'
         ],
-        'Art Consultant': [
+        'Interior Decor': [
             # Domain patterns
-            'consultant', 'consultants', 'advisor', 'advisors', 'advisory',
-            'curator', 'curators', 'curation',
+            'decor', 'decoration', 'decorator', 'decorators',
             # Title/URL patterns
-            'art consultant', 'art advisor', 'art advisory', 'art curation',
-            'art curating', 'art management', 'art services'
+            'interior decor', 'home decor', 'decorating', 'home decoration'
         ],
-        'Art Publisher': [
+        'Home Decor': [
             # Domain patterns
-            'publisher', 'publishers', 'publishing', 'press', 'books', 'book',
-            'edition', 'editions', 'print', 'prints',
+            'home', 'homedecor', 'homedecoration',
             # Title/URL patterns
-            'art publisher', 'art publishing', 'art press', 'art book',
-            'art books', 'art print', 'art prints', 'art edition'
+            'home decor', 'home decoration', 'home accessories', 'home furnishings'
         ],
-        'Art Magazine': [
+        'Holiday Decor': [
             # Domain patterns
-            'magazine', 'magazines', 'journal', 'journals', 'review', 'reviews',
-            'publication', 'publications', 'media', 'news', 'blog',
+            'holiday', 'holidays', 'christmas', 'halloween', 'thanksgiving',
             # Title/URL patterns
-            'art magazine', 'art journal', 'art publication', 'art review',
-            'art news', 'art media', 'art blog', 'art writing', 'art critic'
+            'holiday decor', 'holiday decoration', 'seasonal decor', 'holiday decorating'
+        ],
+        'Holidays': [
+            # Domain patterns
+            'holiday', 'holidays', 'festival', 'festivals', 'celebration',
+            # Title/URL patterns
+            'holiday', 'holidays', 'festival', 'celebration', 'seasonal'
+        ],
+        'Dogs': [
+            # Domain patterns
+            'dog', 'dogs', 'puppy', 'puppies', 'canine', 'canines',
+            # Title/URL patterns
+            'dog', 'dogs', 'puppy', 'canine', 'dog training', 'dog care'
+        ],
+        'Dog Lovers': [
+            # Domain patterns
+            'doglover', 'doglovers', 'dog-lover', 'dog-lovers',
+            # Title/URL patterns
+            'dog lover', 'dog lovers', 'dog owner', 'dog owners'
+        ],
+        'Cats': [
+            # Domain patterns
+            'cat', 'cats', 'kitten', 'kittens', 'feline', 'felines',
+            # Title/URL patterns
+            'cat', 'cats', 'kitten', 'feline', 'cat care', 'cat training'
+        ],
+        'Cat Lovers': [
+            # Domain patterns
+            'catlover', 'catlovers', 'cat-lover', 'cat-lovers',
+            # Title/URL patterns
+            'cat lover', 'cat lovers', 'cat owner', 'cat owners'
+        ],
+        'Parenting': [
+            # Domain patterns
+            'parent', 'parents', 'parenting', 'mom', 'moms', 'dad', 'dads',
+            'family', 'families', 'children', 'kids', 'child',
+            # Title/URL patterns
+            'parenting', 'parent', 'family', 'children', 'kids', 'child care'
+        ],
+        'Childhood Development': [
+            # Domain patterns
+            'child', 'children', 'childhood', 'development', 'early', 'education',
+            # Title/URL patterns
+            'child development', 'childhood development', 'early childhood', 'child education'
+        ],
+        'Home Tech': [
+            # Domain patterns
+            'tech', 'technology', 'smart', 'automation', 'iot', 'homeautomation',
+            # Title/URL patterns
+            'home tech', 'smart home', 'home automation', 'home technology'
+        ],
+        'Audio Visual': [
+            # Domain patterns
+            'audio', 'visual', 'av', 'audiovisual', 'sound', 'video',
+            # Title/URL patterns
+            'audio visual', 'audiovisual', 'sound system', 'home theater'
+        ],
+        'NFTs': [
+            # Domain patterns
+            'nft', 'nfts', 'crypto', 'blockchain', 'web3',
+            # Title/URL patterns
+            'nft', 'nfts', 'non-fungible token', 'crypto art', 'digital art'
+        ],
+        'Famous Quotes': [
+            # Domain patterns
+            'quote', 'quotes', 'quotation', 'quotations', 'inspirational',
+            # Title/URL patterns
+            'quote', 'quotes', 'famous quote', 'inspirational quote'
         ]
     }
     
@@ -1613,11 +1657,43 @@ async def auto_categorize_all(
     logger.info(f"📊 [AUTO CATEGORIZE] Found {len(prospects)} uncategorized prospects")
     
     categorized_count = 0
+    from app.models.discovery_query import DiscoveryQuery
+    
     for prospect in prospects:
+        original_category = prospect.discovery_category
+        # First try to get category from discovery_query
+        if prospect.discovery_query_id:
+            try:
+                result = await db.execute(
+                    select(DiscoveryQuery.category).where(
+                        DiscoveryQuery.id == prospect.discovery_query_id,
+                        DiscoveryQuery.category.isnot(None),
+                        DiscoveryQuery.category != '',
+                        DiscoveryQuery.category != 'N/A',
+                        DiscoveryQuery.category != 'Unknown'
+                    )
+                )
+                query_category = result.scalar_one_or_none()
+                if query_category:
+                    prospect.discovery_category = query_category
+                    categorized_count += 1
+                    logger.info(f"✅ [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Inherited category '{query_category}' from discovery query")
+                    continue
+                else:
+                    logger.debug(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): discovery_query_id exists but query has no category")
+            except Exception as query_err:
+                logger.warning(f"⚠️  [AUTO CATEGORIZE] Error getting category from discovery query for prospect {prospect.id} ({prospect.domain}): {query_err}")
+        else:
+            logger.debug(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): No discovery_query_id")
+        
+        # If no category from discovery_query, try auto-categorization
         category = await auto_categorize_prospect(prospect, db)
         if category:
             prospect.discovery_category = category
             categorized_count += 1
+            logger.info(f"✅ [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Auto-categorized as '{category}'")
+        else:
+            logger.warning(f"⚠️  [AUTO CATEGORIZE] Prospect {prospect.id} ({prospect.domain}): Could not determine category (domain: {prospect.domain}, title: {prospect.page_title or 'N/A'})")
     
     await db.commit()
     
