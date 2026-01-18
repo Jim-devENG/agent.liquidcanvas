@@ -92,7 +92,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       })
       
       // Log all unique categories in the current page for debugging
-      const categoriesInPage = [...new Set(leads.map((p: Prospect) => p.discovery_category).filter(Boolean))]
+      const categoriesInPage = Array.from(new Set(leads.map((p: Prospect) => p.discovery_category).filter((cat): cat is string => !!cat)))
       console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Categories in current page:`, categoriesInPage)
       
       // CRITICAL: If backend says there's data but we got empty array, this is an error
