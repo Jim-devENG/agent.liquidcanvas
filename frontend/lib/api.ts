@@ -571,12 +571,16 @@ export async function listJobs(skip = 0, limit = 50): Promise<Job[]> {
 // Prospects API
 export async function listLeads(
   skip = 0,
-  limit = 50
+  limit = 50,
+  category?: string
 ): Promise<ProspectListResponse> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
   })
+  if (category && category !== 'all') {
+    params.append('category', category)
+  }
   params.append('_t', Date.now().toString())
   
   try {
@@ -615,12 +619,16 @@ export async function listLeads(
 
 export async function listScrapedEmails(
   skip = 0,
-  limit = 50
+  limit = 50,
+  category?: string
 ): Promise<ProspectListResponse> {
   const params = new URLSearchParams({
     skip: skip.toString(),
     limit: limit.toString(),
   })
+  if (category && category !== 'all') {
+    params.append('category', category)
+  }
   params.append('_t', Date.now().toString())
   
   try {

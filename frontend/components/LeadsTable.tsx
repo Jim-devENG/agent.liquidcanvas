@@ -56,8 +56,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       // Leads tab: prospects with scrape_status IN (SCRAPED, ENRICHED) - matches pipeline "Scraped" count
       // Scraped Emails tab: same as leads (for now, both show scraped emails)
       const response = emailsOnly 
-        ? await listScrapedEmails(skip, limit)
-        : await listLeads(skip, limit)
+        ? await listScrapedEmails(skip, limit, selectedCategory !== 'all' ? selectedCategory : undefined)
+        : await listLeads(skip, limit, selectedCategory !== 'all' ? selectedCategory : undefined)
       
       console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] API Response:`, { 
         dataLength: response?.data?.length, 
@@ -68,32 +68,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       let leads = Array.isArray(response?.data) ? response.data : []
       
-      // Log categories in the data for debugging
+      // Backend now handles category filtering, so no need to filter on frontend
+      // But we can still log for debugging
       if (selectedCategory !== 'all') {
-        const categoriesInData = [...new Set(leads.map((p: Prospect) => p.discovery_category).filter(Boolean))]
-        console.log(`🔍 [FILTER] Filtering for category: "${selectedCategory}"`)
-        console.log(`🔍 [FILTER] Categories found in current page:`, categoriesInData)
-        console.log(`🔍 [FILTER] Total items before filter:`, leads.length)
-      }
-      
-      // Filter by category if selected (case-insensitive, trimmed)
-      if (selectedCategory !== 'all') {
-        const normalizedSelected = selectedCategory.trim().toLowerCase()
-        leads = leads.filter((p: Prospect) => {
-          if (!p.discovery_category) return false
-          const normalizedCategory = p.discovery_category.trim().toLowerCase()
-          const matches = normalizedCategory === normalizedSelected
-          if (matches) {
-            console.log(`✅ [FILTER] Match found: "${p.discovery_category}" matches "${selectedCategory}" for ${p.domain}`)
-          }
-          return matches
-        })
-        console.log(`🔍 [FILTER] Items after filter:`, leads.length)
-        
-        // If no results on current page, warn user
-        if (leads.length === 0 && response.total > 0) {
-          console.warn(`⚠️ [FILTER] No "${selectedCategory}" prospects found on current page. They may be on other pages. Total prospects: ${response.total}`)
-        }
+        console.log(`🔍 [FILTER] Backend filtered for category: "${selectedCategory}"`)
+        console.log(`🔍 [FILTER] Results returned: ${leads.length} items (total: ${response.total})`)
       }
       
       // Sort by category in ascending order
@@ -133,15 +112,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       }
       
       setProspects(leads)
-      setTotal(selectedCategory === 'all' ? (response.total ?? leads.length) : leads.length)
+      setTotal(response.total ?? leads.length)
       
-      // Show helpful message if filtering and no results on current page
-      if (selectedCategory !== 'all' && leads.length === 0 && response.total > 0) {
-        setError(`No "${selectedCategory}" prospects found on this page. Try navigating to other pages or check if the category name matches exactly.`)
-      } else {
-        // Clear error on successful load (even if empty data)
-        setError(null)
-      }
+      // Clear error on successful load (even if empty data)
+      setError(null)
       // Empty data is not an error, it's a valid state
     } catch (error: any) {
       // CRITICAL: Do not suppress errors - log them clearly

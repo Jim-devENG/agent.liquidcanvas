@@ -710,6 +710,7 @@ async def promote_to_lead(
 async def list_leads(
     skip: int = 0,
     limit: int = 50,
+    category: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
@@ -732,32 +733,35 @@ async def list_leads(
         # Pipeline counts: scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
         logger.info(f"🔍 [LEADS] Querying website prospects with scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
         
-        # Get total count FIRST (before any filtering that might exclude data)
-        count_query = select(func.count(Prospect.id)).where(
-            and_(
+        # Add category filter if provided
+        category_filter = None
+        if category and category.lower() != 'all':
+            category_filter = Prospect.discovery_category == category
+            logger.info(f"🔍 [LEADS] Filtering by category: {category}")
+        
+        # Build base filters
+        base_filters = [
             Prospect.scrape_status.in_([
                 ScrapeStatus.SCRAPED.value,
                 ScrapeStatus.ENRICHED.value
-                ]),
-                website_filter
-            )
-        )
+            ]),
+            website_filter
+        ]
+        
+        # Add category filter if provided
+        if category_filter:
+            base_filters.append(category_filter)
+        
+        # Get total count FIRST (before any filtering that might exclude data)
+        count_query = select(func.count(Prospect.id)).where(and_(*base_filters))
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
-        logger.info(f"📊 [LEADS] RAW COUNT (before pagination): {total} website prospects with scrape_status IN ('SCRAPED', 'ENRICHED')")
+        logger.info(f"📊 [LEADS] RAW COUNT (before pagination): {total} website prospects with scrape_status IN ('SCRAPED', 'ENRICHED')" + (f" and category='{category}'" if category_filter else ""))
         
         # Build query with explicit column selection to avoid missing column errors
         # Use ORM query - schema validation ensures columns exist
-        query = select(Prospect).where(
-            and_(
-                Prospect.scrape_status.in_([
-                    ScrapeStatus.SCRAPED.value,
-                    ScrapeStatus.ENRICHED.value
-                ]),
-                website_filter
-            )
-        ).order_by(Prospect.created_at.desc())
+        query = select(Prospect).where(and_(*base_filters)).order_by(Prospect.created_at.desc())
         
         # Get paginated results
         # SCHEMA MUST BE CORRECT - migrations must be run manually at deploy time
@@ -963,36 +967,38 @@ async def list_scraped_emails(
             Prospect.source_type.is_(None)  # Legacy prospects (default to website)
         )
         
+        # Add category filter if provided
+        category_filter = None
+        if category and category.lower() != 'all':
+            category_filter = Prospect.discovery_category == category
+            logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category}")
+        
         # SINGLE SOURCE OF TRUTH: contact_email IS NOT NULL AND scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
         logger.info(f"🔍 [SCRAPED EMAILS] Querying website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
         
-        # Get total count FIRST (before any filtering)
-        count_query = select(func.count(Prospect.id)).where(
-            and_(
+        # Build base filters
+        base_filters = [
             Prospect.contact_email.isnot(None),
             Prospect.scrape_status.in_([
                 ScrapeStatus.SCRAPED.value,
                 ScrapeStatus.ENRICHED.value
-                ]),
-                website_filter
-            )
-        )
+            ]),
+            website_filter
+        ]
+        
+        # Add category filter if provided
+        if category_filter:
+            base_filters.append(category_filter)
+        
+        # Get total count FIRST (before any filtering)
+        count_query = select(func.count(Prospect.id)).where(and_(*base_filters))
         
         total_result = await db.execute(count_query)
         total = total_result.scalar() or 0
-        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')")
+        logger.info(f"📊 [SCRAPED EMAILS] RAW COUNT (before pagination): {total} website prospects with contact_email IS NOT NULL AND scrape_status IN ('SCRAPED', 'ENRICHED')" + (f" and category='{category}'" if category_filter else ""))
         
         # Build query with website filter
-        query = select(Prospect).where(
-            and_(
-                Prospect.contact_email.isnot(None),
-                Prospect.scrape_status.in_([
-                    ScrapeStatus.SCRAPED.value,
-                    ScrapeStatus.ENRICHED.value
-                ]),
-                website_filter
-            )
-        ).order_by(Prospect.created_at.desc())
+        query = select(Prospect).where(and_(*base_filters)).order_by(Prospect.created_at.desc())
         
         # Get paginated results
         # SCHEMA MUST BE CORRECT - migrations must be run manually at deploy time
