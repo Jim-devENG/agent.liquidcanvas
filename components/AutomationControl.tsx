@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Power, Zap, Hand, Loader2 } from 'lucide-react'
 import { getMasterSwitch, setMasterSwitch, getAutomationSettings, updateAutomationSettings, isMasterSwitchEnabled } from '@/lib/api'
 
-type AutomationMode = 'manual' | 'automatic' | 'off'
+type AutomationMode = 'manual' | 'off'
 
 export default function AutomationControl() {
   const [masterSwitch, setMasterSwitchState] = useState(false)
@@ -25,11 +25,9 @@ export default function AutomationControl() {
         const masterEnabled = masterStatus.enabled
         setMasterSwitchState(masterEnabled)
         
-        // Determine mode: off, manual, or automatic
+        // Determine mode: off or manual (automatic removed)
         if (!masterEnabled) {
           setMode('off')
-        } else if (automationSettings.enabled) {
-          setMode('automatic')
         } else {
           setMode('manual')
         }
@@ -60,9 +58,7 @@ export default function AutomationControl() {
       setMasterSwitchState(e.detail.enabled)
     }
     const handleAutomationChange = (e: CustomEvent) => {
-      if (e.detail.enabled) {
-        setMode('automatic')
-      } else if (masterSwitch) {
+      if (masterSwitch) {
         setMode('manual')
       } else {
         setMode('off')
@@ -118,15 +114,8 @@ export default function AutomationControl() {
       if (newMode === 'off') {
         // Turn off master switch
         await handleMasterSwitchToggle(false)
-      } else if (newMode === 'automatic') {
-        // Enable automation
-        await updateAutomationSettings({ enabled: true })
-        setMode('automatic')
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('automation_mode', 'automatic')
-        }
       } else {
-        // Manual mode
+        // Manual mode (automatic removed)
         await updateAutomationSettings({ enabled: false })
         setMode('manual')
         if (typeof window !== 'undefined') {
@@ -182,7 +171,7 @@ export default function AutomationControl() {
             <Zap className="w-4 h-4 text-gray-600" />
             <p className="text-xs font-semibold text-gray-900">Mode</p>
           </div>
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-2 gap-1">
             <button
               onClick={() => handleModeChange('off')}
               disabled={saving}
@@ -208,25 +197,10 @@ export default function AutomationControl() {
               <Hand className="w-3 h-3" />
               <span>Manual</span>
             </button>
-            <button
-              onClick={() => handleModeChange('automatic')}
-              disabled={saving || !masterSwitch}
-              className={`px-2 py-1.5 rounded text-xs font-medium transition-all flex items-center justify-center space-x-1 ${
-                mode === 'automatic'
-                  ? 'bg-olive-600 text-white shadow-md'
-                  : masterSwitch
-                  ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              <Zap className="w-3 h-3" />
-              <span>Auto</span>
-            </button>
           </div>
           <p className="text-xs text-gray-600 mt-2">
             {mode === 'off' && 'All pipeline activities are disabled'}
             {mode === 'manual' && 'Pipeline activities run only when you trigger them'}
-            {mode === 'automatic' && 'Pipeline activities run automatically on schedule'}
           </p>
         </div>
       </div>

@@ -67,6 +67,19 @@ export default function SocialLeadsTable() {
       const platform = selectedPlatform === 'all' ? undefined : selectedPlatform
       // List only approved profiles (Social Leads)
       const response = await listSocialProfiles(skip, limit, platform, 'leads')
+      
+      // CRITICAL DIAGNOSTIC LOGGING
+      console.log('🔍 [SOCIAL LEADS TAB] RAW API RESPONSE:', response)
+      console.log('🔍 [SOCIAL LEADS TAB] response.data:', response.data)
+      console.log('🔍 [SOCIAL LEADS TAB] typeof response.data:', typeof response.data)
+      console.log('🔍 [SOCIAL LEADS TAB] Array.isArray(response.data):', Array.isArray(response.data))
+      console.log('🔍 [SOCIAL LEADS TAB] response.data?.length:', response.data?.length)
+      console.log('🔍 [SOCIAL LEADS TAB] response.total:', response.total)
+      console.log('🔍 [SOCIAL LEADS TAB] response keys:', response && Object.keys(response))
+      if (response.data && response.data.length > 0) {
+        console.log('🔍 [SOCIAL LEADS TAB] First item:', response.data[0])
+      }
+      
       setProfiles(response.data || [])
       setTotal(response.total || 0)
     } catch (err: any) {
@@ -557,3 +570,4 @@ export default function SocialLeadsTable() {
     </div>
   )
 }
+

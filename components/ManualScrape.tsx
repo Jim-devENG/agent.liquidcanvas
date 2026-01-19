@@ -14,15 +14,23 @@ const LOCATION_OPTIONS = [
 ]
 
 const CATEGORY_OPTIONS = [
-  { value: 'Art Gallery', label: 'Art Gallery' },
-  { value: 'Museums', label: 'Museums' },
-  { value: 'Art Studio', label: 'Art Studio' },
-  { value: 'Art School', label: 'Art School' },
-  { value: 'Art Fair', label: 'Art Fair' },
-  { value: 'Art Dealer', label: 'Art Dealer' },
-  { value: 'Art Consultant', label: 'Art Consultant' },
-  { value: 'Art Publisher', label: 'Art Publisher' },
-  { value: 'Art Magazine', label: 'Art Magazine' },
+  { value: 'Art', label: 'Art' },
+  { value: 'Interior Design', label: 'Interior Design' },
+  { value: 'Dogs', label: 'Dogs' },
+  { value: 'Dog Lovers', label: 'Dog Lovers' },
+  { value: 'Childhood Development', label: 'Childhood Development' },
+  { value: 'Cat Lovers', label: 'Cat Lovers' },
+  { value: 'Cats', label: 'Cats' },
+  { value: 'Holidays', label: 'Holidays' },
+  { value: 'Famous Quotes', label: 'Famous Quotes' },
+  { value: 'Home Decor', label: 'Home Decor' },
+  { value: 'Audio Visual', label: 'Audio Visual' },
+  { value: 'Interior Decor', label: 'Interior Decor' },
+  { value: 'Holiday Decor', label: 'Holiday Decor' },
+  { value: 'Home Tech', label: 'Home Tech' },
+  { value: 'Parenting', label: 'Parenting (Mom Site)' },
+  { value: 'NFTs', label: 'NFTs' },
+  { value: 'Museum', label: 'Museum' },
 ]
 
 export default function ManualScrape() {

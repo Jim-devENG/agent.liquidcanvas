@@ -49,6 +49,19 @@ export default function SocialDiscoveredProfilesTable() {
       const platform = selectedPlatform === 'all' ? undefined : selectedPlatform
       // List only PENDING profiles (discovered but not yet accepted/rejected)
       const response = await listSocialProfiles(0, 1000, platform, 'discovered')
+      
+      // CRITICAL DIAGNOSTIC LOGGING
+      console.log('🔍 [DISCOVERED TAB] RAW API RESPONSE:', response)
+      console.log('🔍 [DISCOVERED TAB] response.data:', response.data)
+      console.log('🔍 [DISCOVERED TAB] typeof response.data:', typeof response.data)
+      console.log('🔍 [DISCOVERED TAB] Array.isArray(response.data):', Array.isArray(response.data))
+      console.log('🔍 [DISCOVERED TAB] response.data?.length:', response.data?.length)
+      console.log('🔍 [DISCOVERED TAB] response.total:', response.total)
+      console.log('🔍 [DISCOVERED TAB] response keys:', response && Object.keys(response))
+      if (response.data && response.data.length > 0) {
+        console.log('🔍 [DISCOVERED TAB] First item:', response.data[0])
+      }
+      
       setProfiles(response.data || [])
     } catch (err: any) {
       console.error('Failed to load discovered profiles:', err)
@@ -328,3 +341,4 @@ export default function SocialDiscoveredProfilesTable() {
     </div>
   )
 }
+

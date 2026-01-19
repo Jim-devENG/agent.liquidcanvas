@@ -42,8 +42,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
 
   // Available categories
   const availableCategories = [
-    'Art Gallery', 'Museums', 'Art Studio', 'Art School', 'Art Fair', 
-    'Art Dealer', 'Art Consultant', 'Art Publisher', 'Art Magazine'
+    'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development', 
+    'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor', 
+    'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
+    'Parenting', 'NFTs', 'Museum'
   ]
 
   const loadProspects = async () => {
@@ -54,8 +56,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       // Leads tab: prospects with scrape_status IN (SCRAPED, ENRICHED) - matches pipeline "Scraped" count
       // Scraped Emails tab: same as leads (for now, both show scraped emails)
       const response = emailsOnly 
-        ? await listScrapedEmails(skip, limit)
-        : await listLeads(skip, limit)
+        ? await listScrapedEmails(skip, limit, selectedCategory !== 'all' ? selectedCategory : undefined)
+        : await listLeads(skip, limit, selectedCategory !== 'all' ? selectedCategory : undefined)
       
       console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] API Response:`, { 
         dataLength: response?.data?.length, 
@@ -66,11 +68,11 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       let leads = Array.isArray(response?.data) ? response.data : []
       
-      // Filter by category if selected
+      // Backend now handles category filtering, so no need to filter on frontend
+      // But we can still log for debugging
       if (selectedCategory !== 'all') {
-        leads = leads.filter((p: Prospect) => 
-          p.discovery_category === selectedCategory || p.discovery_category?.toLowerCase() === selectedCategory.toLowerCase()
-        )
+        console.log(`🔍 [FILTER] Backend filtered for category: "${selectedCategory}"`)
+        console.log(`🔍 [FILTER] Results returned: ${leads.length} items (total: ${response.total})`)
       }
       
       // Sort by category in ascending order
@@ -89,6 +91,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         firstItem: response?.data?.[0]
       })
       
+      // Log all unique categories in the current page for debugging
+      const categoriesInPage = Array.from(new Set(leads.map((p: Prospect) => p.discovery_category).filter((cat): cat is string => !!cat)))
+      console.log(`📊 [${emailsOnly ? 'SCRAPED EMAILS' : 'LEADS'}] Categories in current page:`, categoriesInPage)
+      
       // CRITICAL: If backend says there's data but we got empty array, this is an error
       if (response?.total > 0 && (!response?.data || response.data.length === 0)) {
         const errorMsg = `Backend reports ${response.total} ${emailsOnly ? 'scraped emails' : 'leads'} but returned empty data array. This indicates a data visibility issue.`
@@ -106,7 +112,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       }
       
       setProspects(leads)
-      setTotal(selectedCategory === 'all' ? (response.total ?? leads.length) : leads.length)
+      setTotal(response.total ?? leads.length)
+      
       // Clear error on successful load (even if empty data)
       setError(null)
       // Empty data is not an error, it's a valid state
@@ -433,12 +440,35 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     setError(null)
     try {
       const result = await autoCategorizeAll()
-      setTimeout(() => {
-        loadProspects().catch(err => console.error('Error reloading prospects:', err))
-      }, 500)
-      setError(`✅ ${result.message}`)
+      console.log('✅ [AUTO CATEGORIZE] Result:', result)
+      setError(`✅ ${result.message} - Refreshing...`)
+      
+      // Reset to first page
+      setSkip(0)
+      
+      // Wait for backend to commit, then reload multiple times to ensure we get fresh data
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [AUTO CATEGORIZE] First refresh complete')
+        } catch (err) {
+          console.error('❌ [AUTO CATEGORIZE] Error on first refresh:', err)
+        }
+      }, 1000)
+      
+      // Second refresh after a bit more time to ensure database is updated
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [AUTO CATEGORIZE] Second refresh complete')
+        } catch (err) {
+          console.error('❌ [AUTO CATEGORIZE] Error on second refresh:', err)
+        }
+      }, 2500)
+      
       setTimeout(() => setError(null), 5000)
     } catch (err: any) {
+      console.error('❌ [AUTO CATEGORIZE] Error:', err)
       setError(err.message || 'Failed to auto-categorize')
     } finally {
       setIsAutoCategorizing(false)
@@ -725,7 +755,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       />
                     </td>
                     <td className="py-2 px-3 text-xs">
-                      <span className="text-gray-700 font-medium">{prospect.discovery_category || 'N/A'}</span>
+                      <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                        prospect.discovery_category 
+                          ? 'bg-olive-100 text-olive-800 border border-olive-300' 
+                          : 'bg-gray-100 text-gray-500 border border-gray-300'
+                      }`}>
+                        {prospect.discovery_category || 'N/A'}
+                      </span>
                     </td>
                     <td className="py-2 px-3 text-xs">
                       <div className="flex items-center space-x-2">
@@ -919,27 +955,27 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       {/* Compose / Review Modal */}
       {activeProspect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="glass rounded-3xl shadow-2xl w-full max-w-7xl max-height-[90vh] max-h-[90vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/50 bg-gradient-to-r from-liquid-50/50 to-purple-50/30">
+          <div className="glass rounded-xl shadow-2xl w-full max-w-3xl max-h-[75vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200/50 bg-gradient-to-r from-liquid-50/50 to-purple-50/30">
               <div>
-                <h3 className="text-xl font-bold liquid-gradient-text">
+                <h3 className="text-base font-bold liquid-gradient-text">
                   Review Draft Email
                 </h3>
-                <p className="text-xs text-gray-600 mt-1 font-medium">
+                <p className="text-xs text-gray-600 mt-0.5 font-medium">
                   {activeProspect.domain} — {activeProspect.contact_email}
                 </p>
               </div>
               <button
                 onClick={closeComposeModal}
-                className="p-2 rounded-xl hover:bg-white/80 text-gray-500 transition-all duration-200 hover:scale-110"
+                className="p-1.5 rounded-lg hover:bg-white/80 text-gray-500 transition-all duration-200 hover:scale-110"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex-1 overflow-hidden flex">
               {/* Left: Gemini Chat */}
-              <div className="w-1/3 border-r flex flex-col">
+              <div className="w-2/5 border-r flex flex-col">
                 <GeminiChatPanel
                   prospectId={activeProspect.id}
                   currentSubject={draftSubject}
@@ -953,7 +989,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <div className="flex border-b">
                   <button
                     onClick={() => setActiveTab('edit')}
-                    className={`px-4 py-2 text-sm font-medium ${
+                    className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'edit'
                         ? 'border-b-2 border-olive-600 text-olive-600'
                         : 'text-gray-600 hover:text-gray-900'
@@ -963,7 +999,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   </button>
                   <button
                     onClick={() => setActiveTab('preview')}
-                    className={`px-4 py-2 text-sm font-medium ${
+                    className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'preview'
                         ? 'border-b-2 border-olive-600 text-olive-600'
                         : 'text-gray-600 hover:text-gray-900'
@@ -973,43 +1009,43 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-3">
                   {activeTab === 'edit' ? (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Subject
                         </label>
                         <input
                           type="text"
                           value={draftSubject}
                           onChange={(e) => setDraftSubject(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
                           placeholder="Email subject..."
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Message Body
                         </label>
                         <textarea
                           value={draftBody}
                           onChange={(e) => setDraftBody(e.target.value)}
-                          rows={15}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          rows={10}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
                           placeholder="Write your message here..."
                         />
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Subject:</h4>
-                        <p className="text-sm text-gray-900">{draftSubject || '(No subject)'}</p>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-1">Subject:</h4>
+                        <p className="text-xs text-gray-900">{draftSubject || '(No subject)'}</p>
                       </div>
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Body:</h4>
-                        <div className="text-sm text-gray-900 whitespace-pre-wrap">{draftBody || '(No body)'}</div>
+                        <h4 className="text-xs font-semibold text-gray-700 mb-1">Body:</h4>
+                        <div className="text-xs text-gray-900 whitespace-pre-wrap">{draftBody || '(No body)'}</div>
                       </div>
                     </div>
                   )}
@@ -1017,16 +1053,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </div>
             </div>
 
-            <div className="border-t p-4 flex items-center justify-end gap-2">
+            <div className="border-t p-2.5 flex items-center justify-end gap-2">
               <button
                 onClick={closeComposeModal}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveDraft}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
               >
                 Save Draft
               </button>
@@ -1034,16 +1070,16 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <button
                   onClick={handleSendNow}
                   disabled={isSending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSending ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-3 h-3 animate-spin" />
                       Sending...
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
+                      <Send className="w-3 h-3" />
                       Send
                     </>
                   )}
