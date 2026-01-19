@@ -1654,11 +1654,11 @@ async def auto_categorize_all(
         select(Prospect).where(
             and_(
                 Prospect.discovery_query_id.is_(None),
-                or_(
-                    Prospect.discovery_category.is_(None),
-                    Prospect.discovery_category == '',
+            or_(
+                Prospect.discovery_category.is_(None),
+                Prospect.discovery_category == '',
                     func.lower(Prospect.discovery_category) == 'n/a',
-                    Prospect.discovery_category == 'N/A',
+                Prospect.discovery_category == 'N/A',
                     func.lower(Prospect.discovery_category) == 'unknown',
                     Prospect.discovery_category == 'Unknown',
                     func.trim(Prospect.discovery_category) == ''  # Also catch whitespace-only
@@ -1725,7 +1725,7 @@ async def auto_categorize_all(
     
     # Commit all changes
     try:
-        await db.commit()
+    await db.commit()
         logger.info(f"✅ [AUTO CATEGORIZE] Committed {categorized_count} category updates to database")
     except Exception as commit_err:
         logger.error(f"❌ [AUTO CATEGORIZE] Failed to commit changes: {commit_err}")
@@ -1738,6 +1738,205 @@ async def auto_categorize_all(
         success=True,
         categorized_count=categorized_count,
         message=f"Successfully auto-categorized {categorized_count} prospect(s) based on their content"
+    )
+
+
+class MigrateCategoriesResponse(BaseModel):
+    success: bool
+    migrated_count: int
+    category_mapping: dict
+    message: str
+
+
+@router.post("/migrate_categories", response_model=MigrateCategoriesResponse)
+async def migrate_categories(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Migrate old category values to new standardized categories.
+    Maps old categories (like "art", "interior_design", "tech_blog") to new ones
+    (like "Art", "Interior Design", "Home Tech").
+    
+    This helps fix filtering issues where old records have categories that don't match
+    the new category list used in the frontend.
+    """
+    logger.info("🔄 [MIGRATE CATEGORIES] Starting category migration")
+    
+    # Define mapping from old categories to new ones
+    # Handles various formats: lowercase, snake_case, variations
+    category_mapping = {
+        # Old lowercase/snake_case formats
+        'art': 'Art',
+        'Art': 'Art',  # Already correct, but normalize
+        'interior_design': 'Interior Design',
+        'interior design': 'Interior Design',
+        'Interior Design': 'Interior Design',
+        'interior_decor': 'Interior Decor',
+        'interior decor': 'Interior Decor',
+        'Interior Decor': 'Interior Decor',
+        'home_decor': 'Home Decor',
+        'home decor': 'Home Decor',
+        'Home Decor': 'Home Decor',
+        'home_tech': 'Home Tech',
+        'home tech': 'Home Tech',
+        'Home Tech': 'Home Tech',
+        'tech_blog': 'Home Tech',  # Map tech_blog to Home Tech
+        'tech blog': 'Home Tech',
+        'mothers_tech': 'Parenting',  # Map mothers_tech to Parenting
+        'mothers tech': 'Parenting',
+        'mom_blog': 'Parenting',
+        'mom blog': 'Parenting',
+        'nft': 'NFTs',
+        'NFT': 'NFTs',
+        'NFTs': 'NFTs',
+        'nft_tech': 'NFTs',
+        'museum': 'Museum',
+        'Museum': 'Museum',
+        'museums': 'Museum',
+        'Museums': 'Museum',
+        'art_gallery': 'Art',
+        'art gallery': 'Art',
+        'Art Gallery': 'Art',
+        'gallery': 'Art',
+        'holiday': 'Holidays',
+        'Holiday': 'Holidays',
+        'Holidays': 'Holidays',
+        'holiday_decor': 'Holiday Decor',
+        'holiday decor': 'Holiday Decor',
+        'Holiday Decor': 'Holiday Decor',
+        'holiday/family': 'Holidays',
+        'Holiday/Family': 'Holidays',
+        'editorial_media': 'Art',  # Map editorial to Art (closest match)
+        'editorial media': 'Art',
+        'Editorial Media': 'Art',
+        'dog': 'Dogs',
+        'Dogs': 'Dogs',
+        'dog_lover': 'Dog Lovers',
+        'dog lover': 'Dog Lovers',
+        'Dog Lovers': 'Dog Lovers',
+        'cat': 'Cats',
+        'Cats': 'Cats',
+        'cat_lover': 'Cat Lovers',
+        'cat lover': 'Cat Lovers',
+        'Cat Lovers': 'Cat Lovers',
+        'parenting': 'Parenting',
+        'Parenting': 'Parenting',
+        'childhood_development': 'Childhood Development',
+        'childhood development': 'Childhood Development',
+        'Childhood Development': 'Childhood Development',
+        'audio_visual': 'Audio Visual',
+        'audio visual': 'Audio Visual',
+        'Audio Visual': 'Audio Visual',
+        'famous_quotes': 'Famous Quotes',
+        'famous quotes': 'Famous Quotes',
+        'Famous Quotes': 'Famous Quotes',
+        # Handle unknown/null values - will be handled by auto-categorize
+        'unknown': None,  # Will trigger auto-categorization
+        'Unknown': None,
+        'n/a': None,
+        'N/A': None,
+        '': None,
+        None: None
+    }
+    
+    # Get all prospects with categories that need migration
+    all_prospects_result = await db.execute(
+        select(Prospect).where(
+            Prospect.discovery_category.isnot(None)
+        )
+    )
+    all_prospects = all_prospects_result.scalars().all()
+    
+    logger.info(f"📊 [MIGRATE CATEGORIES] Found {len(all_prospects)} prospects with categories")
+    
+    # Get current category distribution before migration
+    category_dist_before = await db.execute(
+        select(Prospect.discovery_category, func.count(Prospect.id)).group_by(Prospect.discovery_category)
+    )
+    categories_before = {cat or 'NULL': count for cat, count in category_dist_before.all()}
+    logger.info(f"📊 [MIGRATE CATEGORIES] Categories before migration: {categories_before}")
+    
+    migrated_count = 0
+    migration_details = {}
+    
+    for prospect in all_prospects:
+        old_category = prospect.discovery_category
+        if not old_category:
+            continue
+            
+        # Normalize the category (strip whitespace, handle case variations)
+        normalized_old = old_category.strip() if old_category else None
+        
+        # Check if this category needs migration
+        new_category = category_mapping.get(normalized_old)
+        
+        # If not in mapping, try case-insensitive lookup
+        if new_category is None and normalized_old:
+            # Try case-insensitive match
+            for old_cat, new_cat in category_mapping.items():
+                if old_cat and normalized_old.lower() == old_cat.lower():
+                    new_category = new_cat
+                    break
+        
+        # If still no match, check if it's already a valid new category
+        valid_categories = [
+            'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development',
+            'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor',
+            'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech',
+            'Parenting', 'NFTs', 'Museum'
+        ]
+        if normalized_old in valid_categories:
+            # Already a valid category, skip
+            continue
+        
+        # If we found a mapping, update the prospect
+        if new_category is not None:
+            if new_category != old_category:
+                prospect.discovery_category = new_category
+                migrated_count += 1
+                
+                # Track migration details
+                if old_category not in migration_details:
+                    migration_details[old_category] = {'to': new_category, 'count': 0}
+                migration_details[old_category]['count'] += 1
+                
+                logger.debug(f"🔄 [MIGRATE CATEGORIES] Prospect {prospect.id}: '{old_category}' → '{new_category}'")
+        else:
+            # Category not in mapping and not valid - try auto-categorization
+            logger.debug(f"⚠️  [MIGRATE CATEGORIES] Prospect {prospect.id}: Unknown category '{old_category}', attempting auto-categorization")
+            auto_category = await auto_categorize_prospect(prospect, db)
+            if auto_category and auto_category != old_category:
+                prospect.discovery_category = auto_category
+                migrated_count += 1
+                
+                if old_category not in migration_details:
+                    migration_details[old_category] = {'to': auto_category, 'count': 0}
+                migration_details[old_category]['count'] += 1
+                
+                logger.info(f"✅ [MIGRATE CATEGORIES] Prospect {prospect.id}: Auto-categorized '{old_category}' → '{auto_category}'")
+    
+    # Commit all changes
+    try:
+        await db.commit()
+        logger.info(f"✅ [MIGRATE CATEGORIES] Committed {migrated_count} category migrations to database")
+    except Exception as commit_err:
+        logger.error(f"❌ [MIGRATE CATEGORIES] Failed to commit changes: {commit_err}")
+        await db.rollback()
+        raise
+    
+    # Get category distribution after migration
+    category_dist_after = await db.execute(
+        select(Prospect.discovery_category, func.count(Prospect.id)).group_by(Prospect.discovery_category)
+    )
+    categories_after = {cat or 'NULL': count for cat, count in category_dist_after.all()}
+    logger.info(f"📊 [MIGRATE CATEGORIES] Categories after migration: {categories_after}")
+    
+    return MigrateCategoriesResponse(
+        success=True,
+        migrated_count=migrated_count,
+        category_mapping=migration_details,
+        message=f"Successfully migrated {migrated_count} prospect(s) to new category format"
     )
 
 

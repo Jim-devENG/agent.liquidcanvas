@@ -123,16 +123,16 @@ async def scrape_prospects_async(job_id: str):
                                     logger.warning(f"⚠️  [SCRAPING] Error getting category from discovery query: {query_err}")
                             
                             # If still no category, try auto-categorization as fallback
-                            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
-                                try:
-                                    category = await auto_categorize_prospect(prospect, db)
-                                    if category:
-                                        prospect.discovery_category = category
-                                        logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' during scraping")
-                                    else:
-                                        logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
-                                except Exception as cat_err:
-                                    logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
+                        if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                            try:
+                                category = await auto_categorize_prospect(prospect, db)
+                                if category:
+                                    prospect.discovery_category = category
+                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' during scraping")
+                                else:
+                                    logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain}")
+                            except Exception as cat_err:
+                                logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization: {cat_err}")
                         else:
                             logger.debug(f"✅ [SCRAPING] Preserving existing category '{prospect.discovery_category}' for {prospect.domain}")
                         
@@ -187,15 +187,15 @@ async def scrape_prospects_async(job_id: str):
                                     logger.warning(f"⚠️  [SCRAPING] Error getting category from discovery query: {query_err}")
                             
                             # If still no category, try auto-categorization as fallback
-                            if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
-                                try:
-                                    category = await auto_categorize_prospect(prospect, db)
-                                    if category:
-                                        prospect.discovery_category = category
-                                        logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' (no email found)")
-                                    else:
+                        if not prospect.discovery_category or prospect.discovery_category in ['', 'N/A', 'Unknown']:
+                            try:
+                                category = await auto_categorize_prospect(prospect, db)
+                                if category:
+                                    prospect.discovery_category = category
+                                    logger.info(f"🏷️  [SCRAPING] Auto-categorized {prospect.domain} as '{category}' (no email found)")
+                                else:
                                         logger.debug(f"⚠️  [SCRAPING] Could not auto-categorize {prospect.domain} (no email found)")
-                                except Exception as cat_err:
+                            except Exception as cat_err:
                                     logger.warning(f"⚠️  [SCRAPING] Error during auto-categorization (no email): {cat_err}")
                         else:
                             logger.debug(f"✅ [SCRAPING] Preserving existing category '{prospect.discovery_category}' for {prospect.domain} (no email found)")
