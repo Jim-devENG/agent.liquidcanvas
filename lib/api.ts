@@ -1432,6 +1432,24 @@ export async function autoCategorizeAll(): Promise<AutoCategorizeResponse> {
   return res.json()
 }
 
+export interface MigrateCategoriesResponse {
+  success: boolean
+  migrated_count: number
+  category_mapping: Record<string, { to: string; count: number }>
+  message: string
+}
+
+export async function migrateCategories(): Promise<MigrateCategoriesResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/migrate_categories`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to migrate categories' }))
+    throw new Error(error.detail || 'Failed to migrate categories')
+  }
+  return res.json()
+}
+
 // ============================================
 // MASTER SWITCH & AUTOMATION CONTROL
 // ============================================

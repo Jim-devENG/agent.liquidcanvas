@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download } from 'lucide-react'
-import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -39,6 +39,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [updateCategory, setUpdateCategory] = useState<string>('')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
+  const [isMigratingCategories, setIsMigratingCategories] = useState(false)
 
   // Available categories
   const availableCategories = [
@@ -475,6 +476,42 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
   }
 
+  const handleMigrateCategories = async () => {
+    setIsMigratingCategories(true)
+    setError(null)
+    try {
+      const result = await migrateCategories()
+      console.log('✅ [MIGRATE CATEGORIES] Result:', result)
+      
+      // Show migration details
+      const mappingDetails = Object.entries(result.category_mapping || {})
+        .map(([old, info]: [string, any]) => `"${old}" → "${info.to}" (${info.count} records)`)
+        .join(', ')
+      
+      setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''} - Refreshing...`)
+      
+      // Reset to first page
+      setSkip(0)
+      
+      // Wait for backend to commit, then reload
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [MIGRATE CATEGORIES] Refresh complete')
+        } catch (err) {
+          console.error('❌ [MIGRATE CATEGORIES] Error on refresh:', err)
+        }
+      }, 1000)
+      
+      setTimeout(() => setError(null), 8000)
+    } catch (err: any) {
+      console.error('❌ [MIGRATE CATEGORIES] Error:', err)
+      setError(err.message || 'Failed to migrate categories')
+    } finally {
+      setIsMigratingCategories(false)
+    }
+  }
+
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
       <div className="flex items-center justify-between mb-4">
@@ -524,8 +561,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           )}
           <button
             onClick={handleAutoCategorize}
-            disabled={isAutoCategorizing}
+            disabled={isAutoCategorizing || isMigratingCategories}
             className="px-2 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Auto-categorize prospects based on content analysis"
           >
             {isAutoCategorizing ? (
               <>
@@ -536,6 +574,24 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               <>
                 <Users className="w-3 h-3" />
                 Auto-Categorize All
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleMigrateCategories}
+            disabled={isMigratingCategories || isAutoCategorizing}
+            className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Migrate old category formats to new standardized categories"
+          >
+            {isMigratingCategories ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Migrating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Migrate Categories
               </>
             )}
           </button>
