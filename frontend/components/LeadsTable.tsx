@@ -509,7 +509,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-sm font-bold text-olive-700">
+          <h2 className="text-lg font-bold liquid-gradient-text">
             {emailsOnly ? 'Scraped Emails' : 'Leads'}
           </h2>
           <p className="text-xs text-gray-500 mt-1">Liquid Canvas Outreach</p>
@@ -632,7 +632,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </button>
         <button
           onClick={loadProspects}
-          className="flex items-center space-x-1 px-2 py-1 bg-olive-600 text-white rounded-lg transition-all duration-200 text-xs font-medium shadow-md hover:bg-olive-700"
+          className="flex items-center space-x-1 px-2 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg transition-all duration-200 text-xs font-medium shadow-md hover:from-indigo-700 hover:to-purple-700"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
@@ -669,13 +669,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   value={manualWebsiteUrl}
                   onChange={(e) => setManualWebsiteUrl(e.target.value)}
                   placeholder="https://example.com"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-olive-500 focus:border-olive-500"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
                   disabled={isManualScraping}
                 />
                 <button
                   onClick={handleManualScrape}
                   disabled={isManualScraping || !manualWebsiteUrl.trim()}
-                  className="px-2 py-1 bg-olive-600 text-white rounded-lg hover:bg-olive-700 hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 text-xs font-medium shadow-sm"
+                  className="px-2 py-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 text-xs font-medium shadow-sm"
                 >
                   {isManualScraping ? (
                     <>
@@ -704,7 +704,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   value={manualEmail}
                   onChange={(e) => setManualEmail(e.target.value)}
                   placeholder="email@example.com"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-olive-500 focus:border-olive-500"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
                   disabled={isManualVerifying}
                 />
                 <button
@@ -737,7 +737,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
 
       {loading && prospects.length === 0 ? (
         <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-olive-600 border-t-transparent"></div>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
           <p className="text-gray-500 mt-2">Loading {emailsOnly ? 'emails' : 'leads'}...</p>
         </div>
       ) : error ? (
@@ -746,7 +746,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           <p className="text-gray-600 text-sm">{error}</p>
           <button
             onClick={loadProspects}
-            className="mt-4 px-4 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700"
+            className="mt-4 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-md hover:from-indigo-700 hover:to-purple-700"
           >
             Retry
           </button>
@@ -785,7 +785,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           setSelectedProspects(new Set())
                         }
                       }}
-                      className="w-3 h-3 text-olive-600"
+                      className="w-3 h-3 text-indigo-600"
                     />
                   </th>
                   <th className="text-left py-2 px-3 text-xs font-bold text-gray-700 uppercase tracking-wider">Category</th>
@@ -813,13 +813,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           }
                           setSelectedProspects(newSelected)
                         }}
-                        className="w-3 h-3 text-olive-600"
+                        className="w-3 h-3 text-indigo-600"
                       />
                     </td>
                     <td className="py-2 px-3 text-xs">
                       <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
                         prospect.discovery_category 
-                          ? 'bg-olive-100 text-olive-800 border border-olive-300' 
+                          ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' 
                           : 'bg-gray-100 text-gray-500 border border-gray-300'
                       }`}>
                         {prospect.discovery_category || 'N/A'}
@@ -893,7 +893,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           <button
                             onClick={() => openComposeModal(prospect)}
                             disabled={isComposing}
-                            className="text-olive-700 hover:underline text-xs font-semibold transition-all duration-200"
+                            className="text-indigo-700 hover:underline text-xs font-semibold transition-all duration-200"
                           >
                             {prospect.draft_subject ? 'View / Edit Email' : 'Compose Email'}
                           </button>
@@ -920,7 +920,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               <button
                 onClick={() => setSkip(skip + limit)}
                 disabled={skip + limit >= total}
-                className="px-3 py-2 bg-olive-600 text-white rounded-md hover:bg-olive-700 disabled:opacity-50"
+                className="px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-md hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
               >
                 Next
               </button>
@@ -972,7 +972,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       onClick={() => setUpdateCategory(cat)}
                       className={`px-2 py-1.5 rounded text-xs font-medium transition-all ${
                         updateCategory === cat
-                          ? 'bg-olive-600 text-white shadow-md'
+                          ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md'
                           : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
                       }`}
                     >
@@ -983,7 +983,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <select
                   value={updateCategory}
                   onChange={(e) => setUpdateCategory(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-olive-500 focus:border-olive-500 bg-white"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                 >
                   <option value="">-- Or choose from dropdown --</option>
                   {availableCategories.map((cat) => (
@@ -1004,7 +1004,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <button
                   onClick={handleUpdateCategory}
                   disabled={isUpdatingCategory || !updateCategory}
-                  className="flex-1 px-3 py-2 text-xs font-medium bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50"
+                  className="flex-1 px-3 py-2 text-xs font-medium bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50"
                 >
                   {isUpdatingCategory ? 'Updating...' : 'Update'}
                 </button>
@@ -1053,7 +1053,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                     onClick={() => setActiveTab('edit')}
                     className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'edit'
-                        ? 'border-b-2 border-olive-600 text-olive-600'
+                        ? 'border-b-2 border-indigo-600 text-indigo-600'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
@@ -1063,7 +1063,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                     onClick={() => setActiveTab('preview')}
                     className={`px-3 py-1.5 text-xs font-medium ${
                       activeTab === 'preview'
-                        ? 'border-b-2 border-olive-600 text-olive-600'
+                        ? 'border-b-2 border-indigo-600 text-indigo-600'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
                   >
@@ -1082,7 +1082,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           type="text"
                           value={draftSubject}
                           onChange={(e) => setDraftSubject(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           placeholder="Email subject..."
                         />
                       </div>
@@ -1094,7 +1094,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                           value={draftBody}
                           onChange={(e) => setDraftBody(e.target.value)}
                           rows={10}
-                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           placeholder="Write your message here..."
                         />
                       </div>
@@ -1132,7 +1132,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 <button
                   onClick={handleSendNow}
                   disabled={isSending}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-olive-600 rounded-lg hover:bg-olive-700 disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {isSending ? (
                     <>
