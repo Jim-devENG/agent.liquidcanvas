@@ -714,6 +714,14 @@ class TikTokDiscoveryAdapter:
                     
                     logger.info(f"📥 [TIKTOK DISCOVERY] Query result - success: {serp_results.get('success')}, results count: {len(serp_results.get('results', []))}")
                     
+                    # CRITICAL: Check for DataForSEO credit/account errors
+                    if serp_results.get("error_code") == 402 or serp_results.get("error_type") == "insufficient_credits":
+                        error_msg = serp_results.get("error", "DataForSEO account has insufficient credits")
+                        logger.error(f"❌ [TIKTOK DISCOVERY] DataForSEO account error: {error_msg}")
+                        logger.error(f"❌ [TIKTOK DISCOVERY] Please add credits to your DataForSEO account at https://dataforseo.com")
+                        # Stop processing queries - account issue affects all queries
+                        raise ValueError(f"DataForSEO account error: {error_msg}. Please add credits to continue.")
+                    
                     if serp_results.get("success"):
                         results_list = serp_results.get("results", [])
                         total_results_found += len(results_list)
