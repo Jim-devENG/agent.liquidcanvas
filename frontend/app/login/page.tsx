@@ -47,12 +47,8 @@ export default function LoginPage() {
       localStorage.setItem('auth_token', result.access_token)
       localStorage.setItem('outreach_type', outreachType)
       
-      // Navigate based on outreach type
-      if (outreachType === 'social') {
-        router.push('/social')
-      } else {
-        router.push('/')
-      }
+      // Navigate to dashboard for both website and social
+      router.push('/')
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.')
     } finally {
