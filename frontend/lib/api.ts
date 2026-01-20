@@ -1711,6 +1711,18 @@ export async function handleOAuthCallback(platform: string, code: string, state?
   return res.json()
 }
 
+export async function refreshSocialIntegrationToken(platform: string): Promise<{ success: boolean; message: string; connection_status?: string; token_expires_at?: string }> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/refresh?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to refresh token' }))
+    throw new Error(error.detail || 'Failed to refresh token')
+  }
+  return res.json()
+}
+
 // ============================================
 // SOCIAL OUTREACH API (Separate from Website Outreach)
 // ============================================

@@ -24,6 +24,7 @@ import {
   createSocialIntegration,
   deleteSocialIntegration,
   validateSocialIntegration,
+  refreshSocialIntegrationToken,
   initiateOAuthFlow,
   type SocialIntegration,
   type PlatformCapability,
