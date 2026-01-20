@@ -17,7 +17,7 @@ import {
   ArrowLeft,
   LogOut as LogOutIcon
 } from 'lucide-react'
-import { getSettings, testService, type ServiceStatus } from '@/lib/api'
+import { getSettings, testService, handleOAuthCallback, type ServiceStatus } from '@/lib/api'
 import SocialIntegrationsSettings from '@/components/SocialIntegrationsSettings'
 
 interface ServiceCardProps {
@@ -147,6 +147,45 @@ export default function SettingsPage() {
       return
     }
 
+    // Handle OAuth callback if present in URL
+    const handleOAuthCallback = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const oauthCallback = params.get('oauth_callback')
+      const code = params.get('code')
+      const state = params.get('state')
+      const error = params.get('error')
+      const errorReason = params.get('error_reason')
+      
+      if (oauthCallback && (code || error)) {
+        if (error) {
+          alert(`OAuth authorization failed: ${error}${errorReason ? ` (${errorReason})` : ''}`)
+          // Clean up URL
+          window.history.replaceState({}, '', '/settings')
+          return
+        }
+        
+        if (code && oauthCallback) {
+          try {
+            setLoading(true)
+            await handleOAuthCallback(oauthCallback, code, state || undefined)
+            alert(`✅ Successfully connected ${oauthCallback}!`)
+            // Clean up URL
+            window.history.replaceState({}, '', '/settings')
+            // Reload settings to show updated integrations
+            loadSettings()
+          } catch (err: any) {
+            console.error('OAuth callback error:', err)
+            alert(`Failed to complete OAuth connection: ${err.message}`)
+            // Clean up URL
+            window.history.replaceState({}, '', '/settings')
+          } finally {
+            setLoading(false)
+          }
+        }
+      }
+    }
+
+    handleOAuthCallback()
     loadSettings()
     // Refresh every 30 seconds
     const interval = setInterval(loadSettings, 30000)
