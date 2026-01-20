@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.1 - Discovery feature removed - FORCE REDEPLOY
+// Version: 3.2 - Migrate Categories Button - Build: 2026-01-20-03:50 - FORCE REDEPLOY
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
