@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, CheckCircle, XCircle, Clock, RefreshCw, X, Loader2, Users, Download } from 'lucide-react'
-import { listProspects, updateProspectCategory, autoCategorizeAll, exportProspectsCSV, type Prospect } from '@/lib/api'
+import { listProspects, updateProspectCategory, autoCategorizeAll, migrateCategories, exportProspectsCSV, type Prospect } from '@/lib/api'
 
 export default function EmailsTable() {
   const [prospects, setProspects] = useState<Prospect[]>([])
@@ -17,11 +17,12 @@ export default function EmailsTable() {
   const [updateCategory, setUpdateCategory] = useState<string>('')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
+  const [isMigratingCategories, setIsMigratingCategories] = useState(false)
 
   // Available categories
   const availableCategories = [
-    'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development', 
-    'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor', 
+    'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
+    'Holidays', 'Famous Quotes', 'Home Decor', 
     'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
     'Parenting', 'NFTs', 'Museum'
   ]
@@ -152,6 +153,33 @@ export default function EmailsTable() {
     }
   }
 
+  const handleMigrateCategories = async () => {
+    setIsMigratingCategories(true)
+    setError(null)
+    try {
+      const result = await migrateCategories()
+      console.log('✅ [MIGRATE CATEGORIES] Result:', result)
+      
+      // Show migration details
+      const mappingDetails = Object.entries(result.category_mapping || {})
+        .map(([old, info]: [string, any]) => `"${old}" → "${info.to}" (${info.count} records)`)
+        .join(', ')
+      
+      setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''}`)
+      
+      setTimeout(() => {
+        loadSentEmails().catch(err => console.error('Error reloading emails:', err))
+      }, 1000)
+      
+      setTimeout(() => setError(null), 8000)
+    } catch (err: any) {
+      console.error('❌ [MIGRATE CATEGORIES] Error:', err)
+      setError(err.message || 'Failed to migrate categories')
+    } finally {
+      setIsMigratingCategories(false)
+    }
+  }
+
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3">
       <div className="flex items-center justify-between mb-3">
@@ -196,8 +224,9 @@ export default function EmailsTable() {
           )}
           <button
             onClick={handleAutoCategorize}
-            disabled={isAutoCategorizing}
+            disabled={isAutoCategorizing || isMigratingCategories}
             className="px-2 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Auto-categorize prospects based on content analysis"
           >
             {isAutoCategorizing ? (
               <>
@@ -208,6 +237,24 @@ export default function EmailsTable() {
               <>
                 <Users className="w-3 h-3" />
                 Auto-Categorize All
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleMigrateCategories}
+            disabled={isMigratingCategories || isAutoCategorizing}
+            className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Migrate old category formats to new standardized categories"
+          >
+            {isMigratingCategories ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Migrating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Migrate Categories
               </>
             )}
           </button>

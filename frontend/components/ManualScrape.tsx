@@ -14,13 +14,11 @@ const LOCATION_OPTIONS = [
 ]
 
 const CATEGORY_OPTIONS = [
-  { value: 'Art', label: 'Art' },
+  { value: 'Art Lovers', label: 'Art Lovers' },
   { value: 'Interior Design', label: 'Interior Design' },
-  { value: 'Dogs', label: 'Dogs' },
-  { value: 'Dog Lovers', label: 'Dog Lovers' },
+  { value: 'Pet Lovers', label: 'Pet Lovers' },
+  { value: 'Dogs and Cat Owners - Fur Parent', label: 'Dogs and Cat Owners - Fur Parent' },
   { value: 'Childhood Development', label: 'Childhood Development' },
-  { value: 'Cat Lovers', label: 'Cat Lovers' },
-  { value: 'Cats', label: 'Cats' },
   { value: 'Holidays', label: 'Holidays' },
   { value: 'Famous Quotes', label: 'Famous Quotes' },
   { value: 'Home Decor', label: 'Home Decor' },
