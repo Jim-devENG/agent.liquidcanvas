@@ -522,7 +522,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </h2>
           <p className="text-xs text-gray-500 mt-1">Liquid Canvas Outreach</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-2">
           <select
             value={selectedCategory}
             onChange={(e) => {
@@ -578,13 +578,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </>
             )}
           </button>
-          {/* Migrate Categories Button - Always Visible */}
+          {/* Migrate Categories Button - Always Visible - Purple Button */}
           <button
             onClick={handleMigrateCategories}
             disabled={isMigratingCategories || isAutoCategorizing}
-            className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 shrink-0"
             title="Migrate old category formats to new standardized categories"
-            style={{ display: 'inline-flex', visibility: 'visible', opacity: 1, minWidth: 'auto' }}
+            style={{ display: 'inline-flex', visibility: 'visible', opacity: 1 }}
             data-testid="migrate-categories-button"
           >
             {isMigratingCategories ? (
