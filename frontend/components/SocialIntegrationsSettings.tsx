@@ -126,15 +126,14 @@ export default function SocialIntegrationsSettings() {
   const handleOAuthConnect = async (platform: 'instagram' | 'facebook') => {
     try {
       setConnecting(platform)
-      const { auth_url } = await initiateOAuthFlow(platform)
-      // Open OAuth flow in new window
-      window.open(auth_url, '_blank', 'width=600,height=700')
-      // Note: In production, you'd handle the callback via a redirect or popup callback
-      alert(`Please complete the OAuth flow in the popup window. After authorization, refresh this page.`)
+      const { authorization_url } = await initiateOAuthFlow(platform)
+      // Redirect to OAuth flow (or open in popup)
+      window.location.href = authorization_url
+      // Note: After OAuth callback, user will be redirected back to settings page
+      // The callback handler should process the OAuth code and create the integration
     } catch (error: any) {
       console.error(`Failed to initiate OAuth for ${platform}:`, error)
       alert(`Failed to connect ${platform}: ${error.message}`)
-    } finally {
       setConnecting(null)
     }
   }
