@@ -301,9 +301,19 @@ export default function Dashboard() {
 
         {activeTab === 'leads' && (
           <div className="max-w-7xl mx-auto">
-            {/* DEBUG: Test if this div renders */}
-            <div style={{ backgroundColor: 'yellow', padding: '20px', border: '5px solid red', marginBottom: '20px' }}>
-              DEBUG: You are on the Leads tab! LeadsTable should render below this.
+            {/* VERSION 3.3 TEST BANNER - MUST BE VISIBLE */}
+            <div style={{ 
+              backgroundColor: 'lime', 
+              color: 'black', 
+              padding: '25px', 
+              border: '8px solid red', 
+              marginBottom: '25px',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              textAlign: 'center',
+              zIndex: 99999
+            }}>
+              🚨 VERSION 3.3 TEST - IF YOU SEE THIS, NEW CODE IS DEPLOYED 🚨
             </div>
             <LeadsTable />
           </div>
