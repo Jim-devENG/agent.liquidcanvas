@@ -20,6 +20,8 @@ from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, Field, validator
 import logging
 import os
+import httpx
+from urllib.parse import urlencode
 
 from app.db.database import get_db
 from app.models.social_integration import SocialIntegration, Platform, ConnectionStatus
@@ -664,9 +666,6 @@ async def oauth_callback(
         )
     
     try:
-        import httpx
-        from urllib.parse import urlencode
-        
         # Get OAuth credentials from environment
         client_id = os.getenv(f"{platform.upper()}_CLIENT_ID")
         client_secret = os.getenv(f"{platform.upper()}_CLIENT_SECRET")

@@ -185,7 +185,7 @@ export default function SettingsPage() {
       }
     }
 
-    handleOAuthCallback()
+    handleOAuthCallbackFlow()
     loadSettings()
     // Refresh every 30 seconds
     const interval = setInterval(loadSettings, 30000)
