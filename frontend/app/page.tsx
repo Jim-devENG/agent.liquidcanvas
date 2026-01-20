@@ -117,6 +117,13 @@ export default function Dashboard() {
       return
     }
 
+    // Redirect social outreach users to their dashboard
+    const outreachType = typeof window !== 'undefined' ? localStorage.getItem('outreach_type') : null
+    if (outreachType === 'social') {
+      router.push('/social')
+      return
+    }
+
     // Initial load with timeout to prevent infinite loading
     const loadTimeout = setTimeout(() => {
       console.warn('⚠️ Load data timeout - setting loading to false')
