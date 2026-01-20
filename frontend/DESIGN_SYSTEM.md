@@ -2,20 +2,19 @@
 
 ## Brand Colors - Liquid Canvas (liquidcanvas.art)
 
-### Primary Colors
-- **Liquid Indigo (Primary)**: `#6366f1` (`liquid-500`) - Main brand color for primary actions and accents
-- **Purple (Secondary)**: `#9333ea` (`purple-600`) / `#8b5cf6` (`purple-500`) - Secondary actions and highlights  
-- **Pink (Accent)**: `#ec4899` (`pink-500`) - Accent color for special elements
-
-### Gradient
-- **Liquid Canvas Gradient**: `linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)`
-- **Tailwind Class**: `bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500`
-- Used for: Logo backgrounds, active states, premium features, primary buttons
+### Primary Brand Color
+- **Olive Green (Primary)**: `#5f7047` (`olive-600`) - Main brand color for primary actions and accents
+- **Olive Shades**: Use `olive-50` through `olive-900` for various UI elements
+- **Olive-600**: Primary buttons, active states, logo backgrounds
+- **Olive-700**: Hover states, darker accents
+- **Olive-100/50**: Light backgrounds, hover states
 
 ### Usage
-- Always use `liquid-*` classes instead of generic `indigo-*` for brand consistency
-- Use the three-color gradient (liquid → purple → pink) for primary actions
-- Use `liquid-gradient-text` utility class for branded text
+- Always use `olive-*` classes for brand consistency
+- Primary buttons: `bg-olive-600 hover:bg-olive-700`
+- Active states: `bg-olive-600 text-white`
+- Hover states: `hover:bg-olive-50 hover:text-olive-700`
+- Focus rings: `focus:ring-olive-500 focus:border-olive-500`
 
 ### Neutral Colors
 - **Gray Scale**: Standard Tailwind gray scale (50-900)
@@ -40,12 +39,12 @@
 
 #### Primary Button
 ```tsx
-className="px-4 py-2 bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500 text-white rounded-lg hover:shadow-lg transition-all"
+className="px-4 py-2 bg-olive-600 text-white rounded-lg hover:bg-olive-700 hover:shadow-lg transition-all"
 ```
 
 #### Secondary Button
 ```tsx
-className="px-4 py-2 bg-white border border-liquid-200 text-liquid-700 rounded-lg hover:bg-liquid-50 transition-all"
+className="px-4 py-2 bg-white border border-olive-200 text-olive-700 rounded-lg hover:bg-olive-50 transition-all"
 ```
 
 #### Accent Button (Purple)
@@ -62,15 +61,15 @@ className="glass rounded-xl shadow-lg border border-white/20 p-4"
 
 #### Gradient Card
 ```tsx
-className="rounded-xl shadow-lg bg-gradient-to-br from-liquid-50 via-purple-50 to-pink-50 border border-liquid-100 p-4"
+className="rounded-xl shadow-lg bg-gradient-to-br from-olive-50 to-white border border-olive-100 p-4"
 ```
 
 ### Sidebar
 
 - **Background**: Glass effect with subtle gradient
-- **Active Item**: Liquid Canvas gradient (`from-liquid-600 via-purple-600 to-pink-500`)
-- **Hover**: Light gradient background (`from-liquid-50 to-purple-50`)
-- **Logo**: Liquid Canvas gradient background with LC initials
+- **Active Item**: Olive background (`bg-olive-600`)
+- **Hover**: Light olive background (`hover:bg-olive-50`)
+- **Logo**: Olive background (`bg-olive-600`) with LC initials
 
 ## Spacing
 
@@ -95,12 +94,12 @@ className="rounded-xl shadow-lg bg-gradient-to-br from-liquid-50 via-purple-50 t
 
 ## Best Practices
 
-1. **Use Liquid Canvas gradients** (`from-liquid-600 via-purple-600 to-pink-500`) for primary actions and active states
+1. **Use Olive Green** (`olive-600` for primary, `olive-700` for hover) for all brand elements
 2. **Glassmorphism** for cards and overlays
 3. **Consistent spacing** using Tailwind's spacing scale
 4. **Smooth transitions** on all interactive elements
-5. **Brand colors** - Always use `liquid-*` classes, never generic `indigo-*`
-6. **Three-color gradient** (liquid → purple → pink) for primary buttons and active states
-7. **Purple** for special features (like Migrate Categories)
-8. **Pink** sparingly for accents and highlights
+5. **Brand colors** - Always use `olive-*` classes for brand consistency
+6. **Olive-600** for primary buttons and active states
+7. **Olive-50/100** for light backgrounds and hover states
+8. Keep design clean and modern with olive as the primary accent color
 

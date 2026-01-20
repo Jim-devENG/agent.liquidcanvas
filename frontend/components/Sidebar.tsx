@@ -58,13 +58,13 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
       {/* Logo/Header Section */}
-      <div className="p-4 border-b border-gray-200/50 bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/30">
+      <div className="p-4 border-b border-gray-200/50 bg-gradient-to-br from-white to-olive-50/30">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-liquid-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg hover-glow transition-all">
+          <div className="w-10 h-10 rounded-xl bg-olive-600 flex items-center justify-center shadow-lg hover-glow transition-all">
             <span className="text-white text-sm font-bold">LC</span>
           </div>
           <div>
-            <h1 className="text-sm font-bold liquid-gradient-text">
+            <h1 className="text-sm font-bold text-olive-700">
               Liquid Canvas
             </h1>
             <p className="text-gray-500 text-xs mt-0.5 font-medium">
@@ -97,12 +97,12 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
                   w-full flex items-center space-x-2 px-3 py-2.5 rounded-lg font-medium text-xs transition-all duration-200
                   ${
                     isActive
-                      ? 'bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500 text-white shadow-md hover-glow'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-liquid-50 hover:to-purple-50 hover:text-liquid-700 hover:shadow-sm'
+                      ? 'bg-olive-600 text-white shadow-md hover-glow'
+                      : 'text-gray-700 hover:bg-olive-50 hover:text-olive-700 hover:shadow-sm'
                   }
                 `}
               >
-                <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-liquid-600'}`} />
+                <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-olive-600'}`} />
                 <span>{tab.label}</span>
               </button>
             )
@@ -118,7 +118,7 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
             href="https://liquidcanvas.art" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="liquid-gradient-text font-bold text-xs mt-1 inline-block hover:scale-105 transition-transform"
+            className="text-olive-700 font-bold text-xs mt-1 inline-block hover:scale-105 transition-transform"
           >
             liquidcanvas.art
           </a>
