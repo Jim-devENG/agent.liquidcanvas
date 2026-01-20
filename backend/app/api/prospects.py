@@ -706,6 +706,79 @@ async def promote_to_lead(
         raise HTTPException(status_code=500, detail=f"Failed to promote prospect: {str(e)}")
 
 
+def _normalize_category(category: Optional[str]) -> Optional[str]:
+    """
+    Normalize category input: trim whitespace, handle empty strings, convert to None.
+    Categories are stored as-is in the database (case-sensitive at storage, case-insensitive at query).
+    """
+    if not category:
+        return None
+    normalized = category.strip()
+    if not normalized or normalized.lower() == 'all':
+        return None
+    return normalized
+
+
+def _build_leads_base_query(category: Optional[str] = None):
+    """
+    Build a single, deterministic base query for leads endpoint.
+    
+    This function ensures COUNT(*) and SELECT queries use identical filters,
+    preventing data integrity violations.
+    
+    Args:
+        category: Optional category filter (normalized before use)
+    
+    Returns:
+        Tuple of (base_query, total_count) where:
+        - base_query: select(Prospect) with all filters applied
+        - count_query: select(func.count(Prospect.id)) with same filters
+    """
+    from app.models.prospect import ScrapeStatus
+    
+    # Normalize category input
+    normalized_category = _normalize_category(category)
+    
+    # CRITICAL: Filter by source_type='website' to separate from social outreach
+    website_filter = or_(
+        Prospect.source_type == 'website',
+        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+    )
+    
+    # Base filters: scrape_status and source_type (always applied)
+    base_conditions = [
+        Prospect.scrape_status.in_([
+            ScrapeStatus.SCRAPED.value,
+            ScrapeStatus.ENRICHED.value
+        ]),
+        website_filter
+    ]
+    
+    # Add category filter if provided (exact match, case-insensitive)
+    if normalized_category:
+        # Use ilike for case-insensitive EXACT matching (not partial)
+        # This ensures "Museum" matches "Museum" but not "Art Museum"
+        category_condition = and_(
+            Prospect.discovery_category.isnot(None),
+            Prospect.discovery_category.ilike(normalized_category)  # Exact match, case-insensitive
+        )
+        base_conditions.append(category_condition)
+        logger.info(f"🔍 [LEADS BASE QUERY] Category filter applied: '{normalized_category}' (exact match, case-insensitive)")
+    else:
+        logger.info(f"🔍 [LEADS BASE QUERY] No category filter (returning all leads)")
+    
+    # Build WHERE clause from all conditions
+    where_clause = and_(*base_conditions)
+    
+    # Build base query for SELECT (data)
+    base_query = select(Prospect).where(where_clause).order_by(Prospect.created_at.desc())
+    
+    # Build count query using SAME where_clause (critical for data integrity)
+    count_query = select(func.count(Prospect.id)).where(where_clause)
+    
+    return base_query, count_query
+
+
 @router.get("/leads")
 async def list_leads(
     skip: int = 0,
@@ -719,53 +792,68 @@ async def list_leads(
     
     WEBSITE OUTREACH ONLY: Returns prospects where scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
     This matches the pipeline status "scraped" count exactly.
+    
+    Category filtering:
+    - If category is None, empty, or "all" → returns all leads
+    - If category is provided → exact match (case-insensitive)
+    - Invalid categories return empty results, never errors
     """
     try:
-        from app.models.prospect import ScrapeStatus
+        normalized_category = _normalize_category(category)
+        logger.info(f"📊 [LEADS] Request: skip={skip}, limit={limit}, category={category} (normalized: {normalized_category})")
         
-        # CRITICAL: Filter by source_type='website' to separate from social outreach
-        website_filter = or_(
-            Prospect.source_type == 'website',
-            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
-        )
+        # Build base query and count query from same source (critical for data integrity)
+        base_query, count_query = _build_leads_base_query(category)
         
-        # SINGLE SOURCE OF TRUTH: Match pipeline status query exactly
-        # Pipeline counts: scrape_status IN ("SCRAPED", "ENRICHED") AND source_type='website'
-        logger.info(f"🔍 [LEADS] Querying website prospects with scrape_status IN ('SCRAPED', 'ENRICHED') (skip={skip}, limit={limit})")
+        # Execute count query FIRST
+        try:
+            total_result = await db.execute(count_query)
+            total = total_result.scalar() or 0
+            logger.info(f"📊 [LEADS] COUNT query result: {total} total leads" + (f" (category: '{normalized_category}')" if normalized_category else ""))
+        except Exception as count_err:
+            # Defensive: If count fails, log but don't crash - return empty result
+            logger.error(f"❌ [LEADS] COUNT query failed: {count_err}", exc_info=True)
+            logger.warning(f"⚠️  [LEADS] Returning empty result due to COUNT failure")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit
+            }
         
-        # Add category filter if provided (case-insensitive)
-        category_filter = None
-        if category and category.lower() != 'all':
-            # Use ilike for case-insensitive comparison (PostgreSQL), handle NULL values
-            category_filter = and_(
-                Prospect.discovery_category.isnot(None),
-                Prospect.discovery_category.ilike(f"%{category}%")
-            )
-            logger.info(f"🔍 [LEADS] Filtering by category: {category} (case-insensitive using ilike)")
+        # Execute data query with pagination
+        try:
+            result = await db.execute(base_query.offset(skip).limit(limit))
+            prospects = result.scalars().all()
+            logger.info(f"📊 [LEADS] SELECT query result: {len(prospects)} prospects returned (total available: {total})")
+        except Exception as query_err:
+            error_str = str(query_err).lower()
+            logger.error(f"❌ [LEADS] SELECT query failed: {query_err}", exc_info=True)
+            
+            # Handle schema mismatch errors gracefully
+            if "undefinedcolumn" in error_str or "does not exist" in error_str or "bio_text" in error_str:
+                logger.error(f"❌ [LEADS] Schema mismatch detected: {query_err}")
+                await db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Database schema mismatch: Missing required columns. Please run migrations: 'alembic upgrade head' or use the /api/health/migrate endpoint. Error: {str(query_err)}"
+                )
+            
+            # For other query errors, return empty result instead of crashing
+            logger.warning(f"⚠️  [LEADS] Query error, returning empty result: {query_err}")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit
+            }
         
-        # Build base filters
-        base_filters = [
-            Prospect.scrape_status.in_([
-                ScrapeStatus.SCRAPED.value,
-                ScrapeStatus.ENRICHED.value
-            ]),
-            website_filter
-        ]
-        
-        # Add category filter if provided
-        if category_filter:
-            base_filters.append(category_filter)
-        
-        # Get total count FIRST (before any filtering that might exclude data)
-        count_query = select(func.count(Prospect.id)).where(and_(*base_filters))
-        
-        total_result = await db.execute(count_query)
-        total = total_result.scalar() or 0
-        logger.info(f"📊 [LEADS] RAW COUNT (before pagination): {total} website prospects with scrape_status IN ('SCRAPED', 'ENRICHED')" + (f" and category='{category}'" if category_filter else ""))
-        
-        # Build query with explicit column selection to avoid missing column errors
-        # Use ORM query - schema validation ensures columns exist
-        query = select(Prospect).where(and_(*base_filters)).order_by(Prospect.created_at.desc())
+        # Defensive: If count says we have data but query returned none, adjust total
+        # This handles edge cases where COUNT and SELECT diverge (shouldn't happen but be safe)
+        if total > 0 and len(prospects) == 0 and skip == 0:
+            logger.warning(f"⚠️  [LEADS] COUNT returned {total} but SELECT returned 0 rows (skip={skip}). This may indicate pagination issue or data was deleted.")
+            # Don't raise error - just return empty result
+            total = 0
         
         # Get paginated results
         # SCHEMA MUST BE CORRECT - migrations must be run manually at deploy time
