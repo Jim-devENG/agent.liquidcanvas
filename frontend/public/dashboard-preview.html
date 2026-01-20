@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Preview - Liquid Canvas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fade-in 0.5s ease-out; }
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20">
+    <div class="min-h-screen p-8">
+        <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <!-- Header -->
+            <header class="glass border-b border-gray-200/50 px-4 py-3 flex items-center justify-between">
+                <div>
+                    <h2 class="text-sm font-bold text-olive-700">Overview</h2>
+                    <p class="text-xs text-gray-500 mt-0.5">Liquid Canvas Website Outreach Studio</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button class="px-2 py-1 glass text-gray-700 rounded-lg text-xs font-medium">Refresh</button>
+                    <button class="px-2 py-1 bg-olive-600 text-white rounded-lg text-xs font-medium">Logout</button>
+                </div>
+            </header>
+
+            <!-- System Status -->
+            <div class="px-4 py-2 bg-green-50 border-b border-green-200">
+                <div class="flex items-center space-x-4 text-xs">
+                    <span class="flex items-center space-x-1">
+                        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span class="text-green-700 font-medium">System Online</span>
+                    </span>
+                    <span class="flex items-center space-x-1 text-green-700">
+                        <span>✓</span>
+                        <span>11 completed</span>
+                    </span>
+                    <span class="flex items-center space-x-1 text-red-700">
+                        <span>✗</span>
+                        <span>3 failed</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <main class="p-4">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-3 gap-3 mb-6">
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">Total Prospects</p>
+                                <p class="text-lg font-bold text-olive-700">127</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">With Email</p>
+                                <p class="text-lg font-bold text-olive-700">59</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">Sent</p>
+                                <p class="text-lg font-bold text-olive-700">0</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">Pending</p>
+                                <p class="text-lg font-bold text-olive-700">127</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">Replied</p>
+                                <p class="text-lg font-bold text-olive-700">0</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-600 mb-1">Jobs Running</p>
+                                <p class="text-lg font-bold text-olive-700">0</p>
+                            </div>
+                            <div class="p-2 rounded-lg shadow-md bg-olive-600">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Control Sections -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <h3 class="text-sm font-bold text-gray-900 mb-3">Master Switch</h3>
+                        <p class="text-xs text-gray-600 mb-3">Enable/disable all pipeline activities</p>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-12 h-6 bg-gray-300 rounded-full relative">
+                                <div class="w-5 h-5 bg-white rounded-full absolute left-0.5 top-0.5"></div>
+                            </div>
+                            <span class="text-xs text-gray-600">Off</span>
+                        </div>
+                    </div>
+                    <div class="glass rounded-xl shadow-lg border border-white/20 p-4">
+                        <h3 class="text-sm font-bold text-gray-900 mb-3">Mode</h3>
+                        <div class="flex space-x-2 mb-2">
+                            <button class="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium">Off</button>
+                            <button class="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded text-xs font-medium">Manual</button>
+                        </div>
+                        <p class="text-xs text-gray-600">Pipeline activities run only when you trigger them</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</body>
+</html>
+
