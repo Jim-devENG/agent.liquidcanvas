@@ -144,13 +144,53 @@ export default function SocialDiscovery() {
       )
       setJobs(socialJobs)
       
-      // Refresh pipeline status and trigger all table refreshes
+      // Notify pipeline that discovery has started
       if (typeof window !== 'undefined') {
-        // Trigger discovery completion event to reset pipeline state
-        window.dispatchEvent(new CustomEvent('socialDiscoveryCompleted'))
-        window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
-        window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        window.dispatchEvent(new CustomEvent('socialDiscoveryStarted'))
       }
+      
+      // Poll for job completion and refresh when done
+      const pollForCompletion = async () => {
+        let attempts = 0
+        const maxAttempts = 60 // Poll for up to 5 minutes (60 * 5 seconds)
+        
+        const pollInterval = setInterval(async () => {
+          attempts++
+          try {
+            const allJobs = await listJobs(0, 50)
+            const discoveryJob = allJobs.find((job: Job) => job.id === result.job_id)
+            
+            if (discoveryJob) {
+              if (discoveryJob.status === 'completed' || discoveryJob.status === 'failed') {
+                clearInterval(pollInterval)
+                // Refresh pipeline status and trigger all table refreshes
+                if (typeof window !== 'undefined') {
+                  // Trigger discovery completion event to reset pipeline state
+                  window.dispatchEvent(new CustomEvent('socialDiscoveryCompleted'))
+                  window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+                  window.dispatchEvent(new CustomEvent('jobsCompleted'))
+                }
+              }
+            }
+            
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval)
+              // Even if job isn't complete, reset loading state after timeout
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('refreshSocialPipelineStatus'))
+              }
+            }
+          } catch (err) {
+            console.error('Error polling for job completion:', err)
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval)
+            }
+          }
+        }, 5000) // Poll every 5 seconds
+      }
+      
+      // Start polling for completion
+      pollForCompletion()
     } catch (err: any) {
       setError(err.message || 'Failed to start discovery')
     } finally {

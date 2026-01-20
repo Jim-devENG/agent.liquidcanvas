@@ -140,38 +140,99 @@ export default function SocialPipeline() {
     // Listen for manual refresh requests
     // Do NOT check for new jobs on refresh - only refresh status
     const handleRefresh = () => {
+      console.log('🔄 [SOCIAL PIPELINE] Manual refresh requested')
       loadStatus()
       // Load jobs list but don't check for new jobs (prevents false resets)
       loadSocialDiscoveryJobs(false)
+      // Reset discovery loading state to ensure buttons are enabled
+      setDiscoveryLoading(false)
+    }
+    
+    // Listen for discovery start to set loading state
+    const handleDiscoveryStarted = () => {
+      console.log('🔄 [SOCIAL PIPELINE] Discovery started event received')
+      setDiscoveryLoading(true)
     }
     
     // Listen for discovery completion to reset pipeline state
     // Only reset if we have a confirmed new job ID
     const handleDiscoveryCompleted = () => {
-      console.log('🔄 Social discovery completed event received...')
+      console.log('🔄 [SOCIAL PIPELINE] Discovery completed event received')
+      // Reset loading state immediately to re-enable buttons
+      setDiscoveryLoading(false)
       // Load discovery jobs to check for new job ID
       // Pass true to check for new jobs
       loadSocialDiscoveryJobs(true).then(() => {
         // Status will be reloaded by loadSocialDiscoveryJobs if new job detected
+        // Also explicitly reload status to ensure buttons update
+        loadStatus()
       }).catch(err => {
         console.error('Failed to load social discovery jobs after discovery completed:', err)
-        // Don't reset state on error - treat as false positive
+        // Still reload status even on error to ensure UI updates
+        loadStatus()
+        setDiscoveryLoading(false)
       })
     }
+    
+    // Poll for job status changes to detect when discovery completes
+    // This ensures buttons re-enable even if events don't fire
+    const jobPollInterval = setInterval(async () => {
+      try {
+        const jobs = await listJobs(0, 50)
+        const activeDiscoveryJobs = jobs.filter((j: Job) => 
+          j.job_type === 'social_discover' && 
+          (j.status === 'running' || j.status === 'pending')
+        )
+        
+        // If no active discovery jobs, ensure loading state is reset
+        if (activeDiscoveryJobs.length === 0 && discoveryLoading) {
+          console.log('🔄 [SOCIAL PIPELINE] No active discovery jobs, resetting loading state')
+          setDiscoveryLoading(false)
+          await loadStatus()
+        }
+        
+        // Check for newly completed jobs
+        const completedJobs = jobs.filter((j: Job) => 
+          j.job_type === 'social_discover' && 
+          j.status === 'completed' &&
+          j.id !== lastProcessedDiscoveryJobId
+        )
+        
+        if (completedJobs.length > 0) {
+          const latestCompleted = completedJobs.sort((a: Job, b: Job) => {
+            const dateA = new Date(a.created_at || 0).getTime()
+            const dateB = new Date(b.created_at || 0).getTime()
+            return dateB - dateA
+          })[0]
+          
+          if (latestCompleted.id) {
+            console.log('🔄 [SOCIAL PIPELINE] New completed discovery job detected via polling', latestCompleted.id)
+            setLastProcessedDiscoveryJobId(latestCompleted.id)
+            setDiscoveryLoading(false)
+            await loadStatus()
+          }
+        }
+      } catch (err) {
+        console.error('Error polling for job status:', err)
+      }
+    }, 5000) // Poll every 5 seconds
     
     if (typeof window !== 'undefined') {
       window.addEventListener('refreshSocialPipelineStatus', handleRefresh)
       window.addEventListener('socialDiscoveryCompleted', handleDiscoveryCompleted)
+      window.addEventListener('socialDiscoveryStarted', handleDiscoveryStarted)
     }
     
     return () => {
       abortController.abort()
+      clearInterval(jobPollInterval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('refreshSocialPipelineStatus', handleRefresh)
         window.removeEventListener('socialDiscoveryCompleted', handleDiscoveryCompleted)
+        window.removeEventListener('socialDiscoveryStarted', handleDiscoveryStarted)
       }
     }
-  }, [selectedPlatform]) // Reload when platform changes
+  }, [selectedPlatform, discoveryLoading, lastProcessedDiscoveryJobId]) // Include dependencies
 
   const handleDiscover = async () => {
     // Discovery is handled in the discovery component
@@ -538,15 +599,15 @@ export default function SocialPipeline() {
                 )}
                 <button
                   onClick={step.ctaAction}
-                  disabled={isLocked || !masterSwitchEnabled}
+                  disabled={isLocked || !masterSwitchEnabled || discoveryLoading}
                   className={`w-full px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 ${
-                    isLocked || !masterSwitchEnabled
+                    isLocked || !masterSwitchEnabled || discoveryLoading
                       ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                       : isCompleted
                       ? 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
                       : 'bg-olive-600 text-white hover:bg-olive-700 hover:shadow-md hover:scale-102'
                   }`}
-                  title={!masterSwitchEnabled ? 'Master switch must be enabled' : undefined}
+                  title={!masterSwitchEnabled ? 'Master switch must be enabled' : discoveryLoading ? 'Discovery in progress...' : undefined}
                 >
                   <span>{step.ctaText}</span>
                   {!isLocked && masterSwitchEnabled && <ArrowRight className="w-3 h-3" />}
