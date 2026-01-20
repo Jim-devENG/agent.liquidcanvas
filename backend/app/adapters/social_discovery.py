@@ -33,7 +33,13 @@ class LinkedInDiscoveryAdapter:
         keywords = params.get('keywords', [])
         max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
-        logger.info(f"🔍 [LINKEDIN DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations, {len(keywords)} keywords")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] ========================================")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] Starting discovery")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] Categories: {categories} ({len(categories)} total)")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] Locations: {locations} ({len(locations)} total)")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] Keywords: {keywords} ({len(keywords) if keywords else 0} total)")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] Max results: {max_results}")
+        logger.info(f"🔍 [LINKEDIN DISCOVERY] ========================================")
         
         prospects = []
         
@@ -289,7 +295,13 @@ class InstagramDiscoveryAdapter:
         keywords = params.get('keywords', [])
         max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
-        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] ========================================")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Starting discovery")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Categories: {categories} ({len(categories)} total)")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Locations: {locations} ({len(locations)} total)")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Keywords: {keywords} ({len(keywords) if keywords else 0} total)")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] Max results: {max_results}")
+        logger.info(f"🔍 [INSTAGRAM DISCOVERY] ========================================")
         
         prospects = []
         

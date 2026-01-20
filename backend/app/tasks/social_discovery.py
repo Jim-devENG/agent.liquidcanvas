@@ -97,7 +97,20 @@ async def discover_social_profiles_async(job_id: str) -> dict:
             }
             
             # Run discovery using adapter (this will take time)
+            logger.info(f"🚀 [SOCIAL DISCOVERY] Starting adapter.discover() for platform {platform}")
+            logger.info(f"📋 [SOCIAL DISCOVERY] Adapter params: {adapter_params}")
+            
             prospects = await adapter.discover(adapter_params, db)
+            
+            logger.info(f"📊 [SOCIAL DISCOVERY] Adapter returned {len(prospects)} prospects")
+            if len(prospects) == 0:
+                logger.warning(f"⚠️  [SOCIAL DISCOVERY] Adapter returned ZERO prospects! This may indicate:")
+                logger.warning(f"   1. No results found for the search criteria")
+                logger.warning(f"   2. DataForSEO API issues")
+                logger.warning(f"   3. Query execution problems")
+                logger.warning(f"   4. URL filtering too strict")
+            else:
+                logger.info(f"✅ [SOCIAL DISCOVERY] Adapter successfully found {len(prospects)} prospects")
             
             # ACCEPTANCE & FILTERING RULES
             # Requirements for eligibility (not for saving):
