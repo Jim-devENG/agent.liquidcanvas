@@ -18,6 +18,7 @@ import {
   LogOut as LogOutIcon
 } from 'lucide-react'
 import { getSettings, testService, type ServiceStatus } from '@/lib/api'
+import SocialIntegrationsSettings from '@/components/SocialIntegrationsSettings'
 
 interface ServiceCardProps {
   service: ServiceStatus
@@ -349,6 +350,11 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Social Integrations Section */}
+        <div className="bg-white rounded-xl shadow-md border-2 border-gray-200 p-6 mt-6">
+          <SocialIntegrationsSettings />
         </div>
 
         {/* Instructions */}
