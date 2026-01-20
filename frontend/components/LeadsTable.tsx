@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download } from 'lucide-react'
-import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -10,7 +10,20 @@ interface LeadsTableProps {
   emailsOnly?: boolean
 }
 
+// VERSION: 2.2 - Migrate Categories Button Added - Build: 2026-01-20-04:25 - CACHE BUST
 export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
+  // CRITICAL: Log version on component mount - MULTIPLE LOGS TO ENSURE VISIBILITY
+  console.log('🚀🚀🚀 [LEADS TABLE] Component version 2.2 loaded - Migrate Categories button should be visible!')
+  console.log('🚀🚀🚀 [LEADS TABLE] If you see this, the NEW version is loaded!')
+  console.warn('🚀🚀🚀 [LEADS TABLE] VERSION 2.2 - MIGRATE CATEGORIES BUTTON EXISTS - CACHE BUSTED')
+  
+  // Force component to re-render by adding a timestamp
+  const buildTimestamp = '2026-01-20-04:25:00'
+  if (typeof window !== 'undefined') {
+    (window as any).__LEADS_TABLE_VERSION__ = '2.2'
+    (window as any).__LEADS_TABLE_BUILD_TIME__ = buildTimestamp
+  }
+  
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
@@ -39,6 +52,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [updateCategory, setUpdateCategory] = useState<string>('')
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
+  const [isMigratingCategories, setIsMigratingCategories] = useState(false)
 
   // Available categories
   const availableCategories = [
@@ -475,8 +489,72 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
   }
 
+  const handleMigrateCategories = async () => {
+    console.log('🔄 [MIGRATE] Button clicked - handleMigrateCategories called')
+    setIsMigratingCategories(true)
+    setError(null)
+    try {
+      const result = await migrateCategories()
+      console.log('✅ [MIGRATE CATEGORIES] Result:', result)
+      
+      // Show migration details
+      const mappingDetails = Object.entries(result.category_mapping || {})
+        .map(([old, info]: [string, any]) => `"${old}" → "${info.to}" (${info.count} records)`)
+        .join(', ')
+      
+      setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''} - Refreshing...`)
+      
+      // Reset to first page
+      setSkip(0)
+      
+      // Wait for backend to commit, then reload
+      setTimeout(async () => {
+        try {
+          await loadProspects()
+          console.log('✅ [MIGRATE CATEGORIES] Refresh complete')
+        } catch (err) {
+          console.error('❌ [MIGRATE CATEGORIES] Error on refresh:', err)
+        }
+      }, 1000)
+      
+      setTimeout(() => setError(null), 8000)
+    } catch (err: any) {
+      console.error('❌ [MIGRATE CATEGORIES] Error:', err)
+      setError(err.message || 'Failed to migrate categories')
+    } finally {
+      setIsMigratingCategories(false)
+    }
+  }
+
+  // Debug: Log button render
+  useEffect(() => {
+    console.log('🔍 [LEADS TABLE] Component rendered, isMigratingCategories state:', isMigratingCategories)
+    console.log('🔍 [LEADS TABLE] handleMigrateCategories function exists:', typeof handleMigrateCategories === 'function')
+  }, [isMigratingCategories, handleMigrateCategories])
+
+  // Debug: Force log on every render
+  console.log('🔍 [LEADS TABLE] Component rendering, Migrate Categories button should be visible')
+  console.log('🔍 [LEADS TABLE] emailsOnly prop:', emailsOnly)
+  console.log('🔍 [LEADS TABLE] prospects count:', prospects.length)
+
+  // CRITICAL DEBUG: Render a simple test first
+  try {
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
+      {/* MIGRATE CATEGORIES BUTTON - ALWAYS VISIBLE */}
+      <div style={{ 
+        backgroundColor: '#9333ea', 
+        color: 'white', 
+        padding: '15px', 
+        fontSize: '18px', 
+        fontWeight: 'bold',
+        marginBottom: '15px',
+        textAlign: 'center',
+        border: '3px solid #7e22ce',
+        borderRadius: '8px'
+      }}>
+        ✅ Migrate Categories Feature Available
+      </div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-sm font-bold text-olive-700">
@@ -484,7 +562,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </h2>
           <p className="text-xs text-gray-500 mt-1">Liquid Canvas Outreach</p>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 flex-wrap gap-2 overflow-visible">
           <select
             value={selectedCategory}
             onChange={(e) => {
@@ -524,8 +602,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           )}
           <button
             onClick={handleAutoCategorize}
-            disabled={isAutoCategorizing}
+            disabled={isAutoCategorizing || isMigratingCategories}
             className="px-2 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            title="Auto-categorize prospects based on content analysis"
           >
             {isAutoCategorizing ? (
               <>
@@ -536,6 +615,37 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               <>
                 <Users className="w-3 h-3" />
                 Auto-Categorize All
+              </>
+            )}
+          </button>
+          {/* Migrate Categories Button */}
+          <button
+            onClick={handleMigrateCategories}
+            disabled={isMigratingCategories || isAutoCategorizing}
+            className="px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 shadow-md border-2 border-purple-700"
+            title="Migrate old category formats to new standardized categories"
+            style={{ 
+              display: 'inline-flex', 
+              visibility: 'visible', 
+              opacity: 1,
+              minWidth: '140px',
+              zIndex: 10,
+              position: 'relative',
+              flexShrink: 0,
+              backgroundColor: '#9333ea'
+            }}
+            data-testid="migrate-categories-button"
+            id="migrate-categories-button-v2.1"
+          >
+            {isMigratingCategories ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Migrating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Migrate Categories
               </>
             )}
           </button>
