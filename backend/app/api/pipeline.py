@@ -1477,7 +1477,7 @@ async def auto_categorize_prospect(prospect: Prospect, db: AsyncSession) -> Opti
             'art museum', 'gallery museum', 'contemporary museum', 'modern museum',
             'museum of art', 'art collection', 'permanent collection'
         ],
-        'Art': [
+        'Art Lovers': [
             # Domain patterns
             'gallery', 'galleries', 'galerie', 'galeria', 'galerija',
             'studio', 'studios', 'atelier', 'ateliers',
@@ -1489,7 +1489,8 @@ async def auto_categorize_prospect(prospect: Prospect, db: AsyncSession) -> Opti
             'art studio', 'artist studio', 'creative studio', 'painting studio',
             'sculpture studio', 'artists studio', 'working studio', 'art workshop',
             'art fair', 'art exhibition', 'art show', 'art expo', 'art market',
-            'art event', 'art festival', 'biennale', 'biennial', 'art week'
+            'art event', 'art festival', 'biennale', 'biennial', 'art week',
+            'art lover', 'art lovers', 'art enthusiast', 'art enthusiasts'
         ],
         'Interior Design': [
             # Domain patterns
@@ -1522,29 +1523,29 @@ async def auto_categorize_prospect(prospect: Prospect, db: AsyncSession) -> Opti
             # Title/URL patterns
             'holiday', 'holidays', 'festival', 'celebration', 'seasonal'
         ],
-        'Dogs': [
-            # Domain patterns
+        'Pet Lovers': [
+            # Domain patterns - combined dog and cat patterns
             'dog', 'dogs', 'puppy', 'puppies', 'canine', 'canines',
-            # Title/URL patterns
-            'dog', 'dogs', 'puppy', 'canine', 'dog training', 'dog care'
-        ],
-        'Dog Lovers': [
-            # Domain patterns
-            'doglover', 'doglovers', 'dog-lover', 'dog-lovers',
-            # Title/URL patterns
-            'dog lover', 'dog lovers', 'dog owner', 'dog owners'
-        ],
-        'Cats': [
-            # Domain patterns
             'cat', 'cats', 'kitten', 'kittens', 'feline', 'felines',
-            # Title/URL patterns
-            'cat', 'cats', 'kitten', 'feline', 'cat care', 'cat training'
-        ],
-        'Cat Lovers': [
-            # Domain patterns
+            'pet', 'pets', 'petlover', 'petlovers', 'pet-lover', 'pet-lovers',
+            'doglover', 'doglovers', 'dog-lover', 'dog-lovers',
             'catlover', 'catlovers', 'cat-lover', 'cat-lovers',
             # Title/URL patterns
+            'dog', 'dogs', 'puppy', 'canine', 'dog training', 'dog care',
+            'cat', 'cats', 'kitten', 'feline', 'cat care', 'cat training',
+            'pet lover', 'pet lovers', 'pet owner', 'pet owners',
+            'dog lover', 'dog lovers', 'dog owner', 'dog owners',
             'cat lover', 'cat lovers', 'cat owner', 'cat owners'
+        ],
+        'Dogs and Cat Owners - Fur Parent': [
+            # Domain patterns
+            'furparent', 'furparents', 'fur-parent', 'fur-parents',
+            'furmom', 'furdad', 'furmommy', 'furdaddy',
+            # Title/URL patterns
+            'fur parent', 'fur parents', 'fur mom', 'fur dad',
+            'fur mommy', 'fur daddy', 'pet parent', 'pet parents',
+            'dog and cat owner', 'dogs and cats owner', 'dog and cat owners',
+            'dogs and cats owners', 'multi pet owner', 'multi pet owners'
         ],
         'Parenting': [
             # Domain patterns
@@ -1767,8 +1768,12 @@ async def migrate_categories(
     # Handles various formats: lowercase, snake_case, variations
     category_mapping = {
         # Old lowercase/snake_case formats
-        'art': 'Art',
-        'Art': 'Art',  # Already correct, but normalize
+        'art': 'Art Lovers',
+        'Art': 'Art Lovers',  # Updated to new category name
+        'art lovers': 'Art Lovers',
+        'Art Lovers': 'Art Lovers',
+        'art enthusiast': 'Art Lovers',
+        'art enthusiasts': 'Art Lovers',
         'interior_design': 'Interior Design',
         'interior design': 'Interior Design',
         'Interior Design': 'Interior Design',
