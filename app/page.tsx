@@ -300,6 +300,10 @@ export default function Dashboard() {
 
         {activeTab === 'leads' && (
           <div className="max-w-7xl mx-auto">
+            {/* DEBUG: Test if this div renders */}
+            <div style={{ backgroundColor: 'yellow', padding: '20px', border: '5px solid red', marginBottom: '20px' }}>
+              DEBUG: You are on the Leads tab! LeadsTable should render below this.
+            </div>
             <LeadsTable />
           </div>
         )}
