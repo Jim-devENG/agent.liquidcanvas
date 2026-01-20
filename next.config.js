@@ -6,8 +6,10 @@ const nextConfig = {
   },
   // Force rebuild - disable caching
   generateBuildId: async () => {
-    return `build-${Date.now()}`
+    return `build-${Date.now()}-${Math.random()}`
   },
+  // Disable static optimization to ensure fresh builds
+  output: 'standalone',
 }
 
 module.exports = nextConfig
