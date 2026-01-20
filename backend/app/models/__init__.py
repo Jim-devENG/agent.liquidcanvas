@@ -9,8 +9,10 @@ from app.models.discovery_query import DiscoveryQuery
 from app.models.scraper_history import ScraperHistory
 # Import social outreach models (separate system, but need to be in metadata)
 from app.models.social import SocialProfile, SocialDiscoveryJob, SocialDraft, SocialMessage
+from app.models.social_integration import SocialIntegration, Platform, ConnectionStatus
 
 __all__ = [
     "Prospect", "Job", "EmailLog", "Settings", "DiscoveryQuery", "ScraperHistory",
-    "SocialProfile", "SocialDiscoveryJob", "SocialDraft", "SocialMessage"
+    "SocialProfile", "SocialDiscoveryJob", "SocialDraft", "SocialMessage",
+    "SocialIntegration", "Platform", "ConnectionStatus"
 ]
