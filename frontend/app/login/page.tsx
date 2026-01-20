@@ -139,8 +139,8 @@ export default function LoginPage() {
               </div>
 
               {/* Outreach Type Selection */}
-              {!outreachType && (
-                <div className="mb-8 animate-slide-up">
+              {!outreachType ? (
+                <div className="animate-slide-up">
                   <label className="block text-sm font-semibold text-gray-700 mb-4">
                     Choose Your Outreach Type
                   </label>
@@ -171,42 +171,43 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
-              )}
-
-              {/* Selected Outreach Type Badge */}
-              {outreachType && (
-                <div className="mb-6 animate-slide-up">
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-olive-50 to-olive-100 rounded-xl border border-olive-200">
-                    <div className="flex items-center gap-3">
-                      {outreachType === 'social' ? (
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                          <Users className="w-5 h-5 text-white" />
+              ) : (
+                <>
+                  {/* Selected Outreach Type Badge */}
+                  <div className="mb-6 animate-slide-up">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-olive-50 to-olive-100 rounded-xl border border-olive-200">
+                      <div className="flex items-center gap-3">
+                        {outreachType === 'social' ? (
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                            <Users className="w-5 h-5 text-white" />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                            <Globe className="w-5 h-5 text-white" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-sm text-gray-600">Selected Mode</p>
+                          <p className="font-bold text-olive-700">
+                            {outreachType === 'social' ? 'Social Outreach' : 'Website Outreach'}
+                          </p>
                         </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                          <Globe className="w-5 h-5 text-white" />
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-sm text-gray-600">Selected Mode</p>
-                        <p className="font-bold text-olive-700">
-                          {outreachType === 'social' ? 'Social Outreach' : 'Website Outreach'}
-                        </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOutreachType(null)
+                          setError('')
+                        }}
+                        className="p-2 hover:bg-white rounded-lg transition-colors"
+                        title="Change outreach type"
+                      >
+                        <X className="w-4 h-4 text-gray-500" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setOutreachType(null)}
-                      className="p-2 hover:bg-white rounded-lg transition-colors"
-                      title="Change outreach type"
-                    >
-                      <X className="w-4 h-4 text-gray-500" />
-                    </button>
                   </div>
-                </div>
-              )}
-              
-              <form onSubmit={handleSubmit} className="space-y-6">
+                  
+                  <form onSubmit={handleSubmit} className="space-y-6 animate-slide-up">
                 <div>
                   <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">
                     Username
