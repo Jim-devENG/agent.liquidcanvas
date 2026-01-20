@@ -532,23 +532,24 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
 
   // CRITICAL DEBUG: Render a simple test first
   try {
-    return (
-      <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
-        {/* DEBUG: Very visible test marker - MUST BE VISIBLE */}
-        <div style={{ 
-          backgroundColor: 'red', 
-          color: 'white', 
-          padding: '20px', 
-          fontSize: '18px', 
-          fontWeight: 'bold',
-          marginBottom: '20px',
-          textAlign: 'center',
-          border: '5px solid black',
-          zIndex: 9999,
-          position: 'relative'
-        }}>
-          🔍 DEBUG: LeadsTable Component IS RENDERING! If you see this red box, the component loaded successfully!
-        </div>
+  return (
+    <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
+      {/* VERSION 2.1 INDICATOR - VISIBLE ON PAGE */}
+      <div style={{ 
+        backgroundColor: '#9333ea', 
+        color: 'white', 
+        padding: '15px', 
+        fontSize: '16px', 
+        fontWeight: 'bold',
+        marginBottom: '15px',
+        textAlign: 'center',
+        border: '3px solid #7e22ce',
+        borderRadius: '8px',
+        zIndex: 9999,
+        position: 'relative'
+      }}>
+        ✅ VERSION 2.1 LOADED - Migrate Categories Button Available Below
+      </div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-sm font-bold text-olive-700">
