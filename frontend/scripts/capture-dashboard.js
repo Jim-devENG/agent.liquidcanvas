@@ -23,18 +23,21 @@ async function captureDashboard() {
     const page = await browser.newPage();
     
     // Set viewport to match landing page aspect ratio (16:9)
+    // Use a wider viewport for better dashboard display
     await page.setViewport({
       width: 1920,
       height: 1080,
       deviceScaleFactor: 2 // Higher quality
     });
     
-    // Set body to fill viewport
+    // Ensure full viewport coverage
     await page.evaluate(() => {
       document.body.style.margin = '0';
       document.body.style.padding = '0';
       document.documentElement.style.height = '100%';
+      document.documentElement.style.width = '100%';
       document.body.style.height = '100%';
+      document.body.style.width = '100%';
     });
     
     console.log('🌐 Loading dashboard preview...');
