@@ -541,23 +541,19 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   try {
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
-      {/* VERSION 2.1 INDICATOR - VISIBLE ON PAGE - MUST BE VISIBLE */}
+      {/* MIGRATE CATEGORIES BUTTON - ALWAYS VISIBLE */}
       <div style={{ 
         backgroundColor: '#9333ea', 
         color: 'white', 
-        padding: '20px', 
-        fontSize: '20px', 
+        padding: '15px', 
+        fontSize: '18px', 
         fontWeight: 'bold',
-        marginBottom: '20px',
+        marginBottom: '15px',
         textAlign: 'center',
-        border: '5px solid #7e22ce',
-        borderRadius: '10px',
-        zIndex: 99999,
-        position: 'relative',
-        boxShadow: '0 0 20px rgba(147, 51, 234, 0.5)'
+        border: '3px solid #7e22ce',
+        borderRadius: '8px'
       }}>
-        🚀🚀🚀 VERSION 2.1 LOADED 🚀🚀🚀<br/>
-        Migrate Categories Button Should Be Visible Below!
+        ✅ Migrate Categories Feature Available
       </div>
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -622,13 +618,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </>
             )}
           </button>
-          {/* Migrate Categories Button - Always Visible - Purple Button - DO NOT REMOVE - VERSION 2.1 */}
-          {console.log('🔍 [BUTTON RENDER] Rendering Migrate Categories button NOW')}
+          {/* Migrate Categories Button */}
           <button
-            onClick={() => {
-              console.log('🔄 [MIGRATE] Button clicked!')
-              handleMigrateCategories()
-            }}
+            onClick={handleMigrateCategories}
             disabled={isMigratingCategories || isAutoCategorizing}
             className="px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 shadow-md border-2 border-purple-700"
             title="Migrate old category formats to new standardized categories"
