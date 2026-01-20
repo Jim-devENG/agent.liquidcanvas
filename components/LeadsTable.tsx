@@ -477,7 +477,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   const handleMigrateCategories = async () => {
-    console.log('🔄 [MIGRATE] Button clicked - handleMigrateCategories called')
     setIsMigratingCategories(true)
     setError(null)
     try {
@@ -606,17 +605,17 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 }}
                 data-testid="migrate-categories-button"
               >
-            {isMigratingCategories ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Migrating...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-3 h-3" />
-                Migrate Categories
-              </>
-            )}
+                {isMigratingCategories ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Migrating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3 h-3" />
+                    Migrate Categories
+                  </>
+                )}
               </button>
             )
           })()}
