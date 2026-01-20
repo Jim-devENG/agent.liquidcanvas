@@ -155,7 +155,7 @@ async def discover_social_profiles_async(job_id: str) -> dict:
             job.result = {
                 "prospects_count": saved_count,
                 "qualified_count": qualified_count,
-                "disqualified_count": disqualified_count,
+                "disqualified_count": ineligible_count,  # Fixed: use ineligible_count instead of undefined disqualified_count
                 "platform": platform,
                 "categories": categories,
                 "locations": locations
