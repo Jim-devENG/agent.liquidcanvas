@@ -142,6 +142,15 @@ export default function Dashboard() {
     router.push('/login')
   }
 
+  const handleTabChange = (tab: string) => {
+    const validTabs: Array<'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'> = [
+      'overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'
+    ]
+    if (validTabs.includes(tab as any)) {
+      setActiveTab(tab as any)
+    }
+  }
+
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'pipeline', label: 'Pipeline', icon: Globe },
@@ -169,7 +178,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-olive-50/30">
       <div className="flex h-screen overflow-hidden">
         {/* Sidebar */}
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} tabs={tabs} />
+        <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
 
         {/* Main Content */}
         <main className="flex-1 px-3 sm:px-4 py-2 overflow-y-auto ml-64">
