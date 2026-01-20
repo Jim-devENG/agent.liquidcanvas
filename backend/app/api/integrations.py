@@ -52,7 +52,7 @@ class IntegrationResponse(BaseModel):
     smtp_host: Optional[str] = None  # For email integrations
     smtp_port: Optional[int] = None  # For email integrations
     is_connected: bool
-    metadata: Optional[Dict[str, Any]] = None
+    platform_metadata: Optional[Dict[str, Any]] = None  # Renamed from 'metadata' (reserved in SQLAlchemy)
     
     class Config:
         from_attributes = True
@@ -426,7 +426,7 @@ async def list_integrations(
             smtp_host=integration.smtp_host,
             smtp_port=integration.smtp_port,
             is_connected=integration.is_connected(),
-            metadata=integration.metadata,
+            platform_metadata=integration.platform_metadata,
         )
         for integration in integrations
     ]
@@ -610,9 +610,9 @@ async def validate_integration(
             integration.connection_status = ConnectionStatus.EXPIRED.value
         else:
             integration.connection_status = ConnectionStatus.ERROR.value
-        if integration.metadata is None:
-            integration.metadata = {}
-        integration.metadata["last_validation_error"] = error_msg
+        if integration.platform_metadata is None:
+            integration.platform_metadata = {}
+        integration.platform_metadata["last_validation_error"] = error_msg
     
     await db.commit()
     
@@ -678,10 +678,10 @@ async def save_api_key(
     integration.business_id = None
     
     # Update metadata to indicate this is API key-based
-    if integration.metadata is None:
-        integration.metadata = {}
-    integration.metadata["auth_method"] = "api_key"
-    integration.metadata["saved_at"] = datetime.now(timezone.utc).isoformat()
+    if integration.platform_metadata is None:
+        integration.platform_metadata = {}
+    integration.platform_metadata["auth_method"] = "api_key"
+    integration.platform_metadata["saved_at"] = datetime.now(timezone.utc).isoformat()
     
     await db.commit()
     await db.refresh(integration)
@@ -916,9 +916,9 @@ async def oauth_callback(
         
         if not is_valid:
             integration.connection_status = ConnectionStatus.ERROR.value
-            if integration.metadata is None:
-                integration.metadata = {}
-            integration.metadata["validation_error"] = error_msg
+            if integration.platform_metadata is None:
+                integration.platform_metadata = {}
+            integration.platform_metadata["validation_error"] = error_msg
             await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -941,7 +941,7 @@ async def oauth_callback(
             token_expires_at=integration.token_expires_at,
             last_verified_at=integration.last_verified_at,
             is_connected=integration.is_connected(),
-            metadata=integration.metadata,
+            platform_metadata=integration.platform_metadata,
         )
         
     except httpx.HTTPStatusError as e:

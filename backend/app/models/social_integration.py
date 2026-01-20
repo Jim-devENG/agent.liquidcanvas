@@ -107,7 +107,8 @@ class SocialIntegration(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # Additional metadata (error messages, platform-specific data)
-    metadata = Column(JSONB, nullable=True)  # Platform-specific metadata, error messages, etc.
+    # Note: Using 'platform_metadata' instead of 'metadata' because 'metadata' is reserved in SQLAlchemy Declarative API
+    platform_metadata = Column(JSONB, nullable=True)  # Platform-specific metadata, error messages, etc.
     
     # Composite index for efficient lookups
     __table_args__ = (

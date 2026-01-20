@@ -53,7 +53,7 @@ def upgrade() -> None:
             # Metadata
             sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
             sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), onupdate=sa.text('now()'), nullable=False),
-            sa.Column('metadata', postgresql.JSONB(), nullable=True),  # Platform-specific metadata
+            sa.Column('platform_metadata', postgresql.JSONB(), nullable=True),  # Platform-specific metadata (renamed from 'metadata' - reserved in SQLAlchemy)
         )
         
         # Create indexes
