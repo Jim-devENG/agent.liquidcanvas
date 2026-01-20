@@ -1725,7 +1725,7 @@ async def auto_categorize_all(
     
     # Commit all changes
     try:
-    await db.commit()
+        await db.commit()
         logger.info(f"✅ [AUTO CATEGORIZE] Committed {categorized_count} category updates to database")
     except Exception as commit_err:
         logger.error(f"❌ [AUTO CATEGORIZE] Failed to commit changes: {commit_err}")
