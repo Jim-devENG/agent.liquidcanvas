@@ -48,7 +48,7 @@ export default function LoginPage() {
       localStorage.setItem('outreach_type', outreachType)
       
       // Navigate to dashboard for both website and social
-      router.push('/')
+      router.push('/dashboard')
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.')
     } finally {

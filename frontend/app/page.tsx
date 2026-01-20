@@ -28,6 +28,14 @@ export default function HomePage() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (token) {
+      router.push('/dashboard')
+    }
+  }, [router])
+
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20)
