@@ -477,6 +477,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   const handleMigrateCategories = async () => {
+    console.log('🔄 [MIGRATE] Button clicked - handleMigrateCategories called')
     setIsMigratingCategories(true)
     setError(null)
     try {
@@ -577,12 +578,14 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </>
             )}
           </button>
+          {/* Migrate Categories Button - Always Visible */}
           <button
             onClick={handleMigrateCategories}
             disabled={isMigratingCategories || isAutoCategorizing}
             className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
             title="Migrate old category formats to new standardized categories"
-            style={{ display: 'inline-flex', visibility: 'visible', opacity: 1 }}
+            style={{ display: 'inline-flex', visibility: 'visible', opacity: 1, minWidth: 'auto' }}
+            data-testid="migrate-categories-button"
           >
             {isMigratingCategories ? (
               <>
