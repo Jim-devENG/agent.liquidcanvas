@@ -104,6 +104,12 @@ class OAuthCallbackRequest(BaseModel):
     platform: str
 
 
+class ApiKeyRequest(BaseModel):
+    """Request model for API key storage"""
+    user_id: str
+    api_key: str
+
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -616,6 +622,85 @@ async def validate_integration(
         "connection_status": integration.connection_status,
         "last_verified_at": integration.last_verified_at,
     }
+
+
+@router.post("/{platform}/api-key", response_model=IntegrationResponse)
+async def save_api_key(
+    platform: str,
+    request: ApiKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Save API key/token for a platform (simple approach, no OAuth).
+    Stores the API key encrypted in access_token field.
+    """
+    if platform not in [Platform.INSTAGRAM.value, Platform.FACEBOOK.value, Platform.TIKTOK.value]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"API key storage not supported for platform: {platform}"
+        )
+    
+    user_id = request.user_id
+    api_key = request.api_key
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="api_key is required"
+        )
+    
+    logger.info(f"🔑 [API KEY] Saving API key for {platform} (user: {user_id})")
+    
+    # Get or create integration
+    integration = await get_integration_for_user(db, user_id, platform)
+    
+    if not integration:
+        integration = SocialIntegration(
+            user_id=user_id,
+            platform=platform,
+        )
+        db.add(integration)
+    
+    # Encrypt and store API key in access_token field
+    integration.access_token = encrypt_token(api_key)
+    integration.connection_status = ConnectionStatus.CONNECTED.value
+    integration.last_verified_at = datetime.now(timezone.utc)
+    
+    # For API keys, we don't have expiry info, so set token_expires_at to None
+    # (or set a far future date if you want to track it)
+    integration.token_expires_at = None
+    
+    # Clear OAuth-specific fields since this is API key-based
+    integration.scopes_granted = None
+    integration.account_id = None
+    integration.page_id = None
+    integration.business_id = None
+    
+    # Update metadata to indicate this is API key-based
+    if integration.metadata is None:
+        integration.metadata = {}
+    integration.metadata["auth_method"] = "api_key"
+    integration.metadata["saved_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.commit()
+    await db.refresh(integration)
+    
+    logger.info(f"✅ [API KEY] Successfully saved API key for {platform} (user: {user_id})")
+    
+    return IntegrationResponse(
+        id=str(integration.id),
+        platform=integration.platform,
+        connection_status=integration.connection_status,
+        scopes_granted=integration.scopes_granted,
+        account_id=integration.account_id,
+        page_id=integration.page_id,
+        business_id=integration.business_id,
+        token_expires_at=integration.token_expires_at,
+        last_verified_at=integration.last_verified_at,
+        is_connected=integration.is_connected(),
+        metadata=integration.metadata,
+    )
 
 
 @router.delete("/{platform}", status_code=status.HTTP_204_NO_CONTENT)

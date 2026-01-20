@@ -1741,6 +1741,30 @@ export async function refreshSocialIntegrationToken(platform: string): Promise<{
   return res.json()
 }
 
+// Simple API Key Management (for non-OAuth platforms)
+export async function getSocialIntegrations(): Promise<SocialIntegration[]> {
+  return listSocialIntegrations()
+}
+
+export async function saveSocialApiKey(platform: string, apiKey: string): Promise<SocialIntegration> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/api-key`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      api_key: apiKey,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save API key' }))
+    throw new Error(error.detail || 'Failed to save API key')
+  }
+  return res.json()
+}
+
 // ============================================
 // SOCIAL OUTREACH API (Separate from Website Outreach)
 // ============================================

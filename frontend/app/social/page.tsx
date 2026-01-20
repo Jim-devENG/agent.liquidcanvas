@@ -10,6 +10,7 @@ import SocialDraftsTable from '@/components/SocialDraftsTable'
 import SocialSentTable from '@/components/SocialSentTable'
 import SocialDiscoveredProfilesTable from '@/components/SocialDiscoveredProfilesTable'
 import SocialLeadsTable from '@/components/SocialLeadsTable'
+import SocialSettings from '@/components/SocialSettings'
 import Sidebar from '@/components/Sidebar'
 import SystemStatus from '@/components/SystemStatus'
 import { 
@@ -22,6 +23,7 @@ import {
   FileText,
   Mail,
   Eye,
+  Settings,
   LogOut as LogOutIcon
 } from 'lucide-react'
 import { listJobs } from '@/lib/api'
@@ -30,7 +32,7 @@ import type { Job } from '@/lib/api'
 export default function SocialPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'pipeline' | 'discover' | 'discovered' | 'leads' | 'profiles' | 'drafts' | 'sent'
+    'overview' | 'pipeline' | 'discover' | 'discovered' | 'leads' | 'profiles' | 'drafts' | 'sent' | 'settings'
   >('overview')
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,7 +77,7 @@ export default function SocialPage() {
     // Listen for tab change events from SocialPipeline component
     const handleTabChange = (e: CustomEvent) => {
       const tabId = e.detail as string
-      if (tabId && ['overview', 'pipeline', 'discover', 'discovered', 'leads', 'profiles', 'drafts', 'sent'].includes(tabId)) {
+      if (tabId && ['overview', 'pipeline', 'discover', 'discovered', 'leads', 'profiles', 'drafts', 'sent', 'settings'].includes(tabId)) {
         setActiveTab(tabId as any)
       }
     }
@@ -103,6 +105,7 @@ export default function SocialPage() {
     { id: 'leads', label: 'Social Leads', icon: Users },
     { id: 'drafts', label: 'Drafts', icon: FileText },
     { id: 'sent', label: 'Sent', icon: Mail },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   if (loading) {
@@ -125,7 +128,7 @@ export default function SocialPage() {
 
   // Wrapper function to handle type compatibility with Sidebar component
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab as 'overview' | 'pipeline' | 'discover' | 'discovered' | 'leads' | 'profiles' | 'drafts' | 'sent')
+    setActiveTab(tab as 'overview' | 'pipeline' | 'discover' | 'discovered' | 'leads' | 'profiles' | 'drafts' | 'sent' | 'settings')
   }
 
   return (
@@ -201,6 +204,7 @@ export default function SocialPage() {
             {activeTab === 'profiles' && <SocialProfilesTable />}
             {activeTab === 'drafts' && <SocialDraftsTable />}
             {activeTab === 'sent' && <SocialSentTable />}
+            {activeTab === 'settings' && <SocialSettings />}
           </div>
         </main>
       </div>
