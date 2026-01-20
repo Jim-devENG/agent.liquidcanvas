@@ -31,7 +31,7 @@ class LinkedInDiscoveryAdapter:
         categories = params.get('categories', [])
         locations = params.get('locations', [])
         keywords = params.get('keywords', [])
-        max_results = params.get('max_results', 100)
+        max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
         logger.info(f"🔍 [LINKEDIN DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations, {len(keywords)} keywords")
         
@@ -67,30 +67,87 @@ class LinkedInDiscoveryAdapter:
             logger.info("🔍 [LINKEDIN DISCOVERY] Using DataForSEO to search for LinkedIn profiles")
             logger.info(f"📋 [LINKEDIN DISCOVERY] Categories: {categories}, Locations: {locations}")
             
-            # Build search queries: Focus on contact persons - "site:linkedin.com/in/ [category] [location] contact person"
+            # DEEP SEARCH: Build comprehensive query variations - search the entire internet for profiles
             search_queries = []
+            
+            # Base query patterns - many variations to search deeper
+            base_patterns = [
+                'site:linkedin.com/in/ "{category}" "{location}"',
+                'site:linkedin.com/in/ {category} {location}',
+                'site:linkedin.com/in/ "{category}" {location}',
+                'site:linkedin.com/in/ {category} "{location}"',
+                '"{category}" "{location}" site:linkedin.com/in/',
+                '{category} {location} site:linkedin.com/in/',
+                'site:linkedin.com/in/ "{category}" "{location}" contact',
+                'site:linkedin.com/in/ "{category}" "{location}" owner',
+                'site:linkedin.com/in/ "{category}" "{location}" founder',
+                'site:linkedin.com/in/ "{category}" "{location}" director',
+                'site:linkedin.com/in/ "{category}" "{location}" manager',
+                'site:linkedin.com/in/ "{category}" "{location}" CEO',
+                'site:linkedin.com/in/ "{category}" "{location}" artist',
+                'site:linkedin.com/in/ "{category}" "{location}" professional',
+                'site:linkedin.com/in/ "{category}" "{location}" expert',
+                'site:linkedin.com/in/ "{category}" "{location}" specialist',
+                'site:linkedin.com/in/ "{category}" "{location}" creator',
+                'site:linkedin.com/in/ "{category}" "{location}" influencer',
+                'site:linkedin.com/in/ "{category}" "{location}" business',
+                'site:linkedin.com/in/ "{category}" "{location}" company',
+            ]
+            
+            # Generate queries for each category/location combination
             for category in categories:
                 for location in locations:
-                    # Try multiple query formats focused on finding contact persons
-                    query1 = f'site:linkedin.com/in/ "{category}" "{location}" "contact person"'
-                    query2 = f'site:linkedin.com/in/ "{category}" "{location}" contact'
-                    query3 = f"site:linkedin.com/in/ {category} {location} contact person"
-                    query4 = f'site:linkedin.com/in/ "{category}" "{location}" person'
-                    query5 = f'"{category}" "{location}" contact person site:linkedin.com/in/'
-                    search_queries.extend([query1, query2, query3, query4, query5])
+                    for pattern in base_patterns:
+                        query = pattern.format(category=category, location=location)
+                        search_queries.append(query)
             
-            # INTENSIFIED: Generate more query variations with keywords
+            # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
+                keyword_patterns = [
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}"',
+                    'site:linkedin.com/in/ {keyword} {category} {location}',
+                    'site:linkedin.com/in/ "{keyword}" {category} "{location}"',
+                    '"{keyword}" "{category}" "{location}" site:linkedin.com/in/',
+                    '{keyword} {category} {location} site:linkedin.com/in/',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" contact',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" owner',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" founder',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" director',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" manager',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" artist',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" professional',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" expert',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" specialist',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" creator',
+                    'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" influencer',
+                ]
+                
                 for keyword in keywords:
                     for category in categories:
                         for location in locations:
-                            query_kw1 = f'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" contact person'
-                            query_kw2 = f'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" contact'
-                            query_kw3 = f'site:linkedin.com/in/ {keyword} {category} {location} contact person'
-                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+                            for pattern in keyword_patterns:
+                                query = pattern.format(keyword=keyword, category=category, location=location)
+                                search_queries.append(query)
             
-            # INTENSIFIED: Increased limit to 200 queries for deeper search
-            search_queries = search_queries[:200]
+            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            for category in categories:
+                no_location_patterns = [
+                    f'site:linkedin.com/in/ "{category}"',
+                    f'site:linkedin.com/in/ {category}',
+                    f'"{category}" site:linkedin.com/in/',
+                    f'{category} site:linkedin.com/in/',
+                    f'site:linkedin.com/in/ "{category}" contact',
+                    f'site:linkedin.com/in/ "{category}" owner',
+                    f'site:linkedin.com/in/ "{category}" founder',
+                    f'site:linkedin.com/in/ "{category}" director',
+                    f'site:linkedin.com/in/ "{category}" artist',
+                    f'site:linkedin.com/in/ "{category}" professional',
+                ]
+                search_queries.extend(no_location_patterns)
+            
+            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
+            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
+            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             logger.info(f"📊 [LINKEDIN DISCOVERY] Built {len(search_queries)} search queries")
             
             queries_executed = 0
@@ -110,11 +167,11 @@ class LinkedInDiscoveryAdapter:
                     location_code = client.get_location_code(location_for_code)
                     logger.debug(f"📍 [LINKEDIN DISCOVERY] Using location code {location_code} for '{location_for_code}'")
                     
-                    # INTENSIFIED: Search using DataForSEO with maximum depth
+                    # DEEP SEARCH: Search using DataForSEO with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
+                        depth=200  # DEEP SEARCH: Increased from 100 to 200 for maximum depth - search entire internet
                     )
                     
                     logger.info(f"📥 [LINKEDIN DISCOVERY] Query result - success: {serp_results.get('success')}, results count: {len(serp_results.get('results', []))}")
@@ -230,7 +287,7 @@ class InstagramDiscoveryAdapter:
         categories = params.get('categories', [])
         locations = params.get('locations', [])
         keywords = params.get('keywords', [])
-        max_results = params.get('max_results', 100)
+        max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
         logger.info(f"🔍 [INSTAGRAM DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations")
         
@@ -265,28 +322,88 @@ class InstagramDiscoveryAdapter:
             
             logger.info("🔍 [INSTAGRAM DISCOVERY] Using DataForSEO to search for Instagram profiles")
             
-            # INTENSIFIED: Build search queries with keywords support
+            # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Instagram profiles
             search_queries = []
+            
+            # Base query patterns - many variations to search deeper
+            base_patterns = [
+                'site:instagram.com "{category}" "{location}"',
+                'site:instagram.com {category} {location}',
+                'site:instagram.com "{category}" {location}',
+                'site:instagram.com {category} "{location}"',
+                '"{category}" "{location}" site:instagram.com',
+                '{category} {location} site:instagram.com',
+                'site:instagram.com "{category}" "{location}" contact',
+                'site:instagram.com "{category}" "{location}" owner',
+                'site:instagram.com "{category}" "{location}" founder',
+                'site:instagram.com "{category}" "{location}" artist',
+                'site:instagram.com "{category}" "{location}" creator',
+                'site:instagram.com "{category}" "{location}" influencer',
+                'site:instagram.com "{category}" "{location}" business',
+                'site:instagram.com "{category}" "{location}" account',
+                'site:instagram.com "{category}" "{location}" profile',
+                'site:instagram.com "{category}" "{location}" page',
+                'site:instagram.com "{category}" "{location}" official',
+                'site:instagram.com "{category}" "{location}" verified',
+                'site:instagram.com "{category}" "{location}" gallery',
+                'site:instagram.com "{category}" "{location}" studio',
+            ]
+            
+            # Generate queries for each category/location combination
             for category in categories:
                 for location in locations:
-                    # Focus on finding contact persons
-                    query1 = f'site:instagram.com "{category}" "{location}" contact person'
-                    query2 = f"site:instagram.com {category} {location} contact"
-                    query3 = f'site:instagram.com "{category}" "{location}" person'
-                    search_queries.extend([query1, query2, query3])
+                    for pattern in base_patterns:
+                        query = pattern.format(category=category, location=location)
+                        search_queries.append(query)
             
-            # INTENSIFIED: Add keyword-based queries
+            # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
+                keyword_patterns = [
+                    'site:instagram.com "{keyword}" "{category}" "{location}"',
+                    'site:instagram.com {keyword} {category} {location}',
+                    'site:instagram.com "{keyword}" {category} "{location}"',
+                    '"{keyword}" "{category}" "{location}" site:instagram.com',
+                    '{keyword} {category} {location} site:instagram.com',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" contact',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" owner',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" artist',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" creator',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" influencer',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" business',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" account',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" profile',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" gallery',
+                    'site:instagram.com "{keyword}" "{category}" "{location}" studio',
+                ]
+                
                 for keyword in keywords:
                     for category in categories:
                         for location in locations:
-                            query_kw1 = f'site:instagram.com "{keyword}" "{category}" "{location}" contact person'
-                            query_kw2 = f'site:instagram.com "{keyword}" "{category}" "{location}" contact'
-                            query_kw3 = f'site:instagram.com {keyword} {category} {location} contact person'
-                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+                            for pattern in keyword_patterns:
+                                query = pattern.format(keyword=keyword, category=category, location=location)
+                                search_queries.append(query)
             
-            # INTENSIFIED: Increased limit to 200 queries for deeper search
-            search_queries = search_queries[:200]
+            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            for category in categories:
+                no_location_patterns = [
+                    f'site:instagram.com "{category}"',
+                    f'site:instagram.com {category}',
+                    f'"{category}" site:instagram.com',
+                    f'{category} site:instagram.com',
+                    f'site:instagram.com "{category}" contact',
+                    f'site:instagram.com "{category}" owner',
+                    f'site:instagram.com "{category}" artist',
+                    f'site:instagram.com "{category}" creator',
+                    f'site:instagram.com "{category}" influencer',
+                    f'site:instagram.com "{category}" business',
+                    f'site:instagram.com "{category}" gallery',
+                    f'site:instagram.com "{category}" studio',
+                ]
+                search_queries.extend(no_location_patterns)
+            
+            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
+            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
+            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -294,10 +411,11 @@ class InstagramDiscoveryAdapter:
                 
                 try:
                     location_code = client.get_location_code(locations[0] if locations else "usa")
+                    # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
+                        depth=200  # DEEP SEARCH: Increased from 100 to 200 for maximum depth - search entire internet
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
@@ -387,7 +505,7 @@ class TikTokDiscoveryAdapter:
         categories = params.get('categories', [])
         locations = params.get('locations', [])
         keywords = params.get('keywords', [])
-        max_results = params.get('max_results', 100)
+        max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
         logger.info(f"🔍 [TIKTOK DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations")
         
@@ -423,28 +541,80 @@ class TikTokDiscoveryAdapter:
             
             logger.info("🔍 [TIKTOK DISCOVERY] Using DataForSEO to search for TikTok profiles")
             
-            # INTENSIFIED: Build search queries with keywords support
+            # DEEP SEARCH: Build comprehensive query variations - search the entire internet for TikTok profiles
             search_queries = []
+            
+            # Base query patterns - many variations to search deeper
+            base_patterns = [
+                'site:tiktok.com/@ "{category}" "{location}"',
+                'site:tiktok.com/@ {category} {location}',
+                'site:tiktok.com/@ "{category}" {location}',
+                'site:tiktok.com/@ {category} "{location}"',
+                '"{category}" "{location}" site:tiktok.com/@',
+                '{category} {location} site:tiktok.com/@',
+                'site:tiktok.com/@ "{category}" "{location}" creator',
+                'site:tiktok.com/@ "{category}" "{location}" influencer',
+                'site:tiktok.com/@ "{category}" "{location}" artist',
+                'site:tiktok.com/@ "{category}" "{location}" business',
+                'site:tiktok.com/@ "{category}" "{location}" account',
+                'site:tiktok.com/@ "{category}" "{location}" profile',
+                'site:tiktok.com/@ "{category}" "{location}" official',
+                'site:tiktok.com/@ "{category}" "{location}" verified',
+                'site:tiktok.com/@ "{category}" "{location}" content',
+                'site:tiktok.com/@ "{category}" "{location}" video',
+                'site:tiktok.com/@ "{category}" "{location}" channel',
+            ]
+            
+            # Generate queries for each category/location combination
             for category in categories:
                 for location in locations:
-                    # Focus on finding contact persons
-                    query1 = f'site:tiktok.com/@ "{category}" "{location}" contact person'
-                    query2 = f"site:tiktok.com/@ {category} {location} contact"
-                    query3 = f'site:tiktok.com/@ "{category}" "{location}" person'
-                    search_queries.extend([query1, query2, query3])
+                    for pattern in base_patterns:
+                        query = pattern.format(category=category, location=location)
+                        search_queries.append(query)
             
-            # INTENSIFIED: Add keyword-based queries
+            # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
+                keyword_patterns = [
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}"',
+                    'site:tiktok.com/@ {keyword} {category} {location}',
+                    'site:tiktok.com/@ "{keyword}" {category} "{location}"',
+                    '"{keyword}" "{category}" "{location}" site:tiktok.com/@',
+                    '{keyword} {category} {location} site:tiktok.com/@',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" creator',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" influencer',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" artist',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" business',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" account',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" profile',
+                    'site:tiktok.com/@ "{keyword}" "{category}" "{location}" content',
+                ]
+                
                 for keyword in keywords:
                     for category in categories:
                         for location in locations:
-                            query_kw1 = f'site:tiktok.com/@ "{keyword}" "{category}" "{location}" contact person'
-                            query_kw2 = f'site:tiktok.com/@ "{keyword}" "{category}" "{location}" contact'
-                            query_kw3 = f'site:tiktok.com/@ {keyword} {category} {location} contact person'
-                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+                            for pattern in keyword_patterns:
+                                query = pattern.format(keyword=keyword, category=category, location=location)
+                                search_queries.append(query)
             
-            # INTENSIFIED: Increased limit to 200 queries for deeper search
-            search_queries = search_queries[:200]
+            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            for category in categories:
+                no_location_patterns = [
+                    f'site:tiktok.com/@ "{category}"',
+                    f'site:tiktok.com/@ {category}',
+                    f'"{category}" site:tiktok.com/@',
+                    f'{category} site:tiktok.com/@',
+                    f'site:tiktok.com/@ "{category}" creator',
+                    f'site:tiktok.com/@ "{category}" influencer',
+                    f'site:tiktok.com/@ "{category}" artist',
+                    f'site:tiktok.com/@ "{category}" business',
+                    f'site:tiktok.com/@ "{category}" account',
+                    f'site:tiktok.com/@ "{category}" profile',
+                ]
+                search_queries.extend(no_location_patterns)
+            
+            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
+            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
+            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -452,10 +622,11 @@ class TikTokDiscoveryAdapter:
                 
                 try:
                     location_code = client.get_location_code(locations[0] if locations else "usa")
+                    # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
+                        depth=200  # DEEP SEARCH: Increased from 100 to 200 for maximum depth - search entire internet
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
@@ -545,7 +716,7 @@ class FacebookDiscoveryAdapter:
         categories = params.get('categories', [])
         locations = params.get('locations', [])
         keywords = params.get('keywords', [])
-        max_results = params.get('max_results', 100)
+        max_results = params.get('max_results', 1000)  # DEEP SEARCH: Increased default from 100 to 1000 for deeper search
         
         logger.info(f"🔍 [FACEBOOK DISCOVERY] Starting discovery: {len(categories)} categories, {len(locations)} locations")
         
@@ -580,28 +751,87 @@ class FacebookDiscoveryAdapter:
             
             logger.info("🔍 [FACEBOOK DISCOVERY] Using DataForSEO to search for Facebook pages")
             
-            # INTENSIFIED: Build search queries with keywords support
+            # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Facebook pages
             search_queries = []
+            
+            # Base query patterns - many variations to search deeper
+            base_patterns = [
+                'site:facebook.com "{category}" "{location}"',
+                'site:facebook.com {category} {location}',
+                'site:facebook.com "{category}" {location}',
+                'site:facebook.com {category} "{location}"',
+                '"{category}" "{location}" site:facebook.com',
+                '{category} {location} site:facebook.com',
+                'site:facebook.com "{category}" "{location}" page',
+                'site:facebook.com "{category}" "{location}" business',
+                'site:facebook.com "{category}" "{location}" official',
+                'site:facebook.com "{category}" "{location}" profile',
+                'site:facebook.com "{category}" "{location}" account',
+                'site:facebook.com "{category}" "{location}" owner',
+                'site:facebook.com "{category}" "{location}" founder',
+                'site:facebook.com "{category}" "{location}" director',
+                'site:facebook.com "{category}" "{location}" manager',
+                'site:facebook.com "{category}" "{location}" artist',
+                'site:facebook.com "{category}" "{location}" creator',
+                'site:facebook.com "{category}" "{location}" influencer',
+                'site:facebook.com "{category}" "{location}" gallery',
+                'site:facebook.com "{category}" "{location}" studio',
+            ]
+            
+            # Generate queries for each category/location combination
             for category in categories:
                 for location in locations:
-                    # Focus on finding contact persons
-                    query1 = f'site:facebook.com "{category}" "{location}" contact person'
-                    query2 = f"site:facebook.com {category} {location} contact"
-                    query3 = f'site:facebook.com "{category}" "{location}" person'
-                    search_queries.extend([query1, query2, query3])
+                    for pattern in base_patterns:
+                        query = pattern.format(category=category, location=location)
+                        search_queries.append(query)
             
-            # INTENSIFIED: Add keyword-based queries
+            # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
+                keyword_patterns = [
+                    'site:facebook.com "{keyword}" "{category}" "{location}"',
+                    'site:facebook.com {keyword} {category} {location}',
+                    'site:facebook.com "{keyword}" {category} "{location}"',
+                    '"{keyword}" "{category}" "{location}" site:facebook.com',
+                    '{keyword} {category} {location} site:facebook.com',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" page',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" business',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" official',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" profile',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" owner',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" artist',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" creator',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" gallery',
+                    'site:facebook.com "{keyword}" "{category}" "{location}" studio',
+                ]
+                
                 for keyword in keywords:
                     for category in categories:
                         for location in locations:
-                            query_kw1 = f'site:facebook.com "{keyword}" "{category}" "{location}" contact person'
-                            query_kw2 = f'site:facebook.com "{keyword}" "{category}" "{location}" contact'
-                            query_kw3 = f'site:facebook.com {keyword} {category} {location} contact person'
-                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+                            for pattern in keyword_patterns:
+                                query = pattern.format(keyword=keyword, category=category, location=location)
+                                search_queries.append(query)
             
-            # INTENSIFIED: Increased limit to 200 queries for deeper search
-            search_queries = search_queries[:200]
+            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            for category in categories:
+                no_location_patterns = [
+                    f'site:facebook.com "{category}"',
+                    f'site:facebook.com {category}',
+                    f'"{category}" site:facebook.com',
+                    f'{category} site:facebook.com',
+                    f'site:facebook.com "{category}" page',
+                    f'site:facebook.com "{category}" business',
+                    f'site:facebook.com "{category}" official',
+                    f'site:facebook.com "{category}" profile',
+                    f'site:facebook.com "{category}" owner',
+                    f'site:facebook.com "{category}" artist',
+                    f'site:facebook.com "{category}" gallery',
+                    f'site:facebook.com "{category}" studio',
+                ]
+                search_queries.extend(no_location_patterns)
+            
+            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
+            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
+            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -609,10 +839,11 @@ class FacebookDiscoveryAdapter:
                 
                 try:
                     location_code = client.get_location_code(locations[0] if locations else "usa")
+                    # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
+                        depth=200  # DEEP SEARCH: Increased from 100 to 200 for maximum depth - search entire internet
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
