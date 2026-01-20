@@ -287,6 +287,20 @@ class DataForSEOClient:
                 logger.info(f"🔵 [HTTP RESPONSE] Status: {response.status_code}")
                 logger.debug(f"🔵 [HTTP RESPONSE] Headers: {json.dumps(dict(response.headers), indent=2)}")
                 
+                # CRITICAL: Check for HTTP 402 (Payment Required) - insufficient credits
+                if response.status_code == 402:
+                    error_msg = "DataForSEO account has insufficient credits. Please add credits to your DataForSEO account to continue using the API."
+                    logger.error(f"🔴 [DATAFORSEO 402 ERROR] {error_msg}")
+                    logger.error(f"🔴 [DATAFORSEO 402 ERROR] Response: {response.text[:500]}")
+                    self._error_count += 1
+                    self._last_error = error_msg
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "error_code": 402,
+                        "error_type": "insufficient_credits"
+                    }
+                
                 # Parse response
                 try:
                     result = response.json()
