@@ -21,6 +21,7 @@ import {
   Award
 } from 'lucide-react'
 import Link from 'next/link'
+import DashboardPreview from '@/components/DashboardPreview'
 
 export default function HomePage() {
   const router = useRouter()
@@ -178,19 +179,24 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Hero Image Placeholder */}
-            <div className="relative max-w-5xl mx-auto animate-fade-in animation-delay-600">
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
-                <div className="aspect-video bg-gradient-to-br from-olive-100 via-white to-olive-50 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-olive-600 to-olive-700 rounded-2xl flex items-center justify-center shadow-xl animate-bounce">
-                      <Rocket className="w-12 h-12 text-white" />
-                    </div>
-                    <p className="text-gray-500 font-medium">Dashboard Preview</p>
-                  </div>
+            {/* Dashboard Preview */}
+            <div className="relative max-w-6xl mx-auto animate-fade-in animation-delay-600 transform hover:scale-[1.02] transition-transform duration-500">
+              <div className="relative">
+                {/* Decorative glow behind dashboard */}
+                <div className="absolute -inset-4 bg-gradient-to-r from-olive-600/20 via-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl opacity-50 animate-pulse"></div>
+                
+                {/* Dashboard Preview Component */}
+                <div className="relative transform perspective-1000">
+                  <DashboardPreview />
                 </div>
-                {/* Decorative glow */}
-                <div className="absolute inset-0 bg-gradient-to-t from-olive-600/20 to-transparent pointer-events-none"></div>
+                
+                {/* Floating badges */}
+                <div className="absolute -top-4 -right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg animate-bounce">
+                  Live Demo
+                </div>
+                <div className="absolute -bottom-4 -left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg animate-pulse">
+                  Real-time Data
+                </div>
               </div>
             </div>
           </div>
@@ -301,15 +307,8 @@ export default function HomePage() {
               </div>
             </div>
             <div className="relative">
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-                <div className="aspect-square bg-gradient-to-br from-olive-100 via-white to-olive-50 flex items-center justify-center">
-                  <div className="text-center p-8">
-                    <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-olive-600 to-olive-700 rounded-3xl flex items-center justify-center shadow-2xl animate-pulse">
-                      <Target className="w-16 h-16 text-white" />
-                    </div>
-                    <p className="text-gray-500 font-medium text-lg">Success Metrics</p>
-                  </div>
-                </div>
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+                <DashboardPreview />
               </div>
               {/* Floating elements */}
               <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full opacity-20 blur-2xl animate-pulse"></div>
