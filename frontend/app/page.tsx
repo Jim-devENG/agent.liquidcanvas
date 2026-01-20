@@ -1,365 +1,475 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import StatsCards from '@/components/StatsCards'
-import LeadsTable from '@/components/LeadsTable'
-import EmailsTable from '@/components/EmailsTable'
-import JobStatusPanel from '@/components/JobStatusPanel'
-import ActivityFeed from '@/components/ActivityFeed'
-import AutomationControl from '@/components/AutomationControl'
-import ManualScrape from '@/components/ManualScrape'
-import WebsitesTable from '@/components/WebsitesTable'
-import SystemStatus from '@/components/SystemStatus'
-import Sidebar from '@/components/Sidebar'
-import Pipeline from '@/components/Pipeline'
-import { getStats, listJobs } from '@/lib/api'
-import type { Stats, Job } from '@/lib/api'
+import Image from 'next/image'
 import { 
-  LayoutDashboard, 
+  ArrowRight, 
+  CheckCircle, 
   Globe, 
   Users, 
   Mail, 
-  Settings, 
-  Activity,
-  AtSign,
-  LogOut as LogOutIcon,
-  BookOpen,
-  RefreshCw
+  Zap, 
+  Shield, 
+  TrendingUp,
+  Play,
+  Star,
+  BarChart3,
+  Sparkles,
+  Rocket,
+  Target,
+  Award
 } from 'lucide-react'
+import Link from 'next/link'
 
-export default function Dashboard() {
+export default function HomePage() {
   const router = useRouter()
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [loading, setLoading] = useState(true)
-  const [connectionError, setConnectionError] = useState(false)
-  const [activeTab, setActiveTab] = useState<
-    'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
-  >('pipeline')  // Pipeline-first: default to Pipeline tab
+  const [isScrolled, setIsScrolled] = useState(false)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
-  // Track if we've already triggered refresh for completed jobs to prevent loops
-  const hasTriggeredRefresh = useRef(false)
-
-  const loadData = useCallback(async (isInitialLoad = false) => {
-    try {
-      const [statsData, jobsData] = await Promise.all([
-        getStats().catch(err => {
-          console.warn('Failed to get stats:', err.message)
-          return null
-        }),
-        listJobs(0, 20).catch(err => {
-          console.warn('Failed to get jobs:', err.message)
-          return []
-        }),
-      ])
-      
-      if (statsData) setStats(statsData)
-      // Ensure jobsData is always an array
-      const jobsArray = Array.isArray(jobsData) ? jobsData : []
-      setJobs(jobsArray)
-      
-      // Check for completed discovery jobs and trigger refresh (only once on initial load)
-      // This prevents infinite loops from repeated refreshes
-      if (isInitialLoad && !hasTriggeredRefresh.current) {
-        const completedDiscoveryJobs = jobsArray.filter(
-          (job: any) => job.job_type === 'discover' && job.status === 'completed'
-        )
-        
-        if (completedDiscoveryJobs.length > 0) {
-          // Get the most recent completed discovery job
-          const latestJob = completedDiscoveryJobs.sort((a: any, b: any) => {
-            const dateA = new Date(a.updated_at || a.created_at || 0).getTime()
-            const dateB = new Date(b.updated_at || b.created_at || 0).getTime()
-            return dateB - dateA
-          })[0]
-          
-          console.log('🔄 Found completed discovery job, triggering refresh...', latestJob.id)
-          hasTriggeredRefresh.current = true
-          // Dispatch event to refresh all tables
-          // Use setTimeout to ensure tables are mounted
-          setTimeout(() => {
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('jobsCompleted'))
-            }
-          }, 500)
-        }
-      }
-      
-      const backendResponding = statsData !== null || jobsArray.length > 0
-      setConnectionError(!backendResponding)
-    } catch (error: any) {
-      console.error('Error loading data:', error)
-      const isConnectionError = 
-        error.message?.includes('Failed to fetch') || 
-        error.message?.includes('ERR_CONNECTION_REFUSED') ||
-        error.message?.includes('NetworkError')
-      
-      if (isConnectionError) {
-        setConnectionError(true)
-      }
-    } finally {
-      // Always set loading to false after initial load completes
-      if (isInitialLoad) {
-        setLoading(false)
-      }
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20)
     }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   useEffect(() => {
-    // Check if user is authenticated
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    if (!token) {
-      router.push('/login')
-      return
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY })
     }
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
 
-    // Initial load with timeout to prevent infinite loading
-    const loadTimeout = setTimeout(() => {
-      console.warn('⚠️ Load data timeout - setting loading to false')
-      setLoading(false)
-    }, 10000) // 10 second timeout
-
-    loadData(true).finally(() => {
-      clearTimeout(loadTimeout)
-    })
-    
-    // Refresh every 30 seconds (debounced to prevent loops) - increased from 10s
-    const interval = setInterval(() => {
-      loadData(false) // Don't set loading state on periodic refreshes
-    }, 30000)
-    
-    // Listen for tab change events from Pipeline component
-    const handleTabChange = (e: CustomEvent) => {
-      const tabId = e.detail as string
-      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
-        setActiveTab(tabId as any)
-      }
+  const features = [
+    {
+      icon: Globe,
+      title: 'Website Discovery',
+      description: 'Automatically discover and categorize relevant websites in your industry',
+      gradient: 'from-blue-500 to-cyan-500'
+    },
+    {
+      icon: Users,
+      title: 'Lead Management',
+      description: 'Organize and manage your prospects with intelligent categorization',
+      gradient: 'from-purple-500 to-pink-500'
+    },
+    {
+      icon: Mail,
+      title: 'Email Outreach',
+      description: 'Streamline your email campaigns with automated drafting and sending',
+      gradient: 'from-green-500 to-emerald-500'
+    },
+    {
+      icon: Zap,
+      title: 'Automation',
+      description: 'Set up automated workflows to scale your outreach efforts',
+      gradient: 'from-yellow-500 to-orange-500'
+    },
+    {
+      icon: Shield,
+      title: 'Verification',
+      description: 'Verify leads and ensure data quality before outreach',
+      gradient: 'from-indigo-500 to-blue-500'
+    },
+    {
+      icon: TrendingUp,
+      title: 'Analytics',
+      description: 'Track performance and optimize your outreach strategy',
+      gradient: 'from-red-500 to-rose-500'
     }
-    
-    window.addEventListener('change-tab', handleTabChange as EventListener)
-    
-    return () => {
-      clearInterval(interval)
-      clearTimeout(loadTimeout)
-      window.removeEventListener('change-tab', handleTabChange as EventListener)
-    }
-  }, [router, loadData])
-
-  const refreshData = () => {
-    loadData(false)
-    // Also trigger the jobsCompleted event to refresh all tables
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('jobsCompleted'))
-    }
-  }
-
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'pipeline', label: 'Pipeline', icon: Activity },
-    { id: 'websites', label: 'Websites', icon: Globe },
-    { id: 'leads', label: 'Leads', icon: Users },
-    { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-    { id: 'emails', label: 'Outreach Emails', icon: Mail },
-    { id: 'jobs', label: 'Jobs', icon: Activity },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'guide', label: 'Guide', icon: BookOpen },
   ]
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20">
-        <div className="text-center animate-fade-in">
-          <div className="inline-block relative">
-            <div className="w-16 h-16 rounded-full border-4 border-liquid-200"></div>
-            <div className="absolute top-0 left-0 w-16 h-16 rounded-full border-4 border-t-liquid-500 border-r-purple-500 animate-spin"></div>
-          </div>
-          <div className="mt-6">
-            <h2 className="text-2xl font-bold liquid-gradient-text mb-2">Liquid Canvas</h2>
-            <div className="text-lg font-semibold text-gray-700">Loading your studio...</div>
-            <div className="text-sm text-gray-500 mt-2">Connecting to backend</div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  const stats = [
+    { value: '10K+', label: 'Websites Discovered', icon: Globe },
+    { value: '50K+', label: 'Leads Generated', icon: Users },
+    { value: '95%', label: 'Success Rate', icon: Award },
+    { value: '24/7', label: 'Automation', icon: Zap }
+  ]
 
-  // Wrapper function to handle type compatibility with Sidebar component
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
-  }
+  const benefits = [
+    { icon: Rocket, text: '10x faster lead generation' },
+    { icon: Target, text: 'Precision targeting' },
+    { icon: Sparkles, text: 'AI-powered insights' },
+    { icon: CheckCircle, text: 'Enterprise-grade security' }
+  ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
-      {/* Left Sidebar */}
-      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-olive-50/30 overflow-hidden">
+      {/* Animated background gradient */}
+      <div 
+        className="fixed inset-0 opacity-30 pointer-events-none"
+        style={{
+          background: `radial-gradient(600px at ${mousePosition.x}px ${mousePosition.y}px, rgba(95, 112, 71, 0.15), transparent 80%)`
+        }}
+      />
 
-      {/* Main Content Area */}
-      <div className="flex-1 lg:ml-64 flex flex-col">
-        {/* Top Header */}
-        <header className="glass border-b border-gray-200/50 sticky top-0 z-30 shadow-sm backdrop-blur-xl">
-          <div className="px-3 sm:px-4 py-2 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-olive-700">
-                {tabs.find(t => t.id === activeTab)?.label || 'Dashboard'}
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">Liquid Canvas Outreach Studio</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={refreshData}
-                className="flex items-center space-x-1 px-2 py-1 glass hover:bg-white/80 text-gray-700 rounded-lg transition-all duration-200 text-xs font-medium hover:shadow-md"
-                title="Refresh all data"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Refresh</span>
-              </button>
-              <button
-                onClick={() => {
-                  localStorage.removeItem('auth_token')
-                  router.push('/login')
-                }}
-                className="flex items-center space-x-1 px-2 py-1 bg-olive-600 text-white rounded-lg transition-all duration-200 text-xs font-medium shadow-md hover:bg-olive-700"
-              >
-                <LogOutIcon className="w-3 h-3" />
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </header>
-
-      {/* Connection Error Banner */}
-      {connectionError && (
-          <div className="px-3 sm:px-4 py-2">
-          <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-2 shadow-sm">
-            <div className="flex items-center">
-              <div>
-                <p className="text-xs font-medium text-red-800">
-                  Backend not connected
-                </p>
-                <p className="text-xs text-red-600 mt-0.5">
-                  Unable to connect to API server. Please ensure the backend is running.
-                </p>
+      {/* Navigation */}
+      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-white/95 backdrop-blur-md shadow-lg' : 'bg-transparent'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-olive-600 to-olive-700 flex items-center justify-center shadow-lg animate-pulse">
+                <span className="text-white text-sm font-bold">LC</span>
               </div>
+              <span className="text-xl font-bold bg-gradient-to-r from-olive-700 to-olive-600 bg-clip-text text-transparent">
+                Liquid Canvas
+              </span>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* System Status Bar */}
-        <div className="px-3 sm:px-4 py-2">
-        <SystemStatus jobs={jobs} loading={loading} />
-      </div>
-
-      {/* Main Content */}
-        <main className="flex-1 px-3 sm:px-4 py-2 overflow-y-auto">
-        {activeTab === 'overview' && (
-          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3">
-            {/* Stats Cards - Full Width */}
-            <div className="lg:col-span-12">
-              {stats ? <StatsCards stats={stats} /> : (
-                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                  <p className="text-gray-500">Stats unavailable. Check backend connection.</p>
-                </div>
-              )}
-            </div>
-
-            {/* Left Column - Automation & Manual Scrape */}
-            <div className="lg:col-span-7 space-y-3">
-              <AutomationControl />
-              <ManualScrape />
-            </div>
-
-            {/* Right Column - Jobs & Activity */}
-            <div className="lg:col-span-5 space-y-3">
-              {Array.isArray(jobs) && jobs.length > 0 ? (
-                <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
-              ) : (
-                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                  <p className="text-gray-500">No jobs found.</p>
-                </div>
-              )}
-              <ActivityFeed limit={15} autoRefresh={true} />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'pipeline' && (
-          <div className="max-w-7xl mx-auto">
-            <Pipeline />
-          </div>
-        )}
-
-        {activeTab === 'websites' && (
-          <div className="max-w-7xl mx-auto">
-            <WebsitesTable />
-          </div>
-        )}
-
-        {activeTab === 'leads' && (
-          <div className="max-w-7xl mx-auto">
-            <LeadsTable />
-          </div>
-        )}
-
-        {activeTab === 'scraped_emails' && (
-          <div className="max-w-7xl mx-auto">
-            <LeadsTable emailsOnly />
-          </div>
-        )}
-
-        {activeTab === 'emails' && (
-          <div className="max-w-7xl mx-auto">
-            <EmailsTable />
-          </div>
-        )}
-
-        {activeTab === 'jobs' && Array.isArray(jobs) && jobs.length > 0 && (
-          <div className="max-w-7xl mx-auto">
-            <JobStatusPanel jobs={jobs} expanded onRefresh={refreshData} />
-          </div>
-        )}
-
-        {activeTab === 'settings' && (
-          <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-            <div className="text-center py-4">
-              <Settings className="w-8 h-8 text-olive-600 mx-auto mb-2" />
-              <h2 className="text-sm font-bold text-gray-900 mb-1">System Settings</h2>
-              <p className="text-xs text-gray-600 mb-3">Configure and test all API integrations</p>
-              <Link
-                href="/settings"
-                className="inline-flex items-center px-3 py-1.5 bg-olive-600 text-white rounded-md hover:bg-olive-700 transition-colors text-xs font-semibold"
+            <div className="flex items-center space-x-6">
+              <Link 
+                href="/login"
+                className="text-gray-700 hover:text-olive-700 transition-colors font-medium hidden sm:block"
               >
-                <Settings className="w-3 h-3 mr-1" />
-                Open Settings Page
+                Sign In
+              </Link>
+              <Link
+                href="/login"
+                className="px-6 py-2.5 bg-gradient-to-r from-olive-600 to-olive-700 text-white rounded-xl hover:from-olive-700 hover:to-olive-800 transition-all shadow-lg hover:shadow-xl font-semibold transform hover:scale-105"
+              >
+                Get Started
               </Link>
             </div>
           </div>
-        )}
+        </div>
+      </nav>
 
-        {activeTab === 'guide' && (
-          <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-            <div className="text-center mb-3">
-              <h2 className="text-sm font-bold text-gray-900 mb-1">User Guide</h2>
-              <p className="text-xs text-gray-600">Complete documentation on how to use the Art Outreach Automation</p>
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-24 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Decorative elements */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-olive-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-8 left-1/2 w-72 h-72 bg-pink-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-olive-100 text-olive-700 rounded-full text-sm font-semibold mb-8 animate-fade-in">
+              <Sparkles className="w-4 h-4" />
+              <span>AI-Powered Outreach Automation</span>
             </div>
-            <div className="prose prose-sm max-w-none">
-              <p className="text-xs text-gray-700 mb-2">
-                For the complete user guide, please visit the dedicated guide page.
-              </p>
-              <a
-                href="/guide"
-                className="inline-flex items-center px-3 py-1.5 bg-olive-600 text-white rounded-md hover:bg-olive-700 transition-colors text-xs"
+
+            <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold text-gray-900 mb-6 leading-tight animate-slide-up">
+              Transform Your
+              <br />
+              <span className="bg-gradient-to-r from-olive-600 via-olive-700 to-olive-600 bg-clip-text text-transparent animate-gradient">
+                Outreach Strategy
+              </span>
+            </h1>
+            <p className="text-xl md:text-2xl text-gray-600 mb-10 max-w-3xl mx-auto leading-relaxed animate-slide-up animation-delay-200">
+              Liquid Canvas Outreach Studio helps you discover leads, manage prospects, 
+              and automate your email campaigns—all in one powerful platform.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 animate-slide-up animation-delay-400">
+              <Link
+                href="/login"
+                className="group px-8 py-4 bg-gradient-to-r from-olive-600 to-olive-700 text-white rounded-xl hover:from-olive-700 hover:to-olive-800 transition-all shadow-2xl hover:shadow-olive-500/50 font-semibold text-lg flex items-center gap-2 transform hover:scale-105"
               >
-                <BookOpen className="w-3 h-3 mr-1" />
-                Open Full Guide
-              </a>
+                Get Started Free
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <button className="px-8 py-4 bg-white text-gray-700 rounded-xl hover:bg-gray-50 transition-all shadow-xl hover:shadow-2xl font-semibold text-lg flex items-center gap-2 border-2 border-gray-200 hover:border-olive-300 transform hover:scale-105">
+                <Play className="w-5 h-5" />
+                Watch Demo
+              </button>
+            </div>
+
+            {/* Hero Image Placeholder */}
+            <div className="relative max-w-5xl mx-auto animate-fade-in animation-delay-600">
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+                <div className="aspect-video bg-gradient-to-br from-olive-100 via-white to-olive-50 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-olive-600 to-olive-700 rounded-2xl flex items-center justify-center shadow-xl animate-bounce">
+                      <Rocket className="w-12 h-12 text-white" />
+                    </div>
+                    <p className="text-gray-500 font-medium">Dashboard Preview</p>
+                  </div>
+                </div>
+                {/* Decorative glow */}
+                <div className="absolute inset-0 bg-gradient-to-t from-olive-600/20 to-transparent pointer-events-none"></div>
+              </div>
             </div>
           </div>
-        )}
-      </main>
-      </div>
+
+          {/* Stats */}
+          <div className="mt-24 grid grid-cols-2 md:grid-cols-4 gap-8 animate-fade-in animation-delay-800">
+            {stats.map((stat, index) => {
+              const Icon = stat.icon
+              return (
+                <div 
+                  key={index} 
+                  className="text-center p-6 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-200 hover:border-olive-300 hover:shadow-xl transition-all transform hover:scale-105"
+                >
+                  <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-olive-100 to-olive-50 rounded-xl flex items-center justify-center">
+                    <Icon className="w-6 h-6 text-olive-600" />
+                  </div>
+                  <div className="text-4xl font-bold bg-gradient-to-r from-olive-600 to-olive-700 bg-clip-text text-transparent mb-2">
+                    {stat.value}
+                  </div>
+                  <div className="text-gray-600 font-medium">{stat.label}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white relative overflow-hidden">
+        {/* Background pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(95, 112, 71) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }}></div>
+        </div>
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <div className="text-center mb-20">
+            <div className="inline-block px-4 py-2 bg-olive-100 text-olive-700 rounded-full text-sm font-semibold mb-4">
+              Powerful Features
+            </div>
+            <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+              Everything You Need to
+              <span className="bg-gradient-to-r from-olive-600 to-olive-700 bg-clip-text text-transparent"> Scale</span>
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Powerful features designed to streamline your outreach workflow
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => {
+              const Icon = feature.icon
+              return (
+                <div
+                  key={index}
+                  className="group p-8 rounded-2xl border-2 border-gray-200 hover:border-olive-300 hover:shadow-2xl transition-all bg-white transform hover:-translate-y-2 animate-fade-in"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-6 shadow-lg group-hover:scale-110 transition-transform`}>
+                    <Icon className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                    {feature.title}
+                  </h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+                  <div className="mt-4 flex items-center text-olive-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span>Learn more</span>
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Benefits Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-olive-50 via-white to-gray-50">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-block px-4 py-2 bg-olive-100 text-olive-700 rounded-full text-sm font-semibold mb-4">
+                Why Choose Us
+              </div>
+              <h2 className="text-5xl font-bold text-gray-900 mb-6">
+                Built for
+                <span className="bg-gradient-to-r from-olive-600 to-olive-700 bg-clip-text text-transparent"> Success</span>
+              </h2>
+              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+                Join thousands of businesses using Liquid Canvas to scale their outreach and grow their customer base.
+              </p>
+              <div className="space-y-4">
+                {benefits.map((benefit, index) => {
+                  const Icon = benefit.icon
+                  return (
+                    <div key={index} className="flex items-center gap-4 p-4 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200 hover:border-olive-300 hover:shadow-lg transition-all">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-olive-600 to-olive-700 flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-6 h-6 text-white" />
+                      </div>
+                      <span className="text-lg font-semibold text-gray-900">{benefit.text}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="relative">
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+                <div className="aspect-square bg-gradient-to-br from-olive-100 via-white to-olive-50 flex items-center justify-center">
+                  <div className="text-center p-8">
+                    <div className="w-32 h-32 mx-auto mb-6 bg-gradient-to-br from-olive-600 to-olive-700 rounded-3xl flex items-center justify-center shadow-2xl animate-pulse">
+                      <Target className="w-16 h-16 text-white" />
+                    </div>
+                    <p className="text-gray-500 font-medium text-lg">Success Metrics</p>
+                  </div>
+                </div>
+              </div>
+              {/* Floating elements */}
+              <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full opacity-20 blur-2xl animate-pulse"></div>
+              <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full opacity-20 blur-2xl animate-pulse animation-delay-2000"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-olive-600 via-olive-700 to-olive-600 relative overflow-hidden">
+        {/* Animated background */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, white 1px, transparent 0)`,
+            backgroundSize: '40px 40px',
+            animation: 'float 20s infinite linear'
+          }}></div>
+        </div>
+
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6">
+            Ready to Transform Your Outreach?
+          </h2>
+          <p className="text-xl text-olive-100 mb-10 max-w-2xl mx-auto">
+            Join thousands of businesses using Liquid Canvas to scale their outreach
+          </p>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-3 px-10 py-5 bg-white text-olive-600 rounded-xl hover:bg-gray-50 transition-all shadow-2xl hover:shadow-white/50 font-bold text-xl transform hover:scale-105"
+          >
+            Start Free Trial
+            <ArrowRight className="w-6 h-6" />
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-16 px-4 sm:px-6 lg:px-8 bg-gray-900 text-gray-400">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-4 gap-8 mb-12">
+            <div>
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-olive-600 to-olive-700 flex items-center justify-center">
+                  <span className="text-white text-sm font-bold">LC</span>
+                </div>
+                <span className="text-white font-bold text-lg">Liquid Canvas</span>
+              </div>
+              <p className="text-sm leading-relaxed">
+                Transform your outreach with intelligent automation
+              </p>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Product</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Company</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="hover:text-white transition-colors">About</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-semibold mb-4">Legal</h4>
+              <ul className="space-y-2 text-sm">
+                <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
+                <li><a href="https://liquidcanvas.art" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">liquidcanvas.art</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="pt-8 border-t border-gray-800 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} Liquid Canvas. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+
+      <style jsx>{`
+        @keyframes blob {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+          }
+          33% {
+            transform: translate(30px, -50px) scale(1.1);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.9);
+          }
+        }
+        @keyframes float {
+          0% {
+            transform: translateY(0);
+          }
+          100% {
+            transform: translateY(-20px);
+          }
+        }
+        @keyframes gradient {
+          0%, 100% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        .animation-delay-200 {
+          animation-delay: 200ms;
+        }
+        .animation-delay-400 {
+          animation-delay: 400ms;
+        }
+        .animation-delay-600 {
+          animation-delay: 600ms;
+        }
+        .animation-delay-800 {
+          animation-delay: 800ms;
+        }
+        .animate-gradient {
+          background-size: 200% 200%;
+          animation: gradient 3s ease infinite;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.8s ease-out forwards;
+          opacity: 0;
+        }
+        .animate-slide-up {
+          animation: slideUp 0.8s ease-out forwards;
+          opacity: 0;
+        }
+        @keyframes fadeIn {
+          to {
+            opacity: 1;
+          }
+        }
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   )
 }
