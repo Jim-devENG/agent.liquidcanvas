@@ -521,7 +521,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               // Only filter - never update categories
               setSelectedCategory(e.target.value)
             }}
-            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-olive-500 focus:border-olive-500 bg-white"
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 bg-white"
             title="Filter by category (does not update categories)"
           >
             <option value="all">All Categories (Filter)</option>
