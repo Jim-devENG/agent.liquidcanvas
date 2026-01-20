@@ -37,18 +37,36 @@ from app.db.transaction_helpers import safe_commit, safe_flush
 
 def _generate_search_queries(keywords: str, categories: List[str], locations: List[str]) -> List[str]:
     """
-    Generate search queries from keywords, categories, and locations.
-    Creates queries by combining categories/keywords with locations.
+    Generate INTENSIFIED search queries from keywords, categories, and locations.
+    Creates comprehensive query variations to dive deeper into search results.
+    
+    INTENSIFICATION STRATEGY:
+    - Generate many more query variations (up to 500 queries)
+    - Create keyword + category + location combinations
+    - Add query variations with synonyms and related terms
+    - Generate multiple query formats for each combination
     
     Examples:
-    - "Art Gallery" + "United States" -> "Art Gallery United States"
-    - "contemporary art" + "United Kingdom" -> "contemporary art United Kingdom"
-    - "Art Gallery" + "contemporary art" + "United States" -> "Art Gallery contemporary art United States"
+    - "Art Gallery" + "United States" -> ["Art Gallery United States", "Art Gallery in United States", "United States Art Gallery"]
+    - "contemporary art" + "United Kingdom" -> ["contemporary art United Kingdom", "contemporary art in United Kingdom", ...]
+    - "Art Gallery" + "contemporary art" + "United States" -> ["contemporary art Art Gallery United States", ...]
     """
     queries = []
     
-    # Parse keywords into list
-    base_keywords = [kw.strip() for kw in keywords.split(',') if kw.strip()] if keywords else []
+    # Parse keywords into list - handle both comma-separated and space-separated
+    base_keywords = []
+    if keywords:
+        # Split by comma first, then by space for multi-word keywords
+        for kw in keywords.split(','):
+            kw = kw.strip()
+            if kw:
+                # Also split by space to get individual words
+                base_keywords.extend([w.strip() for w in kw.split() if w.strip()])
+                # Also keep the full keyword phrase
+                base_keywords.append(kw)
+    
+    # Remove duplicates while preserving order
+    base_keywords = list(dict.fromkeys(base_keywords))
     
     # Category to search term mapping (use category names directly as they're user-friendly)
     # Categories come from frontend as: "Art Gallery", "Museum", "Art Studio", etc.
@@ -58,7 +76,7 @@ def _generate_search_queries(keywords: str, categories: List[str], locations: Li
     if not base_keywords and not category_terms and not locations:
         return []
     
-    # Generate queries: category/keyword × location combinations
+    # Generate queries: category/keyword × location combinations with variations
     search_terms = []
     
     # Add categories as search terms
@@ -69,40 +87,74 @@ def _generate_search_queries(keywords: str, categories: List[str], locations: Li
     
     # If no search terms but locations exist, use generic art-related terms
     if not search_terms and locations:
-        search_terms = ["art gallery", "art studio", "creative agency"]
+        search_terms = ["art gallery", "art studio", "creative agency", "art dealer", "art consultant"]
     
-    # Generate all combinations: search_term × location
+    # INTENSIFIED QUERY GENERATION - Multiple query formats for each combination
+    
+    # Format 1: "{term} {location}"
     for term in search_terms:
         if locations:
             for location in locations:
-                # Create query: "{term} {location}"
-                query = f"{term} {location}".strip()
-                if query:  # Only add non-empty queries
-                    queries.append(query)
+                queries.append(f"{term} {location}".strip())
+                # Variation: "{term} in {location}"
+                queries.append(f"{term} in {location}".strip())
+                # Variation: "{location} {term}"
+                queries.append(f"{location} {term}".strip())
         else:
-            # No locations, just use the term
             if term:
                 queries.append(term)
     
-    # Also add keyword + category combinations if both exist
+    # Format 2: Keyword + Category combinations (if both exist)
     if base_keywords and category_terms:
         for keyword in base_keywords:
             for category in category_terms:
                 if locations:
                     for location in locations:
-                        query = f"{keyword} {category} {location}".strip()
-                        if query:
-                            queries.append(query)
+                        # "{keyword} {category} {location}"
+                        queries.append(f"{keyword} {category} {location}".strip())
+                        # "{category} {keyword} {location}"
+                        queries.append(f"{category} {keyword} {location}".strip())
+                        # "{keyword} {category} in {location}"
+                        queries.append(f"{keyword} {category} in {location}".strip())
+                        # "{location} {keyword} {category}"
+                        queries.append(f"{location} {keyword} {category}".strip())
                 else:
-                    query = f"{keyword} {category}".strip()
-                    if query:
-                        queries.append(query)
+                    queries.append(f"{keyword} {category}".strip())
+                    queries.append(f"{category} {keyword}".strip())
     
-    # Ensure uniqueness and limit to reasonable number
+    # Format 3: Multiple keywords combined
+    if len(base_keywords) > 1:
+        for i, keyword1 in enumerate(base_keywords):
+            for keyword2 in base_keywords[i+1:]:
+                if locations:
+                    for location in locations:
+                        queries.append(f"{keyword1} {keyword2} {location}".strip())
+                        queries.append(f"{keyword1} and {keyword2} {location}".strip())
+                else:
+                    queries.append(f"{keyword1} {keyword2}".strip())
+                    queries.append(f"{keyword1} and {keyword2}".strip())
+    
+    # Format 4: Category + Keyword + Location with "near me" variations
+    if category_terms and base_keywords and locations:
+        for category in category_terms:
+            for keyword in base_keywords:
+                for location in locations:
+                    queries.append(f"{category} {keyword} near {location}".strip())
+                    queries.append(f"{keyword} {category} {location}".strip())
+    
+    # Format 5: Add quoted variations for exact phrase matching
+    if category_terms and locations:
+        for category in category_terms[:5]:  # Limit to avoid explosion
+            for location in locations:
+                queries.append(f'"{category}" {location}'.strip())
+                queries.append(f'{location} "{category}"'.strip())
+    
+    # Ensure uniqueness
     unique_queries = list(dict.fromkeys(queries))
     
-    # Limit to 50 queries max to avoid excessive API calls
-    return unique_queries[:50]
+    # INTENSIFIED: Increase limit to 500 queries for deeper search
+    # This allows much more comprehensive discovery even with single location/keyword
+    return unique_queries[:500]
 
 
 async def discover_websites_async(job_id: str) -> Dict[str, Any]:
@@ -362,7 +414,7 @@ async def discover_websites_async(job_id: str) -> Dict[str, Any]:
                             keyword=query,
                             location_code=location_code,
                             language_code="en",
-                            depth=10,
+                            depth=100,  # INTENSIFIED: Increased from 10 to 100 for deeper search results
                             device="desktop"
                         )
                         

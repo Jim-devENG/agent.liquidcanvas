@@ -79,8 +79,18 @@ class LinkedInDiscoveryAdapter:
                     query5 = f'"{category}" "{location}" contact person site:linkedin.com/in/'
                     search_queries.extend([query1, query2, query3, query4, query5])
             
-            # Limit queries to avoid excessive API calls (but allow more combinations)
-            search_queries = search_queries[:30]  # Increased to get more results
+            # INTENSIFIED: Generate more query variations with keywords
+            if keywords:
+                for keyword in keywords:
+                    for category in categories:
+                        for location in locations:
+                            query_kw1 = f'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" contact person'
+                            query_kw2 = f'site:linkedin.com/in/ "{keyword}" "{category}" "{location}" contact'
+                            query_kw3 = f'site:linkedin.com/in/ {keyword} {category} {location} contact person'
+                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+            
+            # INTENSIFIED: Increased limit to 200 queries for deeper search
+            search_queries = search_queries[:200]
             logger.info(f"📊 [LINKEDIN DISCOVERY] Built {len(search_queries)} search queries")
             
             queries_executed = 0
@@ -100,11 +110,11 @@ class LinkedInDiscoveryAdapter:
                     location_code = client.get_location_code(location_for_code)
                     logger.debug(f"📍 [LINKEDIN DISCOVERY] Using location code {location_code} for '{location_for_code}'")
                     
-                    # Search using DataForSEO
+                    # INTENSIFIED: Search using DataForSEO with maximum depth
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=20  # Increased depth to get more results
+                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
                     )
                     
                     logger.info(f"📥 [LINKEDIN DISCOVERY] Query result - success: {serp_results.get('success')}, results count: {len(serp_results.get('results', []))}")
@@ -255,7 +265,7 @@ class InstagramDiscoveryAdapter:
             
             logger.info("🔍 [INSTAGRAM DISCOVERY] Using DataForSEO to search for Instagram profiles")
             
-            # Build search queries: Focus on contact persons - "site:instagram.com [category] [location] contact person"
+            # INTENSIFIED: Build search queries with keywords support
             search_queries = []
             for category in categories:
                 for location in locations:
@@ -265,7 +275,18 @@ class InstagramDiscoveryAdapter:
                     query3 = f'site:instagram.com "{category}" "{location}" person'
                     search_queries.extend([query1, query2, query3])
             
-            search_queries = search_queries[:20]  # Increased from 10
+            # INTENSIFIED: Add keyword-based queries
+            if keywords:
+                for keyword in keywords:
+                    for category in categories:
+                        for location in locations:
+                            query_kw1 = f'site:instagram.com "{keyword}" "{category}" "{location}" contact person'
+                            query_kw2 = f'site:instagram.com "{keyword}" "{category}" "{location}" contact'
+                            query_kw3 = f'site:instagram.com {keyword} {category} {location} contact person'
+                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+            
+            # INTENSIFIED: Increased limit to 200 queries for deeper search
+            search_queries = search_queries[:200]
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -276,7 +297,7 @@ class InstagramDiscoveryAdapter:
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=20  # Increased depth
+                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
@@ -402,7 +423,7 @@ class TikTokDiscoveryAdapter:
             
             logger.info("🔍 [TIKTOK DISCOVERY] Using DataForSEO to search for TikTok profiles")
             
-            # Build search queries: Focus on contact persons - "site:tiktok.com/@ [category] [location] contact person"
+            # INTENSIFIED: Build search queries with keywords support
             search_queries = []
             for category in categories:
                 for location in locations:
@@ -412,7 +433,18 @@ class TikTokDiscoveryAdapter:
                     query3 = f'site:tiktok.com/@ "{category}" "{location}" person'
                     search_queries.extend([query1, query2, query3])
             
-            search_queries = search_queries[:20]  # Increased from 10
+            # INTENSIFIED: Add keyword-based queries
+            if keywords:
+                for keyword in keywords:
+                    for category in categories:
+                        for location in locations:
+                            query_kw1 = f'site:tiktok.com/@ "{keyword}" "{category}" "{location}" contact person'
+                            query_kw2 = f'site:tiktok.com/@ "{keyword}" "{category}" "{location}" contact'
+                            query_kw3 = f'site:tiktok.com/@ {keyword} {category} {location} contact person'
+                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+            
+            # INTENSIFIED: Increased limit to 200 queries for deeper search
+            search_queries = search_queries[:200]
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -423,7 +455,7 @@ class TikTokDiscoveryAdapter:
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=20  # Increased depth
+                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
@@ -548,7 +580,7 @@ class FacebookDiscoveryAdapter:
             
             logger.info("🔍 [FACEBOOK DISCOVERY] Using DataForSEO to search for Facebook pages")
             
-            # Build search queries: Focus on contact persons - "site:facebook.com [category] [location] contact person"
+            # INTENSIFIED: Build search queries with keywords support
             search_queries = []
             for category in categories:
                 for location in locations:
@@ -558,7 +590,18 @@ class FacebookDiscoveryAdapter:
                     query3 = f'site:facebook.com "{category}" "{location}" person'
                     search_queries.extend([query1, query2, query3])
             
-            search_queries = search_queries[:20]  # Increased from 10
+            # INTENSIFIED: Add keyword-based queries
+            if keywords:
+                for keyword in keywords:
+                    for category in categories:
+                        for location in locations:
+                            query_kw1 = f'site:facebook.com "{keyword}" "{category}" "{location}" contact person'
+                            query_kw2 = f'site:facebook.com "{keyword}" "{category}" "{location}" contact'
+                            query_kw3 = f'site:facebook.com {keyword} {category} {location} contact person'
+                            search_queries.extend([query_kw1, query_kw2, query_kw3])
+            
+            # INTENSIFIED: Increased limit to 200 queries for deeper search
+            search_queries = search_queries[:200]
             
             for query in search_queries:
                 if len(prospects) >= max_results:
@@ -569,7 +612,7 @@ class FacebookDiscoveryAdapter:
                     serp_results = await client.serp_google_organic(
                         keyword=query,
                         location_code=location_code,
-                        depth=20  # Increased depth
+                        depth=100  # INTENSIFIED: Increased from 20 to 100 for much deeper search results
                     )
                     
                     if serp_results.get("success") and serp_results.get("results"):
