@@ -69,12 +69,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       
       let leads = Array.isArray(response?.data) ? response.data : []
       
-      // Backend now handles category filtering, so no need to filter on frontend
-      // But we can still log for debugging
-      if (selectedCategory !== 'all') {
-        console.log(`🔍 [FILTER] Backend filtered for category: "${selectedCategory}"`)
-        console.log(`🔍 [FILTER] Results returned: ${leads.length} items (total: ${response.total})`)
-      }
+      // Backend now handles category filtering
       
       // Sort by category in ascending order
       leads.sort((a: Prospect, b: Prospect) => {
@@ -477,12 +472,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   const handleMigrateCategories = async () => {
-    console.log('🔄 [MIGRATE] Button clicked - handleMigrateCategories called')
     setIsMigratingCategories(true)
     setError(null)
     try {
       const result = await migrateCategories()
-      console.log('✅ [MIGRATE CATEGORIES] Result:', result)
       
       // Show migration details
       const mappingDetails = Object.entries(result.category_mapping || {})
@@ -498,7 +491,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       setTimeout(async () => {
         try {
           await loadProspects()
-          console.log('✅ [MIGRATE CATEGORIES] Refresh complete')
         } catch (err) {
           console.error('❌ [MIGRATE CATEGORIES] Error on refresh:', err)
         }
@@ -513,33 +505,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
   }
 
-  // Debug: Log button render
-  useEffect(() => {
-    console.log('🔍 [LEADS TABLE] Component rendered, isMigratingCategories state:', isMigratingCategories)
-    console.log('🔍 [LEADS TABLE] handleMigrateCategories function exists:', typeof handleMigrateCategories === 'function')
-  }, [isMigratingCategories, handleMigrateCategories])
-
-  // Debug: Force log on every render
-  console.log('🔍 [LEADS TABLE] Component rendering, Migrate Categories button should be visible')
-  console.log('🔍 [LEADS TABLE] emailsOnly prop:', emailsOnly)
-  console.log('🔍 [LEADS TABLE] prospects count:', prospects.length)
-
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
-      {/* MIGRATE CATEGORIES BUTTON - ALWAYS VISIBLE */}
-      <div style={{ 
-        backgroundColor: '#9333ea', 
-        color: 'white', 
-        padding: '15px', 
-        fontSize: '18px', 
-        fontWeight: 'bold',
-        marginBottom: '15px',
-        textAlign: 'center',
-        border: '3px solid #7e22ce',
-        borderRadius: '8px'
-      }}>
-        ✅ Migrate Categories Feature Available
-      </div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-sm font-bold text-olive-700">
