@@ -78,29 +78,37 @@ export default function LandingPage() {
               Everything you need to manage your outreach campaigns in one place
             </p>
           </div>
-          <div className="relative rounded-2xl shadow-2xl overflow-hidden border-4 border-white/50">
-            <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-              {/* Dashboard Screenshot - Replace with actual image */}
-              <div className="text-center p-12">
-                <div className="w-24 h-24 bg-gradient-to-br from-olive-500 to-olive-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                  <BarChart3 className="w-12 h-12 text-white" />
-                </div>
-                <p className="text-gray-600 font-medium">
-                  Dashboard Preview
-                </p>
-                <p className="text-sm text-gray-500 mt-2">
-                  Replace with dashboard-screenshot.png
-                </p>
-              </div>
-              {/* Uncomment when you have the screenshot */}
-              {/* <Image
+          <div className="relative rounded-2xl shadow-2xl overflow-hidden border-4 border-white/50 bg-white">
+            <div className="aspect-video relative">
+              {/* Dashboard Screenshot */}
+              <Image
                 src="/dashboard-screenshot.png"
                 alt="Liquid Canvas Dashboard"
-                width={1920}
-                height={1080}
-                className="w-full h-full object-cover"
+                fill
+                className="object-contain"
                 priority
-              /> */}
+                onError={(e) => {
+                  // Fallback if image doesn't exist
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                  const fallback = target.nextElementSibling as HTMLElement
+                  if (fallback) fallback.style.display = 'flex'
+                }}
+              />
+              {/* Fallback placeholder if screenshot doesn't exist */}
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ display: 'none' }}>
+                <div className="text-center p-12">
+                  <div className="w-24 h-24 bg-gradient-to-br from-olive-500 to-olive-600 rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                    <BarChart3 className="w-12 h-12 text-white" />
+                  </div>
+                  <p className="text-gray-600 font-medium">
+                    Dashboard Preview
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Add dashboard-screenshot.png to /public folder
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
