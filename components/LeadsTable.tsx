@@ -524,21 +524,25 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   console.log('🔍 [LEADS TABLE] emailsOnly prop:', emailsOnly)
   console.log('🔍 [LEADS TABLE] prospects count:', prospects.length)
 
-  return (
-    <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
-      {/* DEBUG: Very visible test marker */}
-      <div style={{ 
-        backgroundColor: 'red', 
-        color: 'white', 
-        padding: '10px', 
-        fontSize: '14px', 
-        fontWeight: 'bold',
-        marginBottom: '10px',
-        textAlign: 'center',
-        border: '3px solid black'
-      }}>
-        🔍 DEBUG: LeadsTable Component is RENDERING - If you see this, the component loaded!
-      </div>
+  // CRITICAL DEBUG: Render a simple test first
+  try {
+    return (
+      <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
+        {/* DEBUG: Very visible test marker - MUST BE VISIBLE */}
+        <div style={{ 
+          backgroundColor: 'red', 
+          color: 'white', 
+          padding: '20px', 
+          fontSize: '18px', 
+          fontWeight: 'bold',
+          marginBottom: '20px',
+          textAlign: 'center',
+          border: '5px solid black',
+          zIndex: 9999,
+          position: 'relative'
+        }}>
+          🔍 DEBUG: LeadsTable Component IS RENDERING! If you see this red box, the component loaded successfully!
+        </div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-sm font-bold text-olive-700">
