@@ -186,7 +186,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4 pt-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Liquid Canvas Outreach Studio</h1>
-              <SystemStatus />
+              <SystemStatus jobs={jobs} loading={loading} />
             </div>
             <div className="flex items-center gap-2">
               <button
