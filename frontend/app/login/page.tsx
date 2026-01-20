@@ -32,7 +32,7 @@ export default function LoginPage() {
       if (outreachType === 'social') {
         router.push('/social') // Redirect to social outreach dashboard
       } else {
-        router.push('/dashboard') // Redirect to website outreach dashboard
+        router.push('/') // Redirect to website outreach dashboard
       }
     } catch (err: any) {
       setError(err.message || 'Login failed')
