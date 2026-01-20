@@ -1,15 +1,21 @@
 # Liquid Canvas Design System
 
-## Brand Colors
+## Brand Colors - Liquid Canvas (liquidcanvas.art)
 
 ### Primary Colors
-- **Indigo (Primary)**: `#6366f1` - Main brand color for primary actions and accents
-- **Purple (Secondary)**: `#9333ea` / `#8b5cf6` - Secondary actions and highlights
-- **Pink (Accent)**: `#ec4899` - Accent color for special elements
+- **Liquid Indigo (Primary)**: `#6366f1` (`liquid-500`) - Main brand color for primary actions and accents
+- **Purple (Secondary)**: `#9333ea` (`purple-600`) / `#8b5cf6` (`purple-500`) - Secondary actions and highlights  
+- **Pink (Accent)**: `#ec4899` (`pink-500`) - Accent color for special elements
 
 ### Gradient
-- **Liquid Gradient**: `linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)`
-- Used for: Logo backgrounds, active states, premium features
+- **Liquid Canvas Gradient**: `linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%)`
+- **Tailwind Class**: `bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500`
+- Used for: Logo backgrounds, active states, premium features, primary buttons
+
+### Usage
+- Always use `liquid-*` classes instead of generic `indigo-*` for brand consistency
+- Use the three-color gradient (liquid → purple → pink) for primary actions
+- Use `liquid-gradient-text` utility class for branded text
 
 ### Neutral Colors
 - **Gray Scale**: Standard Tailwind gray scale (50-900)
@@ -34,12 +40,12 @@
 
 #### Primary Button
 ```tsx
-className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all"
+className="px-4 py-2 bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500 text-white rounded-lg hover:shadow-lg transition-all"
 ```
 
 #### Secondary Button
 ```tsx
-className="px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all"
+className="px-4 py-2 bg-white border border-liquid-200 text-liquid-700 rounded-lg hover:bg-liquid-50 transition-all"
 ```
 
 #### Accent Button (Purple)
@@ -56,15 +62,15 @@ className="glass rounded-xl shadow-lg border border-white/20 p-4"
 
 #### Gradient Card
 ```tsx
-className="rounded-xl shadow-lg bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 p-4"
+className="rounded-xl shadow-lg bg-gradient-to-br from-liquid-50 via-purple-50 to-pink-50 border border-liquid-100 p-4"
 ```
 
 ### Sidebar
 
 - **Background**: Glass effect with subtle gradient
-- **Active Item**: Gradient background (indigo to purple)
-- **Hover**: Light gradient background
-- **Logo**: Gradient background with LC initials
+- **Active Item**: Liquid Canvas gradient (`from-liquid-600 via-purple-600 to-pink-500`)
+- **Hover**: Light gradient background (`from-liquid-50 to-purple-50`)
+- **Logo**: Liquid Canvas gradient background with LC initials
 
 ## Spacing
 
@@ -89,11 +95,12 @@ className="rounded-xl shadow-lg bg-gradient-to-br from-indigo-50 to-purple-50 bo
 
 ## Best Practices
 
-1. **Use gradients** for primary actions and active states
+1. **Use Liquid Canvas gradients** (`from-liquid-600 via-purple-600 to-pink-500`) for primary actions and active states
 2. **Glassmorphism** for cards and overlays
 3. **Consistent spacing** using Tailwind's spacing scale
 4. **Smooth transitions** on all interactive elements
-5. **Brand colors** for all primary actions (indigo/purple gradient)
-6. **Purple** for special features (like Migrate Categories)
-7. **Pink** sparingly for accents and highlights
+5. **Brand colors** - Always use `liquid-*` classes, never generic `indigo-*`
+6. **Three-color gradient** (liquid → purple → pink) for primary buttons and active states
+7. **Purple** for special features (like Migrate Categories)
+8. **Pink** sparingly for accents and highlights
 

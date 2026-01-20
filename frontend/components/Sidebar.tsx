@@ -60,7 +60,7 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
       {/* Logo/Header Section */}
       <div className="p-4 border-b border-gray-200/50 bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/30">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl liquid-gradient flex items-center justify-center shadow-lg hover-glow transition-all">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-liquid-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg hover-glow transition-all">
             <span className="text-white text-sm font-bold">LC</span>
           </div>
           <div>
@@ -93,16 +93,16 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
                   }
                   setMobileMenuOpen(false) // Close mobile menu when tab is selected
                 }}
-                className={`
+                  className={`
                   w-full flex items-center space-x-2 px-3 py-2.5 rounded-lg font-medium text-xs transition-all duration-200
                   ${
                     isActive
-                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md hover-glow'
-                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 hover:text-indigo-700 hover:shadow-sm'
+                      ? 'bg-gradient-to-r from-liquid-600 via-purple-600 to-pink-500 text-white shadow-md hover-glow'
+                      : 'text-gray-700 hover:bg-gradient-to-r hover:from-liquid-50 hover:to-purple-50 hover:text-liquid-700 hover:shadow-sm'
                   }
                 `}
               >
-                <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-indigo-600'}`} />
+                <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-liquid-600'}`} />
                 <span>{tab.label}</span>
               </button>
             )
