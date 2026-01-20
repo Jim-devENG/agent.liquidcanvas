@@ -537,8 +537,6 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   console.log('🔍 [LEADS TABLE] emailsOnly prop:', emailsOnly)
   console.log('🔍 [LEADS TABLE] prospects count:', prospects.length)
 
-  // CRITICAL DEBUG: Render a simple test first
-  try {
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
       {/* MIGRATE CATEGORIES BUTTON - ALWAYS VISIBLE */}
