@@ -156,7 +156,7 @@ async def _validate_instagram_token(integration: SocialIntegration) -> tuple[boo
     try:
         # Check if token is expired - try to refresh if we have refresh token
         if integration.is_token_expired():
-            if integration.refresh_token_encrypted:
+            if integration.refresh_token:
                 # Try to refresh the token
                 refreshed = await _refresh_meta_token(integration)
                 if refreshed:
@@ -167,7 +167,7 @@ async def _validate_instagram_token(integration: SocialIntegration) -> tuple[boo
                 return False, "Token has expired and no refresh token available"
         
         # Decrypt token
-        access_token = decrypt_token(integration.access_token_encrypted)
+        access_token = decrypt_token(integration.access_token)
         
         # Validate token by making a debug API call
         debug_url = f"https://graph.facebook.com/v18.0/debug_token"
@@ -205,7 +205,7 @@ async def _validate_facebook_token(integration: SocialIntegration) -> tuple[bool
     try:
         # Check if token is expired - try to refresh if we have refresh token
         if integration.is_token_expired():
-            if integration.refresh_token_encrypted:
+            if integration.refresh_token:
                 # Try to refresh the token
                 refreshed = await _refresh_meta_token(integration)
                 if refreshed:
@@ -216,7 +216,7 @@ async def _validate_facebook_token(integration: SocialIntegration) -> tuple[bool
                 return False, "Token has expired and no refresh token available"
         
         # Decrypt token
-        access_token = decrypt_token(integration.access_token_encrypted)
+        access_token = decrypt_token(integration.access_token)
         
         # Validate token by making a debug API call
         debug_url = f"https://graph.facebook.com/v18.0/debug_token"
@@ -817,7 +817,7 @@ async def oauth_callback(
             db.add(integration)
         
         # Update integration fields
-        integration.access_token_encrypted = encrypt_token(access_token)
+        integration.access_token = encrypt_token(access_token)
         integration.token_expires_at = token_expires_at
         integration.scopes_granted = scopes_granted
         integration.account_id = account_id
