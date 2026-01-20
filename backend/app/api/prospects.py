@@ -736,12 +736,12 @@ async def list_leads(
         # Add category filter if provided (case-insensitive)
         category_filter = None
         if category and category.lower() != 'all':
-            # Use case-insensitive comparison, handle NULL values
+            # Use ilike for case-insensitive comparison (PostgreSQL), handle NULL values
             category_filter = and_(
                 Prospect.discovery_category.isnot(None),
-                func.lower(Prospect.discovery_category) == category.lower()
+                Prospect.discovery_category.ilike(f"%{category}%")
             )
-            logger.info(f"🔍 [LEADS] Filtering by category: {category} (case-insensitive)")
+            logger.info(f"🔍 [LEADS] Filtering by category: {category} (case-insensitive using ilike)")
         
         # Build base filters
         base_filters = [
@@ -987,10 +987,10 @@ async def list_scraped_emails(
         
         # Add category filter if provided (case-insensitive, handle NULL values)
         if category and category.lower() != 'all':
-            logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category} (case-insensitive)")
-            # Add NULL check and case-insensitive comparison directly to base_filters
+            logger.info(f"🔍 [SCRAPED EMAILS] Filtering by category: {category} (case-insensitive using ilike)")
+            # Add NULL check and case-insensitive comparison using ilike (more reliable than func.lower)
             base_filters.append(Prospect.discovery_category.isnot(None))
-            base_filters.append(func.lower(Prospect.discovery_category) == category.lower())
+            base_filters.append(Prospect.discovery_category.ilike(category))
         
         # Get total count FIRST (before any filtering)
         count_query = select(func.count(Prospect.id)).where(and_(*base_filters))
