@@ -582,6 +582,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
             disabled={isMigratingCategories || isAutoCategorizing}
             className="px-2 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
             title="Migrate old category formats to new standardized categories"
+            style={{ display: 'inline-flex' }}
           >
             {isMigratingCategories ? (
               <>
