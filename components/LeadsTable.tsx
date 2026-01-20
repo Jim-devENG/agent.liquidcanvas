@@ -603,9 +603,12 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               minWidth: '140px',
               zIndex: 10,
               position: 'relative',
-              flexShrink: 0
+              flexShrink: 0,
+              backgroundColor: '#9333ea',
+              borderColor: '#7e22ce'
             }}
             data-testid="migrate-categories-button"
+            id="migrate-categories-button-id"
           >
             {isMigratingCategories ? (
               <>
