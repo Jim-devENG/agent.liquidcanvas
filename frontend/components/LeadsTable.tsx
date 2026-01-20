@@ -10,19 +10,7 @@ interface LeadsTableProps {
   emailsOnly?: boolean
 }
 
-// VERSION: 2.2 - Migrate Categories Button Added - Build: 2026-01-20-04:25 - CACHE BUST
 export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
-  // CRITICAL: Log version on component mount - MULTIPLE LOGS TO ENSURE VISIBILITY
-  console.log('🚀🚀🚀 [LEADS TABLE] Component version 2.2 loaded - Migrate Categories button should be visible!')
-  console.log('🚀🚀🚀 [LEADS TABLE] If you see this, the NEW version is loaded!')
-  console.warn('🚀🚀🚀 [LEADS TABLE] VERSION 2.2 - MIGRATE CATEGORIES BUTTON EXISTS - CACHE BUSTED')
-  
-  // Force component to re-render by adding a timestamp
-  if (typeof window !== 'undefined') {
-    (window as any).__LEADS_TABLE_VERSION__ = '2.2'
-    (window as any).__LEADS_TABLE_BUILD_TIME__ = '2026-01-20-04:25:00'
-  }
-  
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
   const [skip, setSkip] = useState(0)
