@@ -30,9 +30,9 @@ export default function LoginPage() {
       
       // Navigate based on selected dashboard
       if (selectedDashboard === 'social') {
-        router.push('/social')
+        router.push('/socials')
       } else {
-        router.push('/')
+        router.push('/dashboard')
       }
     } catch (err: any) {
       setError(err.message || 'Login failed')

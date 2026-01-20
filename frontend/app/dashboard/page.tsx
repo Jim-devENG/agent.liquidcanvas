@@ -1,4 +1,5 @@
 'use client'
+// Version: 3.1 - Discovery feature removed - FORCE REDEPLOY
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,6 +15,7 @@ import WebsitesTable from '@/components/WebsitesTable'
 import SystemStatus from '@/components/SystemStatus'
 import Sidebar from '@/components/Sidebar'
 import Pipeline from '@/components/Pipeline'
+import SettingsContent from '@/components/SettingsContent'
 import { getStats, listJobs } from '@/lib/api'
 import type { Stats, Job } from '@/lib/api'
 import { 
@@ -41,15 +43,6 @@ export default function Dashboard() {
 
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
-
-  // Check authentication on mount
-  useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    if (!token) {
-      router.push('/login')
-      return
-    }
-  }, [router])
 
   const loadData = useCallback(async (isInitialLoad = false) => {
     try {
@@ -109,51 +102,71 @@ export default function Dashboard() {
         setConnectionError(true)
       }
     } finally {
-      setLoading(false)
+      // Always set loading to false after initial load completes
+      if (isInitialLoad) {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    loadData(true)
-  }, [loadData])
-
-  // Listen for job completion events
-  useEffect(() => {
-    const handleJobsCompleted = () => {
-      console.log('🔄 [DASHBOARD] Jobs completed event received, refreshing data...')
-      loadData(false)
+    // Check if user is authenticated
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+    if (!token) {
+      router.push('/login')
+      return
     }
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('jobsCompleted', handleJobsCompleted)
-      return () => {
-        window.removeEventListener('jobsCompleted', handleJobsCompleted)
+    // Redirect social outreach users to their dashboard
+    const outreachType = typeof window !== 'undefined' ? localStorage.getItem('outreach_type') : null
+    if (outreachType === 'social') {
+      router.push('/socials')
+      return
+    }
+
+    // Initial load with timeout to prevent infinite loading
+    const loadTimeout = setTimeout(() => {
+      console.warn('⚠️ Load data timeout - setting loading to false')
+      setLoading(false)
+    }, 10000) // 10 second timeout
+
+    loadData(true).finally(() => {
+      clearTimeout(loadTimeout)
+    })
+    
+    // Refresh every 30 seconds (debounced to prevent loops) - increased from 10s
+    const interval = setInterval(() => {
+      loadData(false) // Don't set loading state on periodic refreshes
+    }, 30000)
+    
+    // Listen for tab change events from Pipeline component
+    const handleTabChange = (e: CustomEvent) => {
+      const tabId = e.detail as string
+      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
+        setActiveTab(tabId as any)
       }
     }
-  }, [loadData])
+    
+    window.addEventListener('change-tab', handleTabChange as EventListener)
+    
+    return () => {
+      clearInterval(interval)
+      clearTimeout(loadTimeout)
+      window.removeEventListener('change-tab', handleTabChange as EventListener)
+    }
+  }, [router, loadData])
 
   const refreshData = () => {
     loadData(false)
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('outreach_type')
-    router.push('/login')
-  }
-
-  const handleTabChange = (tab: string) => {
-    const validTabs: Array<'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'> = [
-      'overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'
-    ]
-    if (validTabs.includes(tab as any)) {
-      setActiveTab(tab as any)
+    // Also trigger the jobsCompleted event to refresh all tables
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('jobsCompleted'))
     }
   }
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'pipeline', label: 'Pipeline', icon: Globe },
+    { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
     { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
@@ -165,111 +178,111 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 via-white to-olive-50/30">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-olive-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading dashboard...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20">
+        <div className="text-center animate-fade-in">
+          <div className="inline-block relative">
+            <div className="w-16 h-16 rounded-full border-4 border-olive-200"></div>
+            <div className="absolute top-0 left-0 w-16 h-16 rounded-full border-4 border-t-olive-500 border-r-purple-500 animate-spin"></div>
+          </div>
+          <div className="mt-6">
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-olive-700 to-olive-600 bg-clip-text text-transparent mb-2">Liquid Canvas</h2>
+            <div className="text-lg font-semibold text-gray-700">Loading your dashboard...</div>
+            <div className="text-sm text-gray-500 mt-2">Connecting to backend</div>
+          </div>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-olive-50/30">
-      <div className="flex h-screen overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
+  // Wrapper function to handle type compatibility with Sidebar component
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
+  }
 
-        {/* Main Content */}
-        <main className="flex-1 px-3 sm:px-4 py-2 overflow-y-auto ml-64">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4 pt-4">
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
+      {/* Left Sidebar */}
+      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
+
+      {/* Main Content Area */}
+      <div className="flex-1 lg:ml-64 flex flex-col">
+        {/* Top Header */}
+        <header className="glass border-b border-gray-200/50 sticky top-0 z-30 shadow-sm backdrop-blur-xl">
+          <div className="px-3 sm:px-4 py-2 flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Liquid Canvas Outreach Studio</h1>
-              <SystemStatus jobs={jobs} loading={loading} />
+              <h2 className="text-sm font-bold text-olive-700">
+                {tabs.find(t => t.id === activeTab)?.label || 'Website Outreach'}
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">Liquid Canvas Website Outreach Studio</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center space-x-2">
               <button
                 onClick={refreshData}
-                className="px-3 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
+                className="flex items-center space-x-1 px-2 py-1 glass hover:bg-white/80 text-gray-700 rounded-lg transition-all duration-200 text-xs font-medium hover:shadow-md"
+                title="Refresh all data"
               >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
+                <RefreshCw className="w-3 h-3" />
+                <span>Refresh</span>
               </button>
               <button
-                onClick={handleLogout}
-                className="px-3 py-2 bg-olive-600 text-white rounded-lg hover:bg-olive-700 transition-colors text-sm font-medium flex items-center gap-2"
+                onClick={() => {
+                  localStorage.removeItem('auth_token')
+                  localStorage.removeItem('outreach_type')
+                  router.push('/login')
+                }}
+                className="flex items-center space-x-1 px-2 py-1 bg-olive-600 text-white rounded-lg transition-all duration-200 text-xs font-medium shadow-md hover:bg-olive-700"
               >
-                <LogOutIcon className="w-4 h-4" />
-                Logout
+                <LogOutIcon className="w-3 h-3" />
+                <span>Logout</span>
               </button>
             </div>
           </div>
+        </header>
 
-          {/* Tab Content */}
-          {activeTab === 'overview' && (
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3">
-              {/* Stats Cards - Full Width */}
-              <div className="lg:col-span-12">
-                {stats ? <StatsCards stats={stats} /> : (
-                  <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                    <p className="text-gray-500">Stats unavailable. Check backend connection.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Left Column - Automation & Manual Scrape */}
-              <div className="lg:col-span-7 space-y-3">
-                <AutomationControl />
-                <ManualScrape />
-              </div>
-
-              {/* Right Column - Jobs & Activity */}
-              <div className="lg:col-span-5 space-y-3">
-                {Array.isArray(jobs) && jobs.length > 0 ? (
-                  <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
-                ) : (
-                  <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                    <p className="text-gray-500">No jobs found.</p>
-                  </div>
-                )}
-                <ActivityFeed limit={15} autoRefresh={true} />
+        {/* Connection Error Banner */}
+        {connectionError && (
+          <div className="px-3 sm:px-4 py-2">
+            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-2 shadow-sm">
+              <div className="flex items-center">
+                <div>
+                  <p className="text-xs font-medium text-red-800">
+                    Backend not connected
+                  </p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    Unable to connect to API server. Please ensure the backend is running.
+                  </p>
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'pipeline' && (
-            <div className="max-w-7xl mx-auto">
-              <Pipeline />
+        {/* System Status Bar */}
+        <div className="px-3 sm:px-4 py-2">
+          <SystemStatus jobs={jobs} loading={loading} />
+        </div>
+
+        {/* Main Content */}
+        <main className="flex-1 px-3 sm:px-4 py-2 overflow-y-auto">
+        {activeTab === 'overview' && (
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-3">
+            {/* Stats Cards - Full Width */}
+            <div className="lg:col-span-12">
+              {stats ? <StatsCards stats={stats} /> : (
+                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
+                  <p className="text-gray-500">Stats unavailable. Check backend connection.</p>
+                </div>
+              )}
             </div>
-          )}
 
-          {activeTab === 'websites' && (
-            <div className="max-w-7xl mx-auto">
-              <WebsitesTable />
+            {/* Left Column - Automation & Manual Scrape */}
+            <div className="lg:col-span-7 space-y-3">
+              <AutomationControl />
+              <ManualScrape />
             </div>
-          )}
 
-          {activeTab === 'leads' && (
-            <div className="max-w-7xl mx-auto">
-              <LeadsTable />
-            </div>
-          )}
-
-          {activeTab === 'scraped_emails' && (
-            <div className="max-w-7xl mx-auto">
-              <LeadsTable emailsOnly={true} />
-            </div>
-          )}
-
-          {activeTab === 'emails' && (
-            <div className="max-w-7xl mx-auto">
-              <EmailsTable />
-            </div>
-          )}
-
-          {activeTab === 'jobs' && (
-            <div className="max-w-7xl mx-auto">
+            {/* Right Column - Jobs & Activity */}
+            <div className="lg:col-span-5 space-y-3">
               {Array.isArray(jobs) && jobs.length > 0 ? (
                 <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
               ) : (
@@ -277,26 +290,72 @@ export default function Dashboard() {
                   <p className="text-gray-500">No jobs found.</p>
                 </div>
               )}
+              <ActivityFeed limit={15} autoRefresh={true} />
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'settings' && (
-            <div className="max-w-7xl mx-auto">
+        {activeTab === 'pipeline' && (
+          <div className="max-w-7xl mx-auto">
+            <Pipeline />
+          </div>
+        )}
+
+        {activeTab === 'websites' && (
+          <div className="max-w-7xl mx-auto">
+            <WebsitesTable />
+          </div>
+        )}
+
+        {activeTab === 'leads' && (
+          <div className="max-w-7xl mx-auto">
+            <LeadsTable />
+          </div>
+        )}
+
+        {activeTab === 'scraped_emails' && (
+          <div className="max-w-7xl mx-auto">
+            <LeadsTable emailsOnly={true} />
+          </div>
+        )}
+
+        {activeTab === 'emails' && (
+          <div className="max-w-7xl mx-auto">
+            <EmailsTable />
+          </div>
+        )}
+
+        {activeTab === 'jobs' && (
+          <div className="max-w-7xl mx-auto">
+            {Array.isArray(jobs) && jobs.length > 0 ? (
+              <JobStatusPanel jobs={jobs} onRefresh={refreshData} />
+            ) : (
               <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Settings</h2>
-                <p className="text-gray-600">Settings page coming soon...</p>
+                <p className="text-gray-500">No jobs found.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="max-w-7xl mx-auto">
+            <SettingsContent />
+          </div>
+        )}
+
+        {activeTab === 'guide' && (
+          <div className="max-w-7xl mx-auto">
+            <div className="glass rounded-xl shadow-lg border border-white/20 p-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">User Guide</h2>
+              <div className="prose prose-sm max-w-none">
+                <p className="text-gray-600">
+                  Welcome to Liquid Canvas Outreach Studio. This guide will help you get started with website outreach.
+                </p>
+                {/* Add more guide content here */}
               </div>
             </div>
-          )}
-
-          {activeTab === 'guide' && (
-            <div className="max-w-7xl mx-auto">
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-gray-200/60 p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Guide</h2>
-                <p className="text-gray-600">User guide coming soon...</p>
-              </div>
-            </div>
-          )}
+          </div>
+        )}
         </main>
       </div>
     </div>
