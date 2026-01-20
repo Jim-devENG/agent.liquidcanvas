@@ -154,27 +154,48 @@ async def validate_token_with_platform(
 async def _validate_instagram_token(integration: SocialIntegration) -> tuple[bool, Optional[str]]:
     """Validate Instagram token via Meta Graph API"""
     try:
-        from app.clients.instagram import InstagramClient
+        # Check if token is expired - try to refresh if we have refresh token
+        if integration.is_token_expired():
+            if integration.refresh_token_encrypted:
+                # Try to refresh the token
+                refreshed = await _refresh_meta_token(integration)
+                if refreshed:
+                    return True, None
+                else:
+                    return False, "Token expired and refresh failed"
+            else:
+                return False, "Token has expired and no refresh token available"
         
         # Decrypt token
-        access_token = decrypt_token(integration.access_token)
+        access_token = decrypt_token(integration.access_token_encrypted)
         
-        # Test token by making a simple API call
-        # This is a placeholder - implement actual Instagram Graph API call
-        # Example: GET /me?fields=id,username
-        client = InstagramClient(access_token)
+        # Validate token by making a debug API call
+        debug_url = f"https://graph.facebook.com/v18.0/debug_token"
+        debug_params = {
+            "input_token": access_token,
+            "access_token": access_token
+        }
         
-        # For now, check if token exists and is not expired
-        if integration.is_token_expired():
-            return False, "Token has expired"
+        async with httpx.AsyncClient() as client:
+            debug_response = await client.get(debug_url, params=debug_params, timeout=10.0)
+            debug_response.raise_for_status()
+            debug_data = debug_response.json()
         
-        # TODO: Implement actual API call to validate token
-        # For now, assume token is valid if not expired
+        # Check if token is valid
+        data = debug_data.get("data", {})
+        is_valid = data.get("is_valid", False)
+        
+        if not is_valid:
+            error_msg = data.get("error", {}).get("message", "Token is invalid")
+            return False, error_msg
+        
         return True, None
         
     except ValueError as e:
         # Decryption failed
         return False, f"Token decryption failed: {e}"
+    except httpx.HTTPStatusError as e:
+        return False, f"Token validation API error: {e.response.text if hasattr(e, 'response') else str(e)}"
     except Exception as e:
         return False, f"Token validation failed: {e}"
 
@@ -182,24 +203,47 @@ async def _validate_instagram_token(integration: SocialIntegration) -> tuple[boo
 async def _validate_facebook_token(integration: SocialIntegration) -> tuple[bool, Optional[str]]:
     """Validate Facebook token via Meta Graph API"""
     try:
-        from app.clients.facebook import FacebookClient
+        # Check if token is expired - try to refresh if we have refresh token
+        if integration.is_token_expired():
+            if integration.refresh_token_encrypted:
+                # Try to refresh the token
+                refreshed = await _refresh_meta_token(integration)
+                if refreshed:
+                    return True, None
+                else:
+                    return False, "Token expired and refresh failed"
+            else:
+                return False, "Token has expired and no refresh token available"
         
         # Decrypt token
-        access_token = decrypt_token(integration.access_token)
+        access_token = decrypt_token(integration.access_token_encrypted)
         
-        # Test token by making a simple API call
-        # Example: GET /me?fields=id,name
-        client = FacebookClient(access_token)
+        # Validate token by making a debug API call
+        debug_url = f"https://graph.facebook.com/v18.0/debug_token"
+        debug_params = {
+            "input_token": access_token,
+            "access_token": access_token
+        }
         
-        # For now, check if token exists and is not expired
-        if integration.is_token_expired():
-            return False, "Token has expired"
+        async with httpx.AsyncClient() as client:
+            debug_response = await client.get(debug_url, params=debug_params, timeout=10.0)
+            debug_response.raise_for_status()
+            debug_data = debug_response.json()
         
-        # TODO: Implement actual API call to validate token
+        # Check if token is valid
+        data = debug_data.get("data", {})
+        is_valid = data.get("is_valid", False)
+        
+        if not is_valid:
+            error_msg = data.get("error", {}).get("message", "Token is invalid")
+            return False, error_msg
+        
         return True, None
         
     except ValueError as e:
         return False, f"Token decryption failed: {e}"
+    except httpx.HTTPStatusError as e:
+        return False, f"Token validation API error: {e.response.text if hasattr(e, 'response') else str(e)}"
     except Exception as e:
         return False, f"Token validation failed: {e}"
 
