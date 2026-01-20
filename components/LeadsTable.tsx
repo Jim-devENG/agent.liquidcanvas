@@ -587,10 +587,15 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               </>
             )}
           </button>
+          {/* TEST: Temporary visible marker */}
+          <div style={{ backgroundColor: 'red', color: 'white', padding: '4px', fontSize: '10px', marginRight: '4px' }}>
+            TEST
+          </div>
           {/* Migrate Categories Button - Always Visible - Purple Button - DO NOT REMOVE */}
           <button
             onClick={() => {
               console.log('🔄 [MIGRATE] Button clicked!')
+              alert('Migrate Categories button clicked!')
               handleMigrateCategories()
             }}
             disabled={isMigratingCategories || isAutoCategorizing}
@@ -605,7 +610,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               position: 'relative',
               flexShrink: 0,
               backgroundColor: '#9333ea',
-              borderColor: '#7e22ce'
+              borderColor: '#7e22ce',
+              borderWidth: '3px'
             }}
             data-testid="migrate-categories-button"
             id="migrate-categories-button-id"
