@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { 
   Globe, 
   Users, 
@@ -13,8 +14,32 @@ import {
   Send,
   Activity
 } from 'lucide-react'
+import { useState } from 'react'
 
 export default function DashboardPreview() {
+  const [useScreenshot, setUseScreenshot] = useState(false)
+  
+  // Try to load screenshot, fallback to mockup if not available
+  const hasScreenshot = false // Set to true when screenshot is added
+  
+  if (hasScreenshot) {
+    return (
+      <div className="w-full relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
+        <Image
+          src="/dashboard-screenshot.png"
+          alt="Liquid Canvas Dashboard Preview"
+          width={1200}
+          height={800}
+          className="w-full h-auto"
+          priority
+        />
+        {/* Overlay gradient for better integration */}
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/20 to-transparent pointer-events-none"></div>
+      </div>
+    )
+  }
+  
+  // Fallback to realistic mockup
   return (
     <div className="w-full bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border-4 border-white">
       {/* Dashboard Header */}
