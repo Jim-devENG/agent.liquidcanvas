@@ -477,6 +477,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   const handleMigrateCategories = async () => {
+    console.log('🔄 [MIGRATE] Button clicked - handleMigrateCategories called')
     setIsMigratingCategories(true)
     setError(null)
     try {
@@ -584,41 +585,37 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
             )}
           </button>
           {/* Migrate Categories Button - Always Visible - Purple Button - DO NOT REMOVE */}
-          {(() => {
-            console.log('🔍 [LEADS TABLE] Rendering Migrate Categories button')
-            return (
-              <button
-                onClick={() => {
-                  console.log('🔄 [MIGRATE] Button clicked!')
-                  handleMigrateCategories()
-                }}
-                disabled={isMigratingCategories || isAutoCategorizing}
-                className="px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 shadow-md border-2 border-purple-700"
-                title="Migrate old category formats to new standardized categories"
-                style={{ 
-                  display: 'inline-flex', 
-                  visibility: 'visible', 
-                  opacity: 1,
-                  minWidth: '140px',
-                  zIndex: 10,
-                  position: 'relative'
-                }}
-                data-testid="migrate-categories-button"
-              >
-                {isMigratingCategories ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Migrating...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-3 h-3" />
-                    Migrate Categories
-                  </>
-                )}
-              </button>
-            )
-          })()}
+          <button
+            onClick={() => {
+              console.log('🔄 [MIGRATE] Button clicked!')
+              handleMigrateCategories()
+            }}
+            disabled={isMigratingCategories || isAutoCategorizing}
+            className="px-3 py-1.5 text-xs font-semibold bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 shadow-md border-2 border-purple-700"
+            title="Migrate old category formats to new standardized categories"
+            style={{ 
+              display: 'inline-flex', 
+              visibility: 'visible', 
+              opacity: 1,
+              minWidth: '140px',
+              zIndex: 10,
+              position: 'relative',
+              flexShrink: 0
+            }}
+            data-testid="migrate-categories-button"
+          >
+            {isMigratingCategories ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Migrating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-3 h-3" />
+                Migrate Categories
+              </>
+            )}
+          </button>
           <button
             onClick={async () => {
               try {
