@@ -1,6 +1,7 @@
 'use client'
-// Version: 3.3 - Migrate Categories Button - Build: 2026-01-20-04:05 - FORCE REBUILD
+// Version: 3.6 - Migrate Categories Button - Build: 2026-01-20-04:25 - CACHE BUST
 // This version MUST show purple banner and Migrate Categories button
+// Build timestamp: 2026-01-20T04:25:00Z
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
