@@ -8,8 +8,6 @@ const nextConfig = {
   generateBuildId: async () => {
     return `build-${Date.now()}-${Math.random()}`
   },
-  // Disable static optimization to ensure fresh builds
-  output: 'standalone',
 }
 
 module.exports = nextConfig
