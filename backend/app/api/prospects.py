@@ -855,34 +855,6 @@ async def list_leads(
             # Don't raise error - just return empty result
             total = 0
         
-        # Get paginated results
-        # SCHEMA MUST BE CORRECT - migrations must be run manually at deploy time
-        # If this fails with UndefinedColumnError, migrations need to be run
-        try:
-            result = await db.execute(query.offset(skip).limit(limit))
-            prospects = result.scalars().all()
-        except Exception as query_err:
-            error_str = str(query_err).lower()
-            if "undefinedcolumn" in error_str or "does not exist" in error_str or "bio_text" in error_str:
-                logger.error(f"❌ [LEADS] Schema mismatch detected: {query_err}")
-                await db.rollback()
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Database schema mismatch: Missing required columns. Please run migrations: 'alembic upgrade head' or use the /api/health/migrate endpoint. Error: {str(query_err)}"
-                )
-            raise  # Re-raise other errors
-        
-        logger.info(f"📊 [LEADS] QUERY RESULT: Found {len(prospects)} prospects from database query (total available: {total})")
-        
-        # CRITICAL: Verify data integrity - total must match actual data
-        if total > 0 and len(prospects) == 0:
-            logger.error(f"❌ [LEADS] DATA INTEGRITY VIOLATION: total={total} but query returned 0 rows")
-            await db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Data integrity violation: COUNT query returned {total} but SELECT query returned 0 rows. This indicates a schema mismatch or query error. Ensure migrations have run successfully."
-            )
-        
         # Safely convert prospects to response, handling NULL draft fields and missing columns
         prospect_responses = []
         for p in prospects:
