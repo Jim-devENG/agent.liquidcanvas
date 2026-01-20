@@ -534,21 +534,23 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   try {
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
-      {/* VERSION 2.1 INDICATOR - VISIBLE ON PAGE */}
+      {/* VERSION 2.1 INDICATOR - VISIBLE ON PAGE - MUST BE VISIBLE */}
       <div style={{ 
         backgroundColor: '#9333ea', 
         color: 'white', 
-        padding: '15px', 
-        fontSize: '16px', 
+        padding: '20px', 
+        fontSize: '20px', 
         fontWeight: 'bold',
-        marginBottom: '15px',
+        marginBottom: '20px',
         textAlign: 'center',
-        border: '3px solid #7e22ce',
-        borderRadius: '8px',
-        zIndex: 9999,
-        position: 'relative'
+        border: '5px solid #7e22ce',
+        borderRadius: '10px',
+        zIndex: 99999,
+        position: 'relative',
+        boxShadow: '0 0 20px rgba(147, 51, 234, 0.5)'
       }}>
-        ✅ VERSION 2.1 LOADED - Migrate Categories Button Available Below
+        🚀🚀🚀 VERSION 2.1 LOADED 🚀🚀🚀<br/>
+        Migrate Categories Button Should Be Visible Below!
       </div>
       <div className="flex items-center justify-between mb-4">
         <div>
