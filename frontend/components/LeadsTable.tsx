@@ -40,14 +40,12 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isMigratingCategories, setIsMigratingCategories] = useState(false)
-
-  // Available categories
-  const availableCategories = [
+  const [availableCategories, setAvailableCategories] = useState<string[]>([
     'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
     'Holidays', 'Famous Quotes', 'Home Decor', 
     'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
     'Parenting', 'NFTs', 'Museum'
-  ]
+  ])
 
   const loadProspects = async () => {
     try {
@@ -155,6 +153,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   useEffect(() => {
+    loadCategories() // Load categories first, then load prospects
     let abortController = new AbortController()
     let debounceTimeout: NodeJS.Timeout | null = null
     
@@ -489,6 +488,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         .join(', ')
       
       setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''} - Refreshing...`)
+      
+      // Reload categories after migration to reflect new category names in filter dropdown
+      await loadCategories()
       
       // Reset to first page
       setSkip(0)

@@ -35,6 +35,53 @@ load_dotenv()
 router = APIRouter()
 
 
+@router.get("/categories")
+async def get_available_categories(
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Get unique categories from prospects in the database.
+    
+    This endpoint returns all unique discovery_category values that exist in the database.
+    Useful for populating filter dropdowns dynamically based on actual data.
+    
+    After migrating categories, this endpoint will automatically return the new category names.
+    """
+    try:
+        # Get unique categories from prospects
+        result = await db.execute(
+            select(Prospect.discovery_category)
+            .where(Prospect.discovery_category.isnot(None))
+            .distinct()
+            .order_by(Prospect.discovery_category)
+        )
+        categories = [row[0] for row in result.all() if row[0]]
+        
+        # Also include standard categories that might not have records yet
+        # This ensures the dropdown always has all valid options
+        standard_categories = [
+            'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 
+            'Childhood Development', 'Holidays', 'Famous Quotes', 'Home Decor', 
+            'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
+            'Parenting', 'NFTs', 'Museum'
+        ]
+        
+        # Combine and deduplicate
+        all_categories = sorted(list(set(categories + standard_categories)))
+        
+        logger.info(f"📊 [CATEGORIES] Returning {len(all_categories)} unique categories (found {len(categories)} in DB)")
+        
+        return {
+            "categories": all_categories,
+            "count": len(all_categories),
+            "from_database": len(categories)
+        }
+    except Exception as e:
+        logger.error(f"❌ [CATEGORIES] Failed to get categories: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get categories: {str(e)}")
+
+
 @router.post("/enrich/direct")
 async def enrich_direct(
     domain: str,

@@ -617,6 +617,23 @@ export async function listLeads(
   }
 }
 
+export interface CategoriesResponse {
+  categories: string[]
+  count: number
+  from_database: number
+}
+
+export async function getAvailableCategories(): Promise<CategoriesResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/categories`, {
+    method: 'GET',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get categories' }))
+    throw new Error(error.detail || 'Failed to get categories')
+  }
+  return res.json()
+}
+
 export async function listScrapedEmails(
   skip = 0,
   limit = 50,
