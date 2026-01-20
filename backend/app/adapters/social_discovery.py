@@ -405,12 +405,25 @@ class InstagramDiscoveryAdapter:
             search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
             search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
+            logger.info(f"📊 [INSTAGRAM DISCOVERY] Built {len(search_queries)} search queries")
+            
+            queries_executed = 0
+            queries_successful = 0
+            total_results_found = 0
+            profiles_extracted = 0
+            
             for query in search_queries:
                 if len(prospects) >= max_results:
+                    logger.info(f"✅ [INSTAGRAM DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
+                    queries_executed += 1
+                    logger.info(f"🔍 [INSTAGRAM DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}'")
+                    
                     location_code = client.get_location_code(locations[0] if locations else "usa")
+                    logger.debug(f"📍 [INSTAGRAM DISCOVERY] Using location code {location_code} for '{locations[0] if locations else 'usa'}'")
+                    
                     # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
                         keyword=query,
@@ -418,43 +431,80 @@ class InstagramDiscoveryAdapter:
                         depth=200  # DEEP SEARCH: Increased from 100 to 200 for maximum depth - search entire internet
                     )
                     
-                    if serp_results.get("success") and serp_results.get("results"):
-                        for result in serp_results["results"]:
-                            url = result.get("url", "")
-                            if "instagram.com/" in url and "/p/" not in url and "/reel/" not in url:
-                                # Extract username from URL
-                                username = url.split("instagram.com/")[-1].split("/")[0].split("?")[0]
+                    logger.info(f"📥 [INSTAGRAM DISCOVERY] Query result - success: {serp_results.get('success')}, results count: {len(serp_results.get('results', []))}")
+                    
+                    if serp_results.get("success"):
+                        results_list = serp_results.get("results", [])
+                        total_results_found += len(results_list)
+                        queries_successful += 1
+                        
+                        if results_list:
+                            logger.info(f"✅ [INSTAGRAM DISCOVERY] Found {len(results_list)} results for query '{query}'")
+                            
+                            for result in results_list:
+                                url = result.get("url", "")
+                                logger.debug(f"🔗 [INSTAGRAM DISCOVERY] Checking URL: {url}")
                                 
-                                # Skip if we already have this username
-                                if any(p.username == username for p in prospects):
-                                    continue
-                                
-                                prospect = Prospect(
-                                    id=uuid.uuid4(),
-                                    source_type='social',
-                                    source_platform='instagram',
-                                    domain=f"instagram.com/{username}",
-                                    page_url=url,
-                                    page_title=result.get("title", f"Instagram Profile: {username}"),
-                                    display_name=result.get("title", username),
-                                    username=username,
-                                    profile_url=url,
-                                    discovery_status='DISCOVERED',
-                                    scrape_status='DISCOVERED',
-                                    approval_status='PENDING',
-                                    discovery_category=categories[0] if categories else None,
-                                    discovery_location=locations[0] if locations else None,
-                                    # Set default follower count and engagement rate
-                                    follower_count=1000,  # Default to pass qualification
-                                    engagement_rate=2.5,  # Default to pass Instagram minimum (2.0%)
-                                )
-                                prospects.append(prospect)
-                                
-                                if len(prospects) >= max_results:
-                                    break
+                                # More lenient URL matching - accept any instagram.com URL that's not a post/reel/story
+                                if "instagram.com/" in url:
+                                    # Skip posts, reels, stories, and other non-profile URLs
+                                    if any(skip in url for skip in ["/p/", "/reel/", "/stories/", "/tv/", "/explore/", "/accounts/", "/direct/"]):
+                                        logger.debug(f"⏭️  [INSTAGRAM DISCOVERY] Skipping non-profile URL: {url}")
+                                        continue
+                                    
+                                    # Extract username from URL - handle various formats
+                                    url_parts = url.split("instagram.com/")[-1].split("/")[0].split("?")[0]
+                                    username = url_parts.strip()
+                                    
+                                    # Skip empty or invalid usernames
+                                    if not username or len(username) < 1:
+                                        logger.debug(f"⏭️  [INSTAGRAM DISCOVERY] Skipping invalid username from URL: {url}")
+                                        continue
+                                    
+                                    # Skip if we already have this username
+                                    if any(p.username == username for p in prospects):
+                                        logger.debug(f"⏭️  [INSTAGRAM DISCOVERY] Skipping duplicate username: {username}")
+                                        continue
+                                    
+                                    logger.info(f"✅ [INSTAGRAM DISCOVERY] Found Instagram profile: {username} - {result.get('title', 'No title')}")
+                                    
+                                    prospect = Prospect(
+                                        id=uuid.uuid4(),
+                                        source_type='social',
+                                        source_platform='instagram',
+                                        domain=f"instagram.com/{username}",
+                                        page_url=url,
+                                        page_title=result.get("title", f"Instagram Profile: {username}"),
+                                        display_name=result.get("title", username),
+                                        username=username,
+                                        profile_url=url,
+                                        discovery_status='DISCOVERED',
+                                        scrape_status='DISCOVERED',
+                                        approval_status='PENDING',
+                                        discovery_category=categories[0] if categories else None,
+                                        discovery_location=locations[0] if locations else None,
+                                        # Set default follower count and engagement rate
+                                        follower_count=1000,  # Default to pass qualification
+                                        engagement_rate=2.5,  # Default to pass Instagram minimum (2.0%)
+                                    )
+                                    prospects.append(prospect)
+                                    profiles_extracted += 1
+                                    
+                                    if len(prospects) >= max_results:
+                                        logger.info(f"✅ [INSTAGRAM DISCOVERY] Reached max_results ({max_results})")
+                                        break
+                                else:
+                                    logger.debug(f"⏭️  [INSTAGRAM DISCOVERY] URL doesn't match Instagram pattern: {url}")
+                        else:
+                            logger.warning(f"⚠️  [INSTAGRAM DISCOVERY] Query '{query}' returned no results")
+                    else:
+                        error_msg = serp_results.get("error", "Unknown error")
+                        logger.warning(f"⚠️  [INSTAGRAM DISCOVERY] Query '{query}' failed: {error_msg}")
                 except Exception as query_error:
-                    logger.warning(f"⚠️  [INSTAGRAM DISCOVERY] Query '{query}' failed: {query_error}. Continuing with next query.")
+                    logger.error(f"❌ [INSTAGRAM DISCOVERY] Query '{query}' failed with exception: {query_error}", exc_info=True)
                     continue
+            
+            logger.info(f"📊 [INSTAGRAM DISCOVERY] Summary - Queries executed: {queries_executed}, Successful: {queries_successful}, Total results: {total_results_found}, Profiles extracted: {profiles_extracted}")
             
             logger.info(f"✅ [INSTAGRAM DISCOVERY] Discovered {len(prospects)} profiles via DataForSEO")
             return prospects[:max_results]
