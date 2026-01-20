@@ -15,6 +15,7 @@ import WebsitesTable from '@/components/WebsitesTable'
 import SystemStatus from '@/components/SystemStatus'
 import Sidebar from '@/components/Sidebar'
 import Pipeline from '@/components/Pipeline'
+import SettingsContent from '@/components/SettingsContent'
 import { getStats, listJobs } from '@/lib/api'
 import type { Stats, Job } from '@/lib/api'
 import { 
@@ -323,19 +324,8 @@ export default function Dashboard() {
         )}
 
         {activeTab === 'settings' && (
-          <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-sm border border-gray-200 p-3">
-            <div className="text-center py-4">
-              <Settings className="w-8 h-8 text-olive-600 mx-auto mb-2" />
-              <h2 className="text-sm font-bold text-gray-900 mb-1">System Settings</h2>
-              <p className="text-xs text-gray-600 mb-3">Configure and test all API integrations</p>
-              <Link
-                href="/settings"
-                className="inline-flex items-center px-3 py-1.5 bg-olive-600 text-white rounded-md hover:bg-olive-700 transition-colors text-xs font-semibold"
-              >
-                <Settings className="w-3 h-3 mr-1" />
-                Open Settings Page
-              </Link>
-            </div>
+          <div className="max-w-7xl mx-auto">
+            <SettingsContent />
           </div>
         )}
 
