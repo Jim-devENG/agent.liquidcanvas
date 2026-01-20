@@ -43,8 +43,8 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
 
   // Available categories
   const availableCategories = [
-    'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development', 
-    'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor', 
+    'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
+    'Holidays', 'Famous Quotes', 'Home Decor', 
     'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
     'Parenting', 'NFTs', 'Museum'
   ]
