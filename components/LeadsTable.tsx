@@ -10,10 +10,12 @@ interface LeadsTableProps {
   emailsOnly?: boolean
 }
 
-// VERSION: 2.0 - Migrate Categories Button Added - Build: 2026-01-20-03:45
+// VERSION: 2.1 - Migrate Categories Button Added - Build: 2026-01-20-04:00
 export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
-  // CRITICAL: Log version on component mount
-  console.log('🚀 [LEADS TABLE] Component version 2.0 loaded - Migrate Categories button should be visible!')
+  // CRITICAL: Log version on component mount - MULTIPLE LOGS TO ENSURE VISIBILITY
+  console.log('🚀🚀🚀 [LEADS TABLE] Component version 2.1 loaded - Migrate Categories button should be visible!')
+  console.log('🚀🚀🚀 [LEADS TABLE] If you see this, the NEW version is loaded!')
+  console.warn('🚀🚀🚀 [LEADS TABLE] VERSION 2.1 - MIGRATE CATEGORIES BUTTON EXISTS')
   
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
