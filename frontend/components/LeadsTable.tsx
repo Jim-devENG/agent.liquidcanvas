@@ -18,10 +18,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   console.warn('🚀🚀🚀 [LEADS TABLE] VERSION 2.2 - MIGRATE CATEGORIES BUTTON EXISTS - CACHE BUSTED')
   
   // Force component to re-render by adding a timestamp
-  const buildTimestamp = '2026-01-20-04:25:00'
   if (typeof window !== 'undefined') {
     (window as any).__LEADS_TABLE_VERSION__ = '2.2'
-    (window as any).__LEADS_TABLE_BUILD_TIME__ = buildTimestamp
+    (window as any).__LEADS_TABLE_BUILD_TIME__ = '2026-01-20-04:25:00'
   }
   
   const [prospects, setProspects] = useState<Prospect[]>([])
