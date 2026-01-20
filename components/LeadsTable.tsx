@@ -519,6 +519,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     console.log('🔍 [LEADS TABLE] handleMigrateCategories function exists:', typeof handleMigrateCategories === 'function')
   }, [isMigratingCategories, handleMigrateCategories])
 
+  // Debug: Force log on every render
+  console.log('🔍 [LEADS TABLE] Component rendering, Migrate Categories button should be visible')
+
   return (
     <div className="glass rounded-xl shadow-lg border border-white/20 p-3 animate-fade-in">
       <div className="flex items-center justify-between mb-4">
