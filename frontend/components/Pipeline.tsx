@@ -604,6 +604,18 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
     setSuccess(false)
 
     try {
+      // Debug: make it obvious what we are actually submitting (helps verify "selected all" runs)
+      // Note: This is UI-only; backend already supports arrays.
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔍 [WEBSITE DISCOVERY] Submitting discovery request:', {
+          categories_count: categories.length,
+          locations_count: locations.length,
+          categories,
+          locations,
+          keywords: keywords.trim() || '(none)',
+          max_results: 100,
+        })
+      }
       await pipelineDiscover({
         categories,
         locations,
@@ -643,12 +655,53 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
           ×
         </button>
       </div>
+
+      <div className="mb-3 flex items-center justify-between text-xs">
+        <div className="text-gray-600">
+          Selected: <span className="font-semibold text-gray-800">{categories.length}</span> categories,
+          <span className="ml-1 font-semibold text-gray-800">{locations.length}</span> locations
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setCategories(availableCategories)
+            setLocations(availableLocations)
+            setError(null)
+          }}
+          className="px-2 py-1 rounded-md border border-olive-200 bg-white hover:bg-olive-50 text-olive-700 font-semibold"
+        >
+          Select all
+        </button>
+      </div>
       
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">
             Categories (Required) *
           </label>
+          <div className="flex items-center justify-end gap-2 mb-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setCategories(availableCategories)
+                setError(null)
+              }}
+              className="text-[11px] font-semibold text-olive-700 hover:text-olive-800"
+            >
+              Select all
+            </button>
+            <span className="text-gray-300">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setCategories([])
+                setError(null)
+              }}
+              className="text-[11px] font-semibold text-gray-600 hover:text-gray-800"
+            >
+              Clear
+            </button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
             {availableCategories.map(cat => (
               <label key={cat} className="flex items-center space-x-1.5 p-1.5 border border-olive-200 rounded hover:bg-olive-50 cursor-pointer">
@@ -674,6 +727,29 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
           <label className="block text-xs font-medium text-gray-700 mb-1">
             Locations (Required) *
           </label>
+          <div className="flex items-center justify-end gap-2 mb-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setLocations(availableLocations)
+                setError(null)
+              }}
+              className="text-[11px] font-semibold text-olive-700 hover:text-olive-800"
+            >
+              Select all
+            </button>
+            <span className="text-gray-300">|</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLocations([])
+                setError(null)
+              }}
+              className="text-[11px] font-semibold text-gray-600 hover:text-gray-800"
+            >
+              Clear
+            </button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
             {availableLocations.map(loc => (
               <label key={loc} className="flex items-center space-x-1.5 p-1.5 border border-olive-200 rounded hover:bg-olive-50 cursor-pointer">
