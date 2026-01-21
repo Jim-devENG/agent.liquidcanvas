@@ -74,12 +74,25 @@ class LinkedInDiscoveryAdapter:
             logger.info(f"📋 [LINKEDIN DISCOVERY] Categories: {categories}, Locations: {locations}")
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for profiles
-            # Store queries as tuples (query, location) to track which location each query corresponds to
+            # Store queries as tuples (query, location, category) to track which location/category each query corresponds to
+            # Strategy: Ensure ALL category/location combinations get at least one query before limiting
             search_queries = []
+            seen_queries = set()
             
+            # Essential query pattern - ensure every category/location combination gets at least this one
+            essential_pattern = 'site:linkedin.com/in/ "{category}" "{location}"'
+            
+            # First pass: Ensure at least ONE query for EACH category/location combination
+            for category in categories:
+                for location in locations:
+                    query = essential_pattern.format(category=category, location=location)
+                    if query not in seen_queries:
+                        seen_queries.add(query)
+                        search_queries.append((query, location))
+            
+            # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
             base_patterns = [
-                'site:linkedin.com/in/ "{category}" "{location}"',
                 'site:linkedin.com/in/ {category} {location}',
                 'site:linkedin.com/in/ "{category}" {location}',
                 'site:linkedin.com/in/ {category} "{location}"',
@@ -101,15 +114,23 @@ class LinkedInDiscoveryAdapter:
                 'site:linkedin.com/in/ "{category}" "{location}" company',
             ]
             
-            # Generate queries for each category/location combination
+            # Add variations for each category/location combination
             for category in categories:
                 for location in locations:
                     for pattern in base_patterns:
+                        if len(search_queries) >= 1000:  # Limit total queries
+                            break
                         query = pattern.format(category=category, location=location)
-                        search_queries.append((query, location))  # Store query with its location
+                        if query not in seen_queries:
+                            seen_queries.add(query)
+                            search_queries.append((query, location))
+                    if len(search_queries) >= 1000:
+                        break
+                if len(search_queries) >= 1000:
+                    break
             
             # DEEP SEARCH: Add keyword-based queries with many variations
-            if keywords:
+            if keywords and len(search_queries) < 1000:
                 keyword_patterns = [
                     'site:linkedin.com/in/ "{keyword}" "{category}" "{location}"',
                     'site:linkedin.com/in/ {keyword} {category} {location}',
@@ -133,36 +154,47 @@ class LinkedInDiscoveryAdapter:
                     for category in categories:
                         for location in locations:
                             for pattern in keyword_patterns:
+                                if len(search_queries) >= 1000:
+                                    break
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append((query, location))  # Store query with its location
+                                if query not in seen_queries:
+                                    seen_queries.add(query)
+                                    search_queries.append((query, location))
+                            if len(search_queries) >= 1000:
+                                break
+                        if len(search_queries) >= 1000:
+                            break
+                    if len(search_queries) >= 1000:
+                        break
             
-            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # DEEP SEARCH: Also search without location restrictions for broader coverage (if we have room)
             # Use first location as default for queries without specific location
-            default_location = locations[0] if locations else "usa"
-            for category in categories:
-                no_location_patterns = [
-                    f'site:linkedin.com/in/ "{category}"',
-                    f'site:linkedin.com/in/ {category}',
-                    f'"{category}" site:linkedin.com/in/',
-                    f'{category} site:linkedin.com/in/',
-                    f'site:linkedin.com/in/ "{category}" contact',
-                    f'site:linkedin.com/in/ "{category}" owner',
-                    f'site:linkedin.com/in/ "{category}" founder',
-                    f'site:linkedin.com/in/ "{category}" director',
-                    f'site:linkedin.com/in/ "{category}" artist',
-                    f'site:linkedin.com/in/ "{category}" professional',
-                ]
-                for pattern in no_location_patterns:
-                    search_queries.append((pattern, default_location))  # Store query with default location
+            if len(search_queries) < 1000:
+                default_location = locations[0] if locations else "usa"
+                for category in categories:
+                    if len(search_queries) >= 1000:
+                        break
+                    no_location_patterns = [
+                        f'site:linkedin.com/in/ "{category}"',
+                        f'site:linkedin.com/in/ {category}',
+                        f'"{category}" site:linkedin.com/in/',
+                        f'{category} site:linkedin.com/in/',
+                        f'site:linkedin.com/in/ "{category}" contact',
+                        f'site:linkedin.com/in/ "{category}" owner',
+                        f'site:linkedin.com/in/ "{category}" founder',
+                        f'site:linkedin.com/in/ "{category}" director',
+                        f'site:linkedin.com/in/ "{category}" artist',
+                        f'site:linkedin.com/in/ "{category}" professional',
+                    ]
+                    for pattern in no_location_patterns:
+                        if len(search_queries) >= 1000:
+                            break
+                        if pattern not in seen_queries:
+                            seen_queries.add(pattern)
+                            search_queries.append((pattern, default_location))
             
-            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
-            seen_queries = set()
-            unique_queries = []
-            for query, location in search_queries:
-                if query not in seen_queries:
-                    seen_queries.add(query)
-                    unique_queries.append((query, location))
-            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # Final limit to ensure we don't exceed reasonable bounds
+            search_queries = search_queries[:1000]
             logger.info(f"📊 [LINKEDIN DISCOVERY] Built {len(search_queries)} search queries")
             
             queries_executed = 0
@@ -344,11 +376,24 @@ class InstagramDiscoveryAdapter:
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Instagram profiles
             # Store queries as tuples (query, location) to track which location each query corresponds to
+            # Strategy: Ensure ALL category/location combinations get at least one query before limiting
             search_queries = []
+            seen_queries = set()
             
+            # Essential query pattern - ensure every category/location combination gets at least this one
+            essential_pattern = 'site:instagram.com "{category}" "{location}"'
+            
+            # First pass: Ensure at least ONE query for EACH category/location combination
+            for category in categories:
+                for location in locations:
+                    query = essential_pattern.format(category=category, location=location)
+                    if query not in seen_queries:
+                        seen_queries.add(query)
+                        search_queries.append((query, location))
+            
+            # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
             base_patterns = [
-                'site:instagram.com "{category}" "{location}"',
                 'site:instagram.com {category} {location}',
                 'site:instagram.com "{category}" {location}',
                 'site:instagram.com {category} "{location}"',
@@ -370,15 +415,23 @@ class InstagramDiscoveryAdapter:
                 'site:instagram.com "{category}" "{location}" studio',
             ]
             
-            # Generate queries for each category/location combination
+            # Add variations for each category/location combination
             for category in categories:
                 for location in locations:
                     for pattern in base_patterns:
+                        if len(search_queries) >= 1000:  # Limit total queries
+                            break
                         query = pattern.format(category=category, location=location)
-                        search_queries.append((query, location))  # Store query with its location
+                        if query not in seen_queries:
+                            seen_queries.add(query)
+                            search_queries.append((query, location))
+                    if len(search_queries) >= 1000:
+                        break
+                if len(search_queries) >= 1000:
+                    break
             
             # DEEP SEARCH: Add keyword-based queries with many variations
-            if keywords:
+            if keywords and len(search_queries) < 1000:
                 keyword_patterns = [
                     'site:instagram.com "{keyword}" "{category}" "{location}"',
                     'site:instagram.com {keyword} {category} {location}',
@@ -401,38 +454,49 @@ class InstagramDiscoveryAdapter:
                     for category in categories:
                         for location in locations:
                             for pattern in keyword_patterns:
+                                if len(search_queries) >= 1000:
+                                    break
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append((query, location))  # Store query with its location
+                                if query not in seen_queries:
+                                    seen_queries.add(query)
+                                    search_queries.append((query, location))
+                            if len(search_queries) >= 1000:
+                                break
+                        if len(search_queries) >= 1000:
+                            break
+                    if len(search_queries) >= 1000:
+                        break
             
-            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # DEEP SEARCH: Also search without location restrictions for broader coverage (if we have room)
             # Use first location as default for queries without specific location
-            default_location = locations[0] if locations else "usa"
-            for category in categories:
-                no_location_patterns = [
-                    f'site:instagram.com "{category}"',
-                    f'site:instagram.com {category}',
-                    f'"{category}" site:instagram.com',
-                    f'{category} site:instagram.com',
-                    f'site:instagram.com "{category}" contact',
-                    f'site:instagram.com "{category}" owner',
-                    f'site:instagram.com "{category}" artist',
-                    f'site:instagram.com "{category}" creator',
-                    f'site:instagram.com "{category}" influencer',
-                    f'site:instagram.com "{category}" business',
-                    f'site:instagram.com "{category}" gallery',
-                    f'site:instagram.com "{category}" studio',
-                ]
-                for pattern in no_location_patterns:
-                    search_queries.append((pattern, default_location))  # Store query with default location
+            if len(search_queries) < 1000:
+                default_location = locations[0] if locations else "usa"
+                for category in categories:
+                    if len(search_queries) >= 1000:
+                        break
+                    no_location_patterns = [
+                        f'site:instagram.com "{category}"',
+                        f'site:instagram.com {category}',
+                        f'"{category}" site:instagram.com',
+                        f'{category} site:instagram.com',
+                        f'site:instagram.com "{category}" contact',
+                        f'site:instagram.com "{category}" owner',
+                        f'site:instagram.com "{category}" artist',
+                        f'site:instagram.com "{category}" creator',
+                        f'site:instagram.com "{category}" influencer',
+                        f'site:instagram.com "{category}" business',
+                        f'site:instagram.com "{category}" gallery',
+                        f'site:instagram.com "{category}" studio',
+                    ]
+                    for pattern in no_location_patterns:
+                        if len(search_queries) >= 1000:
+                            break
+                        if pattern not in seen_queries:
+                            seen_queries.add(pattern)
+                            search_queries.append((pattern, default_location))
             
-            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
-            seen_queries = set()
-            unique_queries = []
-            for query, location in search_queries:
-                if query not in seen_queries:
-                    seen_queries.add(query)
-                    unique_queries.append((query, location))
-            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # Final limit to ensure we don't exceed reasonable bounds
+            search_queries = search_queries[:1000]
             
             logger.info(f"📊 [INSTAGRAM DISCOVERY] Built {len(search_queries)} search queries")
             
@@ -631,11 +695,24 @@ class TikTokDiscoveryAdapter:
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for TikTok profiles
             # Store queries as tuples (query, location) to track which location each query corresponds to
+            # Strategy: Ensure ALL category/location combinations get at least one query before limiting
             search_queries = []
+            seen_queries = set()
             
+            # Essential query pattern - ensure every category/location combination gets at least this one
+            essential_pattern = 'site:tiktok.com/@ "{category}" "{location}"'
+            
+            # First pass: Ensure at least ONE query for EACH category/location combination
+            for category in categories:
+                for location in locations:
+                    query = essential_pattern.format(category=category, location=location)
+                    if query not in seen_queries:
+                        seen_queries.add(query)
+                        search_queries.append((query, location))
+            
+            # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
             base_patterns = [
-                'site:tiktok.com/@ "{category}" "{location}"',
                 'site:tiktok.com/@ {category} {location}',
                 'site:tiktok.com/@ "{category}" {location}',
                 'site:tiktok.com/@ {category} "{location}"',
@@ -654,15 +731,23 @@ class TikTokDiscoveryAdapter:
                 'site:tiktok.com/@ "{category}" "{location}" channel',
             ]
             
-            # Generate queries for each category/location combination
+            # Add variations for each category/location combination
             for category in categories:
                 for location in locations:
                     for pattern in base_patterns:
+                        if len(search_queries) >= 1000:  # Limit total queries
+                            break
                         query = pattern.format(category=category, location=location)
-                        search_queries.append((query, location))  # Store query with its location
+                        if query not in seen_queries:
+                            seen_queries.add(query)
+                            search_queries.append((query, location))
+                    if len(search_queries) >= 1000:
+                        break
+                if len(search_queries) >= 1000:
+                    break
             
             # DEEP SEARCH: Add keyword-based queries with many variations
-            if keywords:
+            if keywords and len(search_queries) < 1000:
                 keyword_patterns = [
                     'site:tiktok.com/@ "{keyword}" "{category}" "{location}"',
                     'site:tiktok.com/@ {keyword} {category} {location}',
@@ -682,36 +767,47 @@ class TikTokDiscoveryAdapter:
                     for category in categories:
                         for location in locations:
                             for pattern in keyword_patterns:
+                                if len(search_queries) >= 1000:
+                                    break
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append((query, location))  # Store query with its location
+                                if query not in seen_queries:
+                                    seen_queries.add(query)
+                                    search_queries.append((query, location))
+                            if len(search_queries) >= 1000:
+                                break
+                        if len(search_queries) >= 1000:
+                            break
+                    if len(search_queries) >= 1000:
+                        break
             
-            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # DEEP SEARCH: Also search without location restrictions for broader coverage (if we have room)
             # Use first location as default for queries without specific location
-            default_location = locations[0] if locations else "usa"
-            for category in categories:
-                no_location_patterns = [
-                    f'site:tiktok.com/@ "{category}"',
-                    f'site:tiktok.com/@ {category}',
-                    f'"{category}" site:tiktok.com/@',
-                    f'{category} site:tiktok.com/@',
-                    f'site:tiktok.com/@ "{category}" creator',
-                    f'site:tiktok.com/@ "{category}" influencer',
-                    f'site:tiktok.com/@ "{category}" artist',
-                    f'site:tiktok.com/@ "{category}" business',
-                    f'site:tiktok.com/@ "{category}" account',
-                    f'site:tiktok.com/@ "{category}" profile',
-                ]
-                for pattern in no_location_patterns:
-                    search_queries.append((pattern, default_location))  # Store query with default location
+            if len(search_queries) < 1000:
+                default_location = locations[0] if locations else "usa"
+                for category in categories:
+                    if len(search_queries) >= 1000:
+                        break
+                    no_location_patterns = [
+                        f'site:tiktok.com/@ "{category}"',
+                        f'site:tiktok.com/@ {category}',
+                        f'"{category}" site:tiktok.com/@',
+                        f'{category} site:tiktok.com/@',
+                        f'site:tiktok.com/@ "{category}" creator',
+                        f'site:tiktok.com/@ "{category}" influencer',
+                        f'site:tiktok.com/@ "{category}" artist',
+                        f'site:tiktok.com/@ "{category}" business',
+                        f'site:tiktok.com/@ "{category}" account',
+                        f'site:tiktok.com/@ "{category}" profile',
+                    ]
+                    for pattern in no_location_patterns:
+                        if len(search_queries) >= 1000:
+                            break
+                        if pattern not in seen_queries:
+                            seen_queries.add(pattern)
+                            search_queries.append((pattern, default_location))
             
-            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
-            seen_queries = set()
-            unique_queries = []
-            for query, location in search_queries:
-                if query not in seen_queries:
-                    seen_queries.add(query)
-                    unique_queries.append((query, location))
-            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # Final limit to ensure we don't exceed reasonable bounds
+            search_queries = search_queries[:1000]
             
             logger.info(f"📊 [TIKTOK DISCOVERY] Built {len(search_queries)} search queries")
             
@@ -906,11 +1002,24 @@ class FacebookDiscoveryAdapter:
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Facebook pages
             # Store queries as tuples (query, location) to track which location each query corresponds to
+            # Strategy: Ensure ALL category/location combinations get at least one query before limiting
             search_queries = []
+            seen_queries = set()
             
+            # Essential query pattern - ensure every category/location combination gets at least this one
+            essential_pattern = 'site:facebook.com "{category}" "{location}"'
+            
+            # First pass: Ensure at least ONE query for EACH category/location combination
+            for category in categories:
+                for location in locations:
+                    query = essential_pattern.format(category=category, location=location)
+                    if query not in seen_queries:
+                        seen_queries.add(query)
+                        search_queries.append((query, location))
+            
+            # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
             base_patterns = [
-                'site:facebook.com "{category}" "{location}"',
                 'site:facebook.com {category} {location}',
                 'site:facebook.com "{category}" {location}',
                 'site:facebook.com {category} "{location}"',
@@ -932,15 +1041,23 @@ class FacebookDiscoveryAdapter:
                 'site:facebook.com "{category}" "{location}" studio',
             ]
             
-            # Generate queries for each category/location combination
+            # Add variations for each category/location combination
             for category in categories:
                 for location in locations:
                     for pattern in base_patterns:
+                        if len(search_queries) >= 1000:  # Limit total queries
+                            break
                         query = pattern.format(category=category, location=location)
-                        search_queries.append((query, location))  # Store query with its location
+                        if query not in seen_queries:
+                            seen_queries.add(query)
+                            search_queries.append((query, location))
+                    if len(search_queries) >= 1000:
+                        break
+                if len(search_queries) >= 1000:
+                    break
             
             # DEEP SEARCH: Add keyword-based queries with many variations
-            if keywords:
+            if keywords and len(search_queries) < 1000:
                 keyword_patterns = [
                     'site:facebook.com "{keyword}" "{category}" "{location}"',
                     'site:facebook.com {keyword} {category} {location}',
@@ -962,38 +1079,49 @@ class FacebookDiscoveryAdapter:
                     for category in categories:
                         for location in locations:
                             for pattern in keyword_patterns:
+                                if len(search_queries) >= 1000:
+                                    break
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append((query, location))  # Store query with its location
+                                if query not in seen_queries:
+                                    seen_queries.add(query)
+                                    search_queries.append((query, location))
+                            if len(search_queries) >= 1000:
+                                break
+                        if len(search_queries) >= 1000:
+                            break
+                    if len(search_queries) >= 1000:
+                        break
             
-            # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # DEEP SEARCH: Also search without location restrictions for broader coverage (if we have room)
             # Use first location as default for queries without specific location
-            default_location = locations[0] if locations else "usa"
-            for category in categories:
-                no_location_patterns = [
-                    f'site:facebook.com "{category}"',
-                    f'site:facebook.com {category}',
-                    f'"{category}" site:facebook.com',
-                    f'{category} site:facebook.com',
-                    f'site:facebook.com "{category}" page',
-                    f'site:facebook.com "{category}" business',
-                    f'site:facebook.com "{category}" official',
-                    f'site:facebook.com "{category}" profile',
-                    f'site:facebook.com "{category}" owner',
-                    f'site:facebook.com "{category}" artist',
-                    f'site:facebook.com "{category}" gallery',
-                    f'site:facebook.com "{category}" studio',
-                ]
-                for pattern in no_location_patterns:
-                    search_queries.append((pattern, default_location))  # Store query with default location
+            if len(search_queries) < 1000:
+                default_location = locations[0] if locations else "usa"
+                for category in categories:
+                    if len(search_queries) >= 1000:
+                        break
+                    no_location_patterns = [
+                        f'site:facebook.com "{category}"',
+                        f'site:facebook.com {category}',
+                        f'"{category}" site:facebook.com',
+                        f'{category} site:facebook.com',
+                        f'site:facebook.com "{category}" page',
+                        f'site:facebook.com "{category}" business',
+                        f'site:facebook.com "{category}" official',
+                        f'site:facebook.com "{category}" profile',
+                        f'site:facebook.com "{category}" owner',
+                        f'site:facebook.com "{category}" artist',
+                        f'site:facebook.com "{category}" gallery',
+                        f'site:facebook.com "{category}" studio',
+                    ]
+                    for pattern in no_location_patterns:
+                        if len(search_queries) >= 1000:
+                            break
+                        if pattern not in seen_queries:
+                            seen_queries.add(pattern)
+                            search_queries.append((pattern, default_location))
             
-            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
-            seen_queries = set()
-            unique_queries = []
-            for query, location in search_queries:
-                if query not in seen_queries:
-                    seen_queries.add(query)
-                    unique_queries.append((query, location))
-            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # Final limit to ensure we don't exceed reasonable bounds
+            search_queries = search_queries[:1000]
             
             logger.info(f"📊 [FACEBOOK DISCOVERY] Built {len(search_queries)} search queries")
             
