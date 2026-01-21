@@ -74,6 +74,7 @@ class LinkedInDiscoveryAdapter:
             logger.info(f"📋 [LINKEDIN DISCOVERY] Categories: {categories}, Locations: {locations}")
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for profiles
+            # Store queries as tuples (query, location) to track which location each query corresponds to
             search_queries = []
             
             # Base query patterns - many variations to search deeper
@@ -105,7 +106,7 @@ class LinkedInDiscoveryAdapter:
                 for location in locations:
                     for pattern in base_patterns:
                         query = pattern.format(category=category, location=location)
-                        search_queries.append(query)
+                        search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
@@ -133,9 +134,11 @@ class LinkedInDiscoveryAdapter:
                         for location in locations:
                             for pattern in keyword_patterns:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append(query)
+                                search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # Use first location as default for queries without specific location
+            default_location = locations[0] if locations else "usa"
             for category in categories:
                 no_location_patterns = [
                     f'site:linkedin.com/in/ "{category}"',
@@ -149,29 +152,34 @@ class LinkedInDiscoveryAdapter:
                     f'site:linkedin.com/in/ "{category}" artist',
                     f'site:linkedin.com/in/ "{category}" professional',
                 ]
-                search_queries.extend(no_location_patterns)
+                for pattern in no_location_patterns:
+                    search_queries.append((pattern, default_location))  # Store query with default location
             
-            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
-            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
-            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
+            seen_queries = set()
+            unique_queries = []
+            for query, location in search_queries:
+                if query not in seen_queries:
+                    seen_queries.add(query)
+                    unique_queries.append((query, location))
+            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             logger.info(f"📊 [LINKEDIN DISCOVERY] Built {len(search_queries)} search queries")
             
             queries_executed = 0
             queries_successful = 0
             total_results_found = 0
             
-            for query in search_queries:
+            for query, query_location in search_queries:
                 if len(prospects) >= max_results:
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [LINKEDIN DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}'")
+                    logger.info(f"🔍 [LINKEDIN DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
                     
-                    # Get location code for DataForSEO - use the location from the query if possible
-                    location_for_code = locations[0] if locations else "usa"
-                    location_code = client.get_location_code(location_for_code)
-                    logger.debug(f"📍 [LINKEDIN DISCOVERY] Using location code {location_code} for '{location_for_code}'")
+                    # Get location code for DataForSEO - use the location from the query
+                    location_code = client.get_location_code(query_location)
+                    logger.debug(f"📍 [LINKEDIN DISCOVERY] Using location code {location_code} for '{query_location}'")
                     
                     # DEEP SEARCH: Search using DataForSEO with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
@@ -219,7 +227,7 @@ class LinkedInDiscoveryAdapter:
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
                                         discovery_category=categories[0] if categories else None,
-                                        discovery_location=locations[0] if locations else None,
+                                        discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate (will be updated later if available)
                                         follower_count=1000,  # Default to pass qualification
                                         engagement_rate=1.5,  # Default to pass LinkedIn minimum (1.0%)
@@ -335,6 +343,7 @@ class InstagramDiscoveryAdapter:
             logger.info("🔍 [INSTAGRAM DISCOVERY] Using DataForSEO to search for Instagram profiles")
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Instagram profiles
+            # Store queries as tuples (query, location) to track which location each query corresponds to
             search_queries = []
             
             # Base query patterns - many variations to search deeper
@@ -366,7 +375,7 @@ class InstagramDiscoveryAdapter:
                 for location in locations:
                     for pattern in base_patterns:
                         query = pattern.format(category=category, location=location)
-                        search_queries.append(query)
+                        search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
@@ -393,9 +402,11 @@ class InstagramDiscoveryAdapter:
                         for location in locations:
                             for pattern in keyword_patterns:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append(query)
+                                search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # Use first location as default for queries without specific location
+            default_location = locations[0] if locations else "usa"
             for category in categories:
                 no_location_patterns = [
                     f'site:instagram.com "{category}"',
@@ -411,11 +422,17 @@ class InstagramDiscoveryAdapter:
                     f'site:instagram.com "{category}" gallery',
                     f'site:instagram.com "{category}" studio',
                 ]
-                search_queries.extend(no_location_patterns)
+                for pattern in no_location_patterns:
+                    search_queries.append((pattern, default_location))  # Store query with default location
             
-            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
-            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
-            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
+            seen_queries = set()
+            unique_queries = []
+            for query, location in search_queries:
+                if query not in seen_queries:
+                    seen_queries.add(query)
+                    unique_queries.append((query, location))
+            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             logger.info(f"📊 [INSTAGRAM DISCOVERY] Built {len(search_queries)} search queries")
             
@@ -424,17 +441,18 @@ class InstagramDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query in search_queries:
+            for query, query_location in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [INSTAGRAM DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [INSTAGRAM DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}'")
+                    logger.info(f"🔍 [INSTAGRAM DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
                     
-                    location_code = client.get_location_code(locations[0] if locations else "usa")
-                    logger.debug(f"📍 [INSTAGRAM DISCOVERY] Using location code {location_code} for '{locations[0] if locations else 'usa'}'")
+                    # Get location code for DataForSEO - use the location from the query
+                    location_code = client.get_location_code(query_location)
+                    logger.debug(f"📍 [INSTAGRAM DISCOVERY] Using location code {location_code} for '{query_location}'")
                     
                     # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
@@ -502,7 +520,7 @@ class InstagramDiscoveryAdapter:
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
                                         discovery_category=categories[0] if categories else None,
-                                        discovery_location=locations[0] if locations else None,
+                                        discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
                                         engagement_rate=2.5,  # Default to pass Instagram minimum (2.0%)
@@ -612,6 +630,7 @@ class TikTokDiscoveryAdapter:
             logger.info("🔍 [TIKTOK DISCOVERY] Using DataForSEO to search for TikTok profiles")
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for TikTok profiles
+            # Store queries as tuples (query, location) to track which location each query corresponds to
             search_queries = []
             
             # Base query patterns - many variations to search deeper
@@ -640,7 +659,7 @@ class TikTokDiscoveryAdapter:
                 for location in locations:
                     for pattern in base_patterns:
                         query = pattern.format(category=category, location=location)
-                        search_queries.append(query)
+                        search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
@@ -664,9 +683,11 @@ class TikTokDiscoveryAdapter:
                         for location in locations:
                             for pattern in keyword_patterns:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append(query)
+                                search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # Use first location as default for queries without specific location
+            default_location = locations[0] if locations else "usa"
             for category in categories:
                 no_location_patterns = [
                     f'site:tiktok.com/@ "{category}"',
@@ -680,11 +701,17 @@ class TikTokDiscoveryAdapter:
                     f'site:tiktok.com/@ "{category}" account',
                     f'site:tiktok.com/@ "{category}" profile',
                 ]
-                search_queries.extend(no_location_patterns)
+                for pattern in no_location_patterns:
+                    search_queries.append((pattern, default_location))  # Store query with default location
             
-            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
-            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
-            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
+            seen_queries = set()
+            unique_queries = []
+            for query, location in search_queries:
+                if query not in seen_queries:
+                    seen_queries.add(query)
+                    unique_queries.append((query, location))
+            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             logger.info(f"📊 [TIKTOK DISCOVERY] Built {len(search_queries)} search queries")
             
@@ -693,17 +720,18 @@ class TikTokDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query in search_queries:
+            for query, query_location in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [TIKTOK DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [TIKTOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}'")
+                    logger.info(f"🔍 [TIKTOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
                     
-                    location_code = client.get_location_code(locations[0] if locations else "usa")
-                    logger.debug(f"📍 [TIKTOK DISCOVERY] Using location code {location_code} for '{locations[0] if locations else 'usa'}'")
+                    # Get location code for DataForSEO - use the location from the query
+                    location_code = client.get_location_code(query_location)
+                    logger.debug(f"📍 [TIKTOK DISCOVERY] Using location code {location_code} for '{query_location}'")
                     
                     # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
@@ -768,7 +796,7 @@ class TikTokDiscoveryAdapter:
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
                                         discovery_category=categories[0] if categories else None,
-                                        discovery_location=locations[0] if locations else None,
+                                        discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
                                         engagement_rate=3.5,  # Default to pass TikTok minimum (3.0%)
@@ -877,6 +905,7 @@ class FacebookDiscoveryAdapter:
             logger.info("🔍 [FACEBOOK DISCOVERY] Using DataForSEO to search for Facebook pages")
             
             # DEEP SEARCH: Build comprehensive query variations - search the entire internet for Facebook pages
+            # Store queries as tuples (query, location) to track which location each query corresponds to
             search_queries = []
             
             # Base query patterns - many variations to search deeper
@@ -908,7 +937,7 @@ class FacebookDiscoveryAdapter:
                 for location in locations:
                     for pattern in base_patterns:
                         query = pattern.format(category=category, location=location)
-                        search_queries.append(query)
+                        search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Add keyword-based queries with many variations
             if keywords:
@@ -934,9 +963,11 @@ class FacebookDiscoveryAdapter:
                         for location in locations:
                             for pattern in keyword_patterns:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
-                                search_queries.append(query)
+                                search_queries.append((query, location))  # Store query with its location
             
             # DEEP SEARCH: Also search without location restrictions for broader coverage
+            # Use first location as default for queries without specific location
+            default_location = locations[0] if locations else "usa"
             for category in categories:
                 no_location_patterns = [
                     f'site:facebook.com "{category}"',
@@ -952,11 +983,17 @@ class FacebookDiscoveryAdapter:
                     f'site:facebook.com "{category}" gallery',
                     f'site:facebook.com "{category}" studio',
                 ]
-                search_queries.extend(no_location_patterns)
+                for pattern in no_location_patterns:
+                    search_queries.append((pattern, default_location))  # Store query with default location
             
-            # DEEP SEARCH: Remove duplicates and increase limit to 1000+ queries for maximum depth
-            search_queries = list(dict.fromkeys(search_queries))  # Remove duplicates while preserving order
-            search_queries = search_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
+            # DEEP SEARCH: Remove duplicates while preserving order (based on query string)
+            seen_queries = set()
+            unique_queries = []
+            for query, location in search_queries:
+                if query not in seen_queries:
+                    seen_queries.add(query)
+                    unique_queries.append((query, location))
+            search_queries = unique_queries[:1000]  # DEEP SEARCH: Increased from 200 to 1000 for much deeper internet search
             
             logger.info(f"📊 [FACEBOOK DISCOVERY] Built {len(search_queries)} search queries")
             
@@ -965,17 +1002,18 @@ class FacebookDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query in search_queries:
+            for query, query_location in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [FACEBOOK DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [FACEBOOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}'")
+                    logger.info(f"🔍 [FACEBOOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
                     
-                    location_code = client.get_location_code(locations[0] if locations else "usa")
-                    logger.debug(f"📍 [FACEBOOK DISCOVERY] Using location code {location_code} for '{locations[0] if locations else 'usa'}'")
+                    # Get location code for DataForSEO - use the location from the query
+                    location_code = client.get_location_code(query_location)
+                    logger.debug(f"📍 [FACEBOOK DISCOVERY] Using location code {location_code} for '{query_location}'")
                     
                     # DEEP SEARCH: Search with maximum depth - search the entire internet
                     serp_results = await client.serp_google_organic(
@@ -1042,7 +1080,7 @@ class FacebookDiscoveryAdapter:
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
                                         discovery_category=categories[0] if categories else None,
-                                        discovery_location=locations[0] if locations else None,
+                                        discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
                                         engagement_rate=2.0,  # Default to pass Facebook minimum (1.5%)
