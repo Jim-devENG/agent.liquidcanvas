@@ -88,7 +88,7 @@ class LinkedInDiscoveryAdapter:
                     query = essential_pattern.format(category=category, location=location)
                     if query not in seen_queries:
                         seen_queries.add(query)
-                        search_queries.append((query, location))
+                        search_queries.append((query, location, category))  # Store query with location AND category
             
             # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
@@ -123,7 +123,7 @@ class LinkedInDiscoveryAdapter:
                         query = pattern.format(category=category, location=location)
                         if query not in seen_queries:
                             seen_queries.add(query)
-                            search_queries.append((query, location))
+                            search_queries.append((query, location, category))  # Store query with location AND category
                     if len(search_queries) >= 1000:
                         break
                 if len(search_queries) >= 1000:
@@ -159,7 +159,7 @@ class LinkedInDiscoveryAdapter:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
                                 if query not in seen_queries:
                                     seen_queries.add(query)
-                                    search_queries.append((query, location))
+                                    search_queries.append((query, location, category))  # Store query with location AND category
                             if len(search_queries) >= 1000:
                                 break
                         if len(search_queries) >= 1000:
@@ -191,7 +191,7 @@ class LinkedInDiscoveryAdapter:
                             break
                         if pattern not in seen_queries:
                             seen_queries.add(pattern)
-                            search_queries.append((pattern, default_location))
+                            search_queries.append((pattern, default_location, category))  # Store query with location AND category
             
             # Final limit to ensure we don't exceed reasonable bounds
             search_queries = search_queries[:1000]
@@ -201,13 +201,13 @@ class LinkedInDiscoveryAdapter:
             queries_successful = 0
             total_results_found = 0
             
-            for query, query_location in search_queries:
+            for query, query_location, query_category in search_queries:
                 if len(prospects) >= max_results:
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [LINKEDIN DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
+                    logger.info(f"🔍 [LINKEDIN DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location}, category: {query_category})")
                     
                     # Get location code for DataForSEO - use the location from the query
                     location_code = client.get_location_code(query_location)
@@ -258,7 +258,7 @@ class LinkedInDiscoveryAdapter:
                                         discovery_status='DISCOVERED',
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
-                                        discovery_category=categories[0] if categories else None,
+                                        discovery_category=query_category,  # Use the category from the query
                                         discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate (will be updated later if available)
                                         follower_count=1000,  # Default to pass qualification
@@ -389,7 +389,7 @@ class InstagramDiscoveryAdapter:
                     query = essential_pattern.format(category=category, location=location)
                     if query not in seen_queries:
                         seen_queries.add(query)
-                        search_queries.append((query, location))
+                        search_queries.append((query, location, category))  # Store query with location AND category
             
             # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
@@ -424,7 +424,7 @@ class InstagramDiscoveryAdapter:
                         query = pattern.format(category=category, location=location)
                         if query not in seen_queries:
                             seen_queries.add(query)
-                            search_queries.append((query, location))
+                            search_queries.append((query, location, category))  # Store query with location AND category
                     if len(search_queries) >= 1000:
                         break
                 if len(search_queries) >= 1000:
@@ -459,7 +459,7 @@ class InstagramDiscoveryAdapter:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
                                 if query not in seen_queries:
                                     seen_queries.add(query)
-                                    search_queries.append((query, location))
+                                    search_queries.append((query, location, category))  # Store query with location AND category
                             if len(search_queries) >= 1000:
                                 break
                         if len(search_queries) >= 1000:
@@ -493,7 +493,7 @@ class InstagramDiscoveryAdapter:
                             break
                         if pattern not in seen_queries:
                             seen_queries.add(pattern)
-                            search_queries.append((pattern, default_location))
+                            search_queries.append((pattern, default_location, category))  # Store query with location AND category
             
             # Final limit to ensure we don't exceed reasonable bounds
             search_queries = search_queries[:1000]
@@ -505,14 +505,14 @@ class InstagramDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query, query_location in search_queries:
+            for query, query_location, query_category in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [INSTAGRAM DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [INSTAGRAM DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
+                    logger.info(f"🔍 [INSTAGRAM DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location}, category: {query_category})")
                     
                     # Get location code for DataForSEO - use the location from the query
                     location_code = client.get_location_code(query_location)
@@ -583,7 +583,7 @@ class InstagramDiscoveryAdapter:
                                         discovery_status='DISCOVERED',
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
-                                        discovery_category=categories[0] if categories else None,
+                                        discovery_category=query_category,  # Use the category from the query
                                         discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
@@ -708,7 +708,7 @@ class TikTokDiscoveryAdapter:
                     query = essential_pattern.format(category=category, location=location)
                     if query not in seen_queries:
                         seen_queries.add(query)
-                        search_queries.append((query, location))
+                        search_queries.append((query, location, category))  # Store query with location AND category
             
             # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
@@ -740,7 +740,7 @@ class TikTokDiscoveryAdapter:
                         query = pattern.format(category=category, location=location)
                         if query not in seen_queries:
                             seen_queries.add(query)
-                            search_queries.append((query, location))
+                            search_queries.append((query, location, category))  # Store query with location AND category
                     if len(search_queries) >= 1000:
                         break
                 if len(search_queries) >= 1000:
@@ -772,7 +772,7 @@ class TikTokDiscoveryAdapter:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
                                 if query not in seen_queries:
                                     seen_queries.add(query)
-                                    search_queries.append((query, location))
+                                    search_queries.append((query, location, category))  # Store query with location AND category
                             if len(search_queries) >= 1000:
                                 break
                         if len(search_queries) >= 1000:
@@ -804,7 +804,7 @@ class TikTokDiscoveryAdapter:
                             break
                         if pattern not in seen_queries:
                             seen_queries.add(pattern)
-                            search_queries.append((pattern, default_location))
+                            search_queries.append((pattern, default_location, category))  # Store query with location AND category
             
             # Final limit to ensure we don't exceed reasonable bounds
             search_queries = search_queries[:1000]
@@ -816,14 +816,14 @@ class TikTokDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query, query_location in search_queries:
+            for query, query_location, query_category in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [TIKTOK DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [TIKTOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
+                    logger.info(f"🔍 [TIKTOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location}, category: {query_category})")
                     
                     # Get location code for DataForSEO - use the location from the query
                     location_code = client.get_location_code(query_location)
@@ -891,7 +891,7 @@ class TikTokDiscoveryAdapter:
                                         discovery_status='DISCOVERED',
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
-                                        discovery_category=categories[0] if categories else None,
+                                        discovery_category=query_category,  # Use the category from the query
                                         discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
@@ -1015,7 +1015,7 @@ class FacebookDiscoveryAdapter:
                     query = essential_pattern.format(category=category, location=location)
                     if query not in seen_queries:
                         seen_queries.add(query)
-                        search_queries.append((query, location))
+                        search_queries.append((query, location, category))  # Store query with location AND category
             
             # Second pass: Add more variations for each category/location combination (up to limit)
             # Base query patterns - many variations to search deeper
@@ -1050,7 +1050,7 @@ class FacebookDiscoveryAdapter:
                         query = pattern.format(category=category, location=location)
                         if query not in seen_queries:
                             seen_queries.add(query)
-                            search_queries.append((query, location))
+                            search_queries.append((query, location, category))  # Store query with location AND category
                     if len(search_queries) >= 1000:
                         break
                 if len(search_queries) >= 1000:
@@ -1084,7 +1084,7 @@ class FacebookDiscoveryAdapter:
                                 query = pattern.format(keyword=keyword, category=category, location=location)
                                 if query not in seen_queries:
                                     seen_queries.add(query)
-                                    search_queries.append((query, location))
+                                    search_queries.append((query, location, category))  # Store query with location AND category
                             if len(search_queries) >= 1000:
                                 break
                         if len(search_queries) >= 1000:
@@ -1118,7 +1118,7 @@ class FacebookDiscoveryAdapter:
                             break
                         if pattern not in seen_queries:
                             seen_queries.add(pattern)
-                            search_queries.append((pattern, default_location))
+                            search_queries.append((pattern, default_location, category))  # Store query with location AND category
             
             # Final limit to ensure we don't exceed reasonable bounds
             search_queries = search_queries[:1000]
@@ -1130,14 +1130,14 @@ class FacebookDiscoveryAdapter:
             total_results_found = 0
             profiles_extracted = 0
             
-            for query, query_location in search_queries:
+            for query, query_location, query_category in search_queries:
                 if len(prospects) >= max_results:
                     logger.info(f"✅ [FACEBOOK DISCOVERY] Reached max_results ({max_results}), stopping query execution")
                     break
                 
                 try:
                     queries_executed += 1
-                    logger.info(f"🔍 [FACEBOOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location})")
+                    logger.info(f"🔍 [FACEBOOK DISCOVERY] Executing query {queries_executed}/{len(search_queries)}: '{query}' (location: {query_location}, category: {query_category})")
                     
                     # Get location code for DataForSEO - use the location from the query
                     location_code = client.get_location_code(query_location)
@@ -1207,7 +1207,7 @@ class FacebookDiscoveryAdapter:
                                         discovery_status='DISCOVERED',
                                         scrape_status='DISCOVERED',
                                         approval_status='PENDING',
-                                        discovery_category=categories[0] if categories else None,
+                                        discovery_category=query_category,  # Use the category from the query
                                         discovery_location=query_location,  # Use the location from the query
                                         # Set default follower count and engagement rate
                                         follower_count=1000,  # Default to pass qualification
