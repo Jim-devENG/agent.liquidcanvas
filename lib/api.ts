@@ -617,6 +617,23 @@ export async function listLeads(
   }
 }
 
+export interface CategoriesResponse {
+  categories: string[]
+  count: number
+  from_database: number
+}
+
+export async function getAvailableCategories(): Promise<CategoriesResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/categories`, {
+    method: 'GET',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get categories' }))
+    throw new Error(error.detail || 'Failed to get categories')
+  }
+  return res.json()
+}
+
 export async function listScrapedEmails(
   skip = 0,
   limit = 50,
@@ -1524,6 +1541,228 @@ export function isMasterSwitchEnabled(): boolean {
   if (typeof window === 'undefined') return false
   const stored = localStorage.getItem('master_switch_enabled')
   return stored === 'true'
+}
+
+// ============================================================================
+// Social Integrations API
+// ============================================================================
+
+export interface SocialIntegration {
+  id: string
+  platform: 'instagram' | 'facebook' | 'tiktok' | 'email'
+  connection_status: 'connected' | 'expired' | 'revoked' | 'unsupported' | 'pending_oauth' | 'error'
+  scopes_granted?: string[]
+  account_id?: string
+  page_id?: string
+  business_id?: string
+  token_expires_at?: string
+  last_verified_at?: string
+  email_address?: string
+  smtp_host?: string
+  smtp_port?: number
+  is_connected: boolean
+  metadata?: Record<string, any>
+}
+
+export interface PlatformCapability {
+  platform: string
+  is_connected: boolean
+  connection_status: string
+  can_send_dm: boolean
+  can_discover: boolean
+  can_read_messages: boolean
+  reason?: string
+  scopes_granted?: string[]
+  token_expires_at?: string
+}
+
+export interface IntegrationCreate {
+  platform: 'instagram' | 'facebook' | 'tiktok' | 'email'
+  access_token?: string
+  refresh_token?: string
+  token_expires_at?: string
+  scopes_granted?: string[]
+  account_id?: string
+  page_id?: string
+  business_id?: string
+  email_address?: string
+  smtp_host?: string
+  smtp_port?: number
+  smtp_username?: string
+  smtp_password?: string
+}
+
+// Get current user ID (placeholder - adjust based on your auth system)
+function getCurrentUserId(): string {
+  // TODO: Replace with actual user ID from auth system
+  // For now, use a placeholder or get from localStorage
+  if (typeof window !== 'undefined') {
+    const userId = localStorage.getItem('user_id') || 'default-user-id'
+    return userId
+  }
+  return 'default-user-id'
+}
+
+export async function listSocialIntegrations(): Promise<SocialIntegration[]> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations?user_id=${encodeURIComponent(userId)}`, {
+    method: 'GET',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get integrations' }))
+    throw new Error(error.detail || 'Failed to get integrations')
+  }
+  return res.json()
+}
+
+export async function getSocialCapabilities(): Promise<PlatformCapability[]> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/capabilities?user_id=${encodeURIComponent(userId)}`, {
+    method: 'GET',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get capabilities' }))
+    throw new Error(error.detail || 'Failed to get capabilities')
+  }
+  return res.json()
+}
+
+export async function getPlatformCapabilities(platform: string): Promise<PlatformCapability> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/capabilities?user_id=${encodeURIComponent(userId)}`, {
+    method: 'GET',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get platform capabilities' }))
+    throw new Error(error.detail || 'Failed to get platform capabilities')
+  }
+  return res.json()
+}
+
+export async function createSocialIntegration(data: IntegrationCreate): Promise<SocialIntegration> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to create integration' }))
+    throw new Error(error.detail || 'Failed to create integration')
+  }
+  return res.json()
+}
+
+export async function updateSocialIntegration(platform: string, data: Partial<IntegrationCreate>): Promise<SocialIntegration> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ ...data, platform }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to update integration' }))
+    throw new Error(error.detail || 'Failed to update integration')
+  }
+  return res.json()
+}
+
+export async function deleteSocialIntegration(platform: string): Promise<{ success: boolean; message: string }> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}?user_id=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to delete integration' }))
+    throw new Error(error.detail || 'Failed to delete integration')
+  }
+  if (res.status === 204) {
+    return { success: true, message: 'Integration deleted successfully' }
+  }
+  return res.json()
+}
+
+export async function validateSocialIntegration(platform: string): Promise<{ valid: boolean; message: string }> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/validate?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to validate integration' }))
+    throw new Error(error.detail || 'Failed to validate integration')
+  }
+  const result = await res.json()
+  return {
+    valid: result.is_valid || false,
+    message: result.error_message || result.message || ''
+  }
+}
+
+export async function initiateOAuthFlow(platform: 'instagram' | 'facebook'): Promise<{ authorization_url: string }> {
+  const userId = getCurrentUserId()
+  // Get current URL for redirect_uri
+  const redirectUri = typeof window !== 'undefined' 
+    ? `${window.location.origin}/settings?oauth_callback=${platform}`
+    : 'http://localhost:3000/settings'
+  
+  const res = await authenticatedFetch(
+    `${API_BASE}/integrations/oauth/${platform}/authorize?user_id=${encodeURIComponent(userId)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+    {
+      method: 'GET',
+    }
+  )
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to initiate OAuth flow' }))
+    throw new Error(error.detail || 'Failed to initiate OAuth flow')
+  }
+  return res.json()
+}
+
+export async function handleOAuthCallback(platform: string, code: string, state?: string): Promise<SocialIntegration> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/oauth/${platform}/callback?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ code, state, platform }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to handle OAuth callback' }))
+    throw new Error(error.detail || 'Failed to handle OAuth callback')
+  }
+  return res.json()
+}
+
+export async function refreshSocialIntegrationToken(platform: string): Promise<{ success: boolean; message: string; connection_status?: string; token_expires_at?: string }> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/refresh?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to refresh token' }))
+    throw new Error(error.detail || 'Failed to refresh token')
+  }
+  return res.json()
+}
+
+// Simple API Key Management (for non-OAuth platforms)
+export async function getSocialIntegrations(): Promise<SocialIntegration[]> {
+  return listSocialIntegrations()
+}
+
+export async function saveSocialApiKey(platform: string, apiKey: string): Promise<SocialIntegration> {
+  const userId = getCurrentUserId()
+  const res = await authenticatedFetch(`${API_BASE}/integrations/${platform}/api-key`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      api_key: apiKey,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to save API key' }))
+    throw new Error(error.detail || 'Failed to save API key')
+  }
+  return res.json()
 }
 
 // ============================================

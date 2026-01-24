@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Mail, CheckCircle, XCircle, Clock, RefreshCw, X, Loader2, Users, Download } from 'lucide-react'
-import { listProspects, updateProspectCategory, autoCategorizeAll, migrateCategories, exportProspectsCSV, type Prospect } from '@/lib/api'
+import { listProspects, updateProspectCategory, autoCategorizeAll, migrateCategories, exportProspectsCSV, getAvailableCategories, type Prospect } from '@/lib/api'
 
 export default function EmailsTable() {
   const [prospects, setProspects] = useState<Prospect[]>([])
@@ -18,14 +18,26 @@ export default function EmailsTable() {
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isMigratingCategories, setIsMigratingCategories] = useState(false)
-
-  // Available categories
-  const availableCategories = [
-    'Art', 'Interior Design', 'Dogs', 'Dog Lovers', 'Childhood Development', 
-    'Cat Lovers', 'Cats', 'Holidays', 'Famous Quotes', 'Home Decor', 
+  const [availableCategories, setAvailableCategories] = useState<string[]>([
+    'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
+    'Holidays', 'Famous Quotes', 'Home Decor', 
     'Audio Visual', 'Interior Decor', 'Holiday Decor', 'Home Tech', 
     'Parenting', 'NFTs', 'Museum'
-  ]
+  ])
+
+  // Load available categories from API (dynamic, reflects migrated categories)
+  const loadCategories = async () => {
+    try {
+      const response = await getAvailableCategories()
+      if (response.categories && response.categories.length > 0) {
+        setAvailableCategories(response.categories)
+        console.log(`📊 [CATEGORIES] Loaded ${response.categories.length} categories from API (${response.from_database} from DB)`)
+      }
+    } catch (err) {
+      console.warn('⚠️ [CATEGORIES] Failed to load categories from API, using defaults:', err)
+      // Keep default categories if API fails
+    }
+  }
 
   const loadSentEmails = async () => {
     try {
@@ -78,6 +90,7 @@ export default function EmailsTable() {
   }
 
   useEffect(() => {
+    loadCategories() // Load categories first
     loadSentEmails()
     const interval = setInterval(loadSentEmails, 15000)
     
@@ -166,6 +179,9 @@ export default function EmailsTable() {
         .join(', ')
       
       setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''}`)
+      
+      // Reload categories after migration to reflect new category names in filter dropdown
+      await loadCategories()
       
       setTimeout(() => {
         loadSentEmails().catch(err => console.error('Error reloading emails:', err))
