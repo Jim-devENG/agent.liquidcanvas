@@ -167,18 +167,28 @@ export default function Dashboard() {
   }
 
   // Define tabs as a constant to ensure it's always the same
-  const tabs = useMemo(() => [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
-    { id: 'websites', label: 'Websites', icon: Globe },
-    { id: 'leads', label: 'Leads', icon: Users },
-    { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-    { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - CRITICAL: Must be visible
-    { id: 'emails', label: 'Outreach Emails', icon: Mail },
-    { id: 'jobs', label: 'Jobs', icon: Activity },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'guide', label: 'Guide', icon: BookOpen },
-  ], [])
+  // CRITICAL: Drafts tab MUST be in this array for it to appear in sidebar
+  const tabs = useMemo(() => {
+    const tabsArray = [
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
+      { id: 'websites', label: 'Websites', icon: Globe },
+      { id: 'leads', label: 'Leads', icon: Users },
+      { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
+      { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - CRITICAL: Must be visible
+      { id: 'emails', label: 'Outreach Emails', icon: Mail },
+      { id: 'jobs', label: 'Jobs', icon: Activity },
+      { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'guide', label: 'Guide', icon: BookOpen },
+    ]
+    
+    // IMMEDIATE console log - runs during component initialization (before useEffect)
+    console.log('🚨 TABS ARRAY CREATED:', tabsArray.map(t => t.id).join(', '))
+    console.log('🚨 DRAFTS IN ARRAY:', tabsArray.some(t => t.id === 'drafts'))
+    console.log('🚨 FileText icon available:', !!FileText)
+    
+    return tabsArray
+  }, [])
   
   // Debug: Log tabs to verify Drafts is included (works in both dev and prod)
   useEffect(() => {
@@ -215,14 +225,28 @@ export default function Dashboard() {
   // Force render Drafts tab - emergency fallback to verify it exists
   const draftsTab = tabs.find(t => t.id === 'drafts')
   
+  // CRITICAL: Immediate console logs that run on EVERY render
+  console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
+  console.log('🚨 RENDER - All tab IDs:', tabs.map(t => t.id).join(', '))
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
-      {/* Emergency Drafts Tab Debug - Visible red box if tab exists */}
-      {draftsTab && (
-        <div style={{ position: 'fixed', top: 0, right: 0, zIndex: 9999, background: 'red', color: 'white', padding: '10px', fontSize: '12px' }}>
-          DEBUG: Drafts tab exists: {draftsTab.label}
-        </div>
-      )}
+      {/* CRITICAL DEBUG: Always visible - shows if code is running */}
+      <div style={{ 
+        position: 'fixed', 
+        top: 0, 
+        right: 0, 
+        zIndex: 99999, 
+        background: draftsTab ? 'green' : 'red', 
+        color: 'white', 
+        padding: '8px 12px', 
+        fontSize: '11px', 
+        fontWeight: 'bold',
+        borderRadius: '0 0 0 8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+      }}>
+        {draftsTab ? `✅ DRAFTS: ${draftsTab.label}` : '❌ DRAFTS MISSING'}
+      </div>
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
 
