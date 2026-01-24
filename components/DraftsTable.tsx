@@ -122,13 +122,14 @@ export default function DraftsTable() {
         }
       } catch (err) {
         console.error('Error checking for drafts:', err)
+        setHasAutoDrafted(true) // Mark as checked even on error to prevent retry loops
       }
     }
     
     // Delay to ensure component is mounted
     const timer = setTimeout(checkAndAutoDraft, 500)
     return () => clearTimeout(timer)
-  }, [hasAutoDrafted])
+  }, [hasAutoDrafted, handleAutoDraft])
 
   const handleSend = async () => {
     if (selected.size === 0) {
@@ -185,7 +186,8 @@ export default function DraftsTable() {
 
   const handleExport = async () => {
     try {
-      const csv = await exportProspectsCSV(Array.from(selected))
+      // Export prospects with drafts (drafted status, website source type)
+      const csv = await exportProspectsCSV('drafted', 'website')
       const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')

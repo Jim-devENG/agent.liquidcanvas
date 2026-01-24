@@ -343,7 +343,20 @@ export default function Dashboard() {
 
         {activeTab === 'drafts' && (
           <div className="max-w-7xl mx-auto">
-            <DraftsTable />
+            {(() => {
+              try {
+                return <DraftsTable />
+              } catch (error: any) {
+                console.error('Error rendering DraftsTable:', error)
+                return (
+                  <div className="glass rounded-xl shadow-lg border border-red-200 p-6">
+                    <h2 className="text-lg font-bold text-red-600 mb-2">Error Loading Drafts</h2>
+                    <p className="text-sm text-gray-600">{error?.message || 'Unknown error'}</p>
+                    <p className="text-xs text-gray-500 mt-2">Check console for details</p>
+                  </div>
+                )
+              }
+            })()}
           </div>
         )}
 
