@@ -708,7 +708,8 @@ async def draft_emails(
         result = await db.execute(
             select(Prospect).where(
                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None)
+                Prospect.contact_email.isnot(None),
+                website_filter  # CRITICAL: Only website prospects for website outreach
                 # No draft_status filter - accept all verified prospects with emails
             )
         )
