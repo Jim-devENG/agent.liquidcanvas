@@ -7,6 +7,7 @@ import Link from 'next/link'
 import StatsCards from '@/components/StatsCards'
 import LeadsTable from '@/components/LeadsTable'
 import EmailsTable from '@/components/EmailsTable'
+import DraftsTable from '@/components/DraftsTable'
 import JobStatusPanel from '@/components/JobStatusPanel'
 import ActivityFeed from '@/components/ActivityFeed'
 import AutomationControl from '@/components/AutomationControl'
@@ -28,7 +29,8 @@ import {
   AtSign,
   LogOut as LogOutIcon,
   BookOpen,
-  RefreshCw
+  RefreshCw,
+  FileText
 } from 'lucide-react'
 
 export default function Dashboard() {
@@ -38,7 +40,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide'
+    'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'drafts' | 'jobs' | 'websites' | 'settings' | 'guide'
   >('pipeline')  // Pipeline-first: default to Pipeline tab
 
   // Track if we've already triggered refresh for completed jobs to prevent loops
@@ -142,7 +144,7 @@ export default function Dashboard() {
     // Listen for tab change events from Pipeline component
     const handleTabChange = (e: CustomEvent) => {
       const tabId = e.detail as string
-      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
+      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'drafts', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
         setActiveTab(tabId as any)
       }
     }
@@ -170,6 +172,7 @@ export default function Dashboard() {
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
     { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
+    { id: 'drafts', label: 'Drafts', icon: FileText },
     { id: 'emails', label: 'Outreach Emails', icon: Mail },
     { id: 'jobs', label: 'Jobs', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -196,7 +199,7 @@ export default function Dashboard() {
 
   // Wrapper function to handle type compatibility with Sidebar component
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
+    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'drafts' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
   }
 
   return (
@@ -316,6 +319,12 @@ export default function Dashboard() {
         {activeTab === 'scraped_emails' && (
           <div className="max-w-7xl mx-auto">
             <LeadsTable emailsOnly={true} />
+          </div>
+        )}
+
+        {activeTab === 'drafts' && (
+          <div className="max-w-7xl mx-auto">
+            <DraftsTable />
           </div>
         )}
 
