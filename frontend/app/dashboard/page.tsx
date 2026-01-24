@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.1 - Discovery feature removed - FORCE REDEPLOY
+// Version: 3.2 - Drafts tab added for website outreach - FORCE REDEPLOY
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
