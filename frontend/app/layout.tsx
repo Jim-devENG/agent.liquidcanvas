@@ -26,6 +26,19 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <NoAlertScript />
+        {/* Immediate debug script - runs before React loads */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 3.5 🚨🚨🚨');
+                console.log('🚨 Timestamp:', new Date().toISOString());
+                window.__DASHBOARD_VERSION__ = '3.5';
+                window.__DASHBOARD_LOADED__ = true;
+              })();
+            `,
+          }}
+        />
         {children}
       </body>
     </html>

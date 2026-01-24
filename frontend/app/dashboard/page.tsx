@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.4 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD
+// Version: 3.5 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD - CACHE BUST
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -226,26 +226,47 @@ export default function Dashboard() {
   const draftsTab = tabs.find(t => t.id === 'drafts')
   
   // CRITICAL: Immediate console logs that run on EVERY render
-  console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
-  console.log('🚨 RENDER - All tab IDs:', tabs.map(t => t.id).join(', '))
+  // Force these to run immediately - no conditions
+  if (typeof window !== 'undefined') {
+    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 3.4 🚨🚨🚨')
+    console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
+    console.log('🚨 RENDER - All tab IDs:', tabs.map(t => t.id).join(', '))
+    console.log('🚨 RENDER - Active tab:', activeTab)
+    console.log('🚨 RENDER - DraftsTab object:', draftsTab)
+    
+    // Also set a global variable that can be checked
+    ;(window as any).__DRAFTS_TAB_DEBUG__ = {
+      exists: !!draftsTab,
+      tabId: draftsTab?.id,
+      label: draftsTab?.label,
+      allTabs: tabs.map(t => t.id),
+      timestamp: Date.now()
+    }
+  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
       {/* CRITICAL DEBUG: Always visible - shows if code is running */}
-      <div style={{ 
-        position: 'fixed', 
-        top: 0, 
-        right: 0, 
-        zIndex: 99999, 
-        background: draftsTab ? 'green' : 'red', 
-        color: 'white', 
-        padding: '8px 12px', 
-        fontSize: '11px', 
-        fontWeight: 'bold',
-        borderRadius: '0 0 0 8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-      }}>
-        {draftsTab ? `✅ DRAFTS: ${draftsTab.label}` : '❌ DRAFTS MISSING'}
+      {/* This MUST be visible if the code is running */}
+      <div 
+        id="drafts-debug-indicator"
+        style={{ 
+          position: 'fixed', 
+          top: 0, 
+          right: 0, 
+          zIndex: 99999, 
+          background: draftsTab ? 'green' : 'red', 
+          color: 'white', 
+          padding: '8px 12px', 
+          fontSize: '11px', 
+          fontWeight: 'bold',
+          borderRadius: '0 0 0 8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          display: 'block !important',
+          visibility: 'visible !important'
+        }}
+      >
+        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v3.5)` : '❌ DRAFTS MISSING (v3.5)'}
       </div>
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
