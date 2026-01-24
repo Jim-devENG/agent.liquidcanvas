@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, 
@@ -80,6 +80,23 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
           {Array.isArray(tabs) && tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
+            
+            // Debug logging for Drafts tab
+            if (tab.id === 'drafts') {
+              console.log('🔍 Rendering Drafts tab:', { 
+                id: tab.id, 
+                label: tab.label, 
+                icon: Icon ? '✅' : '❌',
+                isActive 
+              })
+            }
+            
+            // Error boundary for icon rendering
+            if (!Icon) {
+              console.error(`❌ Icon missing for tab: ${tab.id}`)
+              return null
+            }
+            
             return (
               <button
                 key={tab.id}

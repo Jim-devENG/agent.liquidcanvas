@@ -179,10 +179,12 @@ export default function Dashboard() {
     { id: 'guide', label: 'Guide', icon: BookOpen },
   ]
   
-  // Debug: Log tabs to verify Drafts is included
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('📋 Dashboard Tabs:', tabs.map(t => t.id))
-  }
+  // Debug: Log tabs to verify Drafts is included (works in both dev and prod)
+  useEffect(() => {
+    console.log('📋 Dashboard Tabs Array:', tabs.map(t => ({ id: t.id, label: t.label })))
+    console.log('📋 Drafts tab exists:', tabs.some(t => t.id === 'drafts'))
+    console.log('📋 FileText icon:', FileText ? '✅ Imported' : '❌ Missing')
+  }, [])
 
   if (loading) {
     return (
