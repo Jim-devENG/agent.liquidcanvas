@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.3 - Drafts tab verified and debug logging added - FORCE REDEPLOY
+// Version: 3.4 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
