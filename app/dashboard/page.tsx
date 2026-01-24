@@ -1,7 +1,7 @@
 'use client'
 // Version: 3.3 - Drafts tab verified and debug logging added - FORCE REDEPLOY
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import StatsCards from '@/components/StatsCards'
@@ -166,25 +166,28 @@ export default function Dashboard() {
     }
   }
 
-  const tabs = [
+  // Define tabs as a constant to ensure it's always the same
+  const tabs = useMemo(() => [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
     { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-    { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - Should be visible in sidebar
+    { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - CRITICAL: Must be visible
     { id: 'emails', label: 'Outreach Emails', icon: Mail },
     { id: 'jobs', label: 'Jobs', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'guide', label: 'Guide', icon: BookOpen },
-  ]
+  ], [])
   
   // Debug: Log tabs to verify Drafts is included (works in both dev and prod)
   useEffect(() => {
     console.log('📋 Dashboard Tabs Array:', tabs.map(t => ({ id: t.id, label: t.label })))
     console.log('📋 Drafts tab exists:', tabs.some(t => t.id === 'drafts'))
     console.log('📋 FileText icon:', FileText ? '✅ Imported' : '❌ Missing')
-  }, [])
+    console.log('📋 Tabs count:', tabs.length)
+    console.log('📋 Tabs passed to Sidebar:', tabs)
+  }, [tabs])
 
   if (loading) {
     return (
@@ -209,8 +212,17 @@ export default function Dashboard() {
     setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'drafts' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
   }
 
+  // Force render Drafts tab - emergency fallback to verify it exists
+  const draftsTab = tabs.find(t => t.id === 'drafts')
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
+      {/* Emergency Drafts Tab Debug - Visible red box if tab exists */}
+      {draftsTab && (
+        <div style={{ position: 'fixed', top: 0, right: 0, zIndex: 9999, background: 'red', color: 'white', padding: '10px', fontSize: '12px' }}>
+          DEBUG: Drafts tab exists: {draftsTab.label}
+        </div>
+      )}
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
 
