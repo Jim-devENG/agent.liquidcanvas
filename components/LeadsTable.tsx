@@ -263,9 +263,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       // Trigger pipeline status refresh
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
       }
       // Show success message
-      setError('✅ Draft saved successfully!')
+      setError('✅ Draft saved successfully! The draft count in the pipeline will update shortly.')
       setTimeout(() => setError(null), 3000)
     } catch (err: any) {
       console.error('Failed to save draft:', err)
@@ -1146,7 +1147,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                 onClick={handleSaveDraft}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
               >
-                Save Draft
+                Save to Draft
               </button>
               {draftSubject && draftBody && (
                 <button

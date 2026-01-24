@@ -212,8 +212,16 @@ export default function Pipeline() {
       return
     }
     try {
-      await pipelineDraft()
+      const result = await pipelineDraft()
+      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads with scraped emails.`)
       await loadStatus()
+      // Refresh after a short delay to allow job to start
+      setTimeout(() => {
+        loadStatus()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        }
+      }, 2000)
     } catch (err: any) {
       alert(err.message || 'Failed to start drafting')
     }
@@ -358,7 +366,7 @@ export default function Pipeline() {
       },
       viewText: normalizedStatus.drafted > 0 ? 'View Drafts' : undefined,
       viewAction: normalizedStatus.drafted > 0 ? () => {
-        const event = new CustomEvent('change-tab', { detail: 'leads' })
+        const event = new CustomEvent('change-tab', { detail: 'drafts' })
         window.dispatchEvent(event)
       } : undefined
     },
