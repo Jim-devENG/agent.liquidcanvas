@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.2 - Drafts tab added for website outreach - FORCE REDEPLOY
+// Version: 3.3 - Drafts tab verified and debug logging added - FORCE REDEPLOY
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -172,12 +172,17 @@ export default function Dashboard() {
     { id: 'websites', label: 'Websites', icon: Globe },
     { id: 'leads', label: 'Leads', icon: Users },
     { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-    { id: 'drafts', label: 'Drafts', icon: FileText },
+    { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - Should be visible in sidebar
     { id: 'emails', label: 'Outreach Emails', icon: Mail },
     { id: 'jobs', label: 'Jobs', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'guide', label: 'Guide', icon: BookOpen },
   ]
+  
+  // Debug: Log tabs to verify Drafts is included
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('📋 Dashboard Tabs:', tabs.map(t => t.id))
+  }
 
   if (loading) {
     return (
