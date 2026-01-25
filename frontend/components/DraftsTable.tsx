@@ -122,7 +122,7 @@ export default function DraftsTable() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    if (showConfirm && !confirm('Generate drafts for all leads with scraped emails? This will create drafts for all verified prospects.')) {
+    if (showConfirm && !confirm('Generate drafts for all verified leads and scraped emails? This will create drafts for all prospects with verification_status=\'verified\' and contact_email IS NOT NULL.')) {
       abortControllerRef.current = null
       return
     }
@@ -303,8 +303,8 @@ export default function DraftsTable() {
 
   const handleExport = async () => {
     try {
-      // Export prospects with drafts (drafted status, website source type)
-      const csv = await exportProspectsCSV('drafted', 'website')
+      // Export all prospects with drafts (regardless of source type - includes leads and scraped emails)
+      const csv = await exportProspectsCSV('drafted')
       const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -456,7 +456,7 @@ export default function DraftsTable() {
         <div className="text-center py-8 text-gray-500">
           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
           <p className="text-sm font-medium mb-1">No drafts found</p>
-          <p className="text-xs">Click "Generate Drafts" to create drafts for all leads with scraped emails</p>
+          <p className="text-xs">Click "Generate Drafts" to create drafts for all verified leads and scraped emails</p>
         </div>
       ) : (
         <>
