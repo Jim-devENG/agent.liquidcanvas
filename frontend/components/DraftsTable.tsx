@@ -47,12 +47,25 @@ export default function DraftsTable() {
     }
   }, [])
 
+  // Track if this is the initial load to determine error handling behavior
+  const isInitialLoadRef = useRef(true)
+  
   const loadDrafts = useCallback(async () => {
+    // Only update loading state if component is mounted
+    if (!mountedRef.current) return
+    
+    const isInitial = isInitialLoadRef.current
+    isInitialLoadRef.current = false
+    
     try {
       setLoading(true)
       setError(null)
       // Filter prospects that have drafts (draft_subject and draft_body not null)
       const response = await listProspects(skip, limit)
+      
+      // Check if component unmounted during async operation
+      if (!mountedRef.current) return
+      
       const allProspects = Array.isArray(response?.data) ? response.data : []
       
       // Filter for website prospects with drafts
@@ -61,18 +74,38 @@ export default function DraftsTable() {
         ((p as any).source_type === 'website' || !(p as any).source_type)
       )
       
-      setProspects(draftedProspects)
-      setTotal(draftedProspects.length)
-      setError(null)
+      // Only update state if component is still mounted
+      if (mountedRef.current) {
+        setProspects(draftedProspects)
+        setTotal(response?.total || draftedProspects.length)
+        setError(null) // Clear error on successful load
+      }
     } catch (error: any) {
+      // Check if component unmounted during error handling
+      if (!mountedRef.current) return
+      
       console.error('Failed to load drafts:', error)
-      setError(error?.message || 'Failed to load drafts')
-      setProspects([])
-      setTotal(0)
+      
+      // Extract error message - distinguish network errors from business logic errors
+      const errorMessage = error?.message || 'Failed to load drafts'
+      
+      // Set error state but DO NOT clear prospects array on subsequent loads
+      // This allows error message to display while preserving any previously loaded data
+      setError(errorMessage)
+      
+      // Only clear prospects if this is the initial load (no existing data)
+      // This prevents "No drafts found" from showing when there's an error
+      if (isInitial && mountedRef.current) {
+        setProspects([])
+        setTotal(0)
+      }
     } finally {
-      setLoading(false)
+      // Only update loading state if component is still mounted
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
-  }, [skip, limit])
+  }, [skip, limit]) // Remove prospects.length from dependencies to prevent loops
 
   const handleAutoDraft = useCallback(async (showConfirm = true) => {
     // Prevent concurrent requests - check via ref to avoid closure issues
@@ -140,13 +173,24 @@ export default function DraftsTable() {
         return
       }
       
-      // Extract error message - backend 422 is a valid business rule, not a crash
-      const errorMessage = err?.message || 'Failed to generate drafts'
+      // Extract error message - distinguish 422 (validation) from other errors
+      let errorMessage = err?.message || 'Failed to generate drafts'
+      
+      // For 422 responses, the backend message is already in err.message
+      // Ensure it's displayed prominently in the UI
+      if (err?.status === 422) {
+        // 422 is a validation error - show the backend's explanation
+        errorMessage = err.message || 'No prospects ready for drafting. Ensure prospects have verification_status=\'verified\' and contact_email IS NOT NULL.'
+      } else if (err?.message?.includes('Failed to fetch') || err?.message?.includes('network')) {
+        // Network errors should be retryable
+        errorMessage = 'Network error: Failed to connect to server. Please check your connection and try again.'
+      }
       
       // Single state update: transition to error (consolidated)
       if (mountedRef.current && !abortController.signal.aborted) {
         draftStateRef.current = 'error'
         setDraftState({ status: 'error', message: errorMessage })
+        // Also set in main error state so it shows in the error banner
         setError(errorMessage)
       }
       
@@ -165,12 +209,24 @@ export default function DraftsTable() {
   }, [loadDrafts]) // Removed draftState from dependencies to prevent recreation loop
 
   useEffect(() => {
+    // Only run if component is mounted
+    if (!mountedRef.current) return
+    
+    // Reset initial load flag when skip changes (new page)
+    isInitialLoadRef.current = true
+    
     loadDrafts()
     
-    const interval = setInterval(loadDrafts, 15000)
+    const interval = setInterval(() => {
+      if (mountedRef.current) {
+        loadDrafts()
+      }
+    }, 15000)
     
     const handleJobCompleted = () => {
-      loadDrafts()
+      if (mountedRef.current) {
+        loadDrafts()
+      }
     }
     
     if (typeof window !== 'undefined') {
@@ -183,7 +239,7 @@ export default function DraftsTable() {
         window.removeEventListener('jobsCompleted', handleJobCompleted)
       }
     }
-  }, [skip])
+  }, [skip, loadDrafts]) // Include loadDrafts explicitly to satisfy React hooks rules
 
   // DISABLED: Auto-draft on mount to prevent React invariant errors
   // Auto-drafting is now opt-in only via the "Generate Drafts" button
@@ -377,7 +433,26 @@ export default function DraftsTable() {
         </div>
       )}
 
-      {prospects.length === 0 ? (
+      {/* Show error state if there's an error and no prospects (don't show empty state when error exists) */}
+      {error && prospects.length === 0 && !loading ? (
+        <div className="text-center py-8">
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm font-medium text-red-800 mb-2">Error loading drafts</p>
+            <p className="text-xs text-red-700">{error}</p>
+            {error.includes('Failed to fetch') || error.includes('network') || error.includes('SSL') ? (
+              <button
+                onClick={() => {
+                  setError(null)
+                  loadDrafts()
+                }}
+                className="mt-3 px-4 py-2 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Retry
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : prospects.length === 0 && !loading && !error ? (
         <div className="text-center py-8 text-gray-500">
           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
           <p className="text-sm font-medium mb-1">No drafts found</p>

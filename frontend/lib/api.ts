@@ -58,6 +58,7 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
     if (!response.ok) {
       // Try to get error details from response
       let errorDetail = `HTTP ${response.status}: ${response.statusText}`
+      let errorCode = response.status
       try {
         const errorData = await response.clone().json().catch(() => null)
         if (errorData) {
@@ -74,7 +75,10 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
         // If JSON parsing fails, use status text
       }
       
-      const error = new Error(`Fetch failed: ${errorDetail}`)
+      // Create error with status code attached for frontend to distinguish error types
+      const error: any = new Error(errorDetail)
+      error.status = errorCode
+      error.statusText = response.statusText
       console.error(`❌ [FETCH] Request failed: ${url}`, {
         status: response.status,
         statusText: response.statusText,
