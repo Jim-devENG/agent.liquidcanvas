@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { FileText, RefreshCw, Send, Edit, X, Loader2, Download, Mail, CheckCircle } from 'lucide-react'
 import { listProspects, pipelineDraft, pipelineSend, updateProspectDraft, exportProspectsCSV, type Prospect } from '@/lib/api'
 
@@ -19,7 +19,7 @@ export default function DraftsTable() {
   const [isDrafting, setIsDrafting] = useState(false)
   const [hasAutoDrafted, setHasAutoDrafted] = useState(false)
 
-  const loadDrafts = async () => {
+  const loadDrafts = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -30,7 +30,7 @@ export default function DraftsTable() {
       // Filter for website prospects with drafts
       const draftedProspects = allProspects.filter((p: Prospect) => 
         p.draft_subject && p.draft_body && 
-        (p.source_type === 'website' || !p.source_type)
+        ((p as any).source_type === 'website' || !(p as any).source_type)
       )
       
       setProspects(draftedProspects)
@@ -44,9 +44,9 @@ export default function DraftsTable() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [skip, limit])
 
-  const handleAutoDraft = async (showConfirm = true) => {
+  const handleAutoDraft = useCallback(async (showConfirm = true) => {
     if (showConfirm && !confirm('Generate drafts for all leads with scraped emails? This will create drafts for all verified prospects.')) {
       return
     }
@@ -74,7 +74,7 @@ export default function DraftsTable() {
     } finally {
       setIsDrafting(false)
     }
-  }
+  }, [loadDrafts])
 
   useEffect(() => {
     loadDrafts()
@@ -108,7 +108,7 @@ export default function DraftsTable() {
         const allProspects = Array.isArray(response?.data) ? response.data : []
         const draftedProspects = allProspects.filter((p: Prospect) => 
           p.draft_subject && p.draft_body && 
-          (p.source_type === 'website' || !p.source_type)
+          ((p as any).source_type === 'website' || !(p as any).source_type)
         )
         
         // Auto-trigger drafting if no drafts exist
@@ -129,7 +129,7 @@ export default function DraftsTable() {
     // Delay to ensure component is mounted
     const timer = setTimeout(checkAndAutoDraft, 500)
     return () => clearTimeout(timer)
-  }, [hasAutoDrafted, handleAutoDraft])
+  }, [hasAutoDrafted, handleAutoDraft, loadDrafts])
 
   const handleSend = async () => {
     if (selected.size === 0) {
@@ -234,7 +234,7 @@ export default function DraftsTable() {
         <h2 className="text-sm font-bold text-gray-900">Email Drafts</h2>
         <div className="flex items-center space-x-2">
           <button
-            onClick={handleAutoDraft}
+            onClick={() => handleAutoDraft(true)}
             disabled={isDrafting}
             className="px-3 py-1.5 text-xs font-medium bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
           >

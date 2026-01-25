@@ -194,7 +194,7 @@ export default function Dashboard() {
   useEffect(() => {
     console.log('📋 Dashboard Tabs Array:', tabs.map(t => ({ id: t.id, label: t.label })))
     console.log('📋 Drafts tab exists:', tabs.some(t => t.id === 'drafts'))
-    console.log('📋 FileText icon:', FileText ? '✅ Imported' : '❌ Missing')
+    console.log('📋 FileText icon:', typeof FileText !== 'undefined' ? '✅ Imported' : '❌ Missing')
     console.log('📋 Tabs count:', tabs.length)
     console.log('📋 Tabs passed to Sidebar:', tabs)
   }, [tabs])
@@ -262,9 +262,9 @@ export default function Dashboard() {
           fontWeight: 'bold',
           borderRadius: '0 0 0 8px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          display: 'block !important',
-          visibility: 'visible !important'
-        }}
+          display: 'block',
+          visibility: 'visible'
+        } as React.CSSProperties}
       >
         {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v3.5)` : '❌ DRAFTS MISSING (v3.5)'}
       </div>

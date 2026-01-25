@@ -86,7 +86,7 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
               console.log('🔍 Rendering Drafts tab:', { 
                 id: tab.id, 
                 label: tab.label, 
-                icon: Icon ? '✅' : '❌',
+                icon: typeof Icon !== 'undefined' ? '✅' : '❌',
                 isActive 
               })
             }
