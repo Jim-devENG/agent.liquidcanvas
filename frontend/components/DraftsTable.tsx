@@ -229,14 +229,22 @@ export default function DraftsTable() {
       }
     }
     
+    const handleRefreshDrafts = () => {
+      if (mountedRef.current) {
+        loadDrafts()
+      }
+    }
+    
     if (typeof window !== 'undefined') {
       window.addEventListener('jobsCompleted', handleJobCompleted)
+      window.addEventListener('refreshDrafts', handleRefreshDrafts)
     }
     
     return () => {
       clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('jobsCompleted', handleJobCompleted)
+        window.removeEventListener('refreshDrafts', handleRefreshDrafts)
       }
     }
   }, [skip, loadDrafts]) // Include loadDrafts explicitly to satisfy React hooks rules

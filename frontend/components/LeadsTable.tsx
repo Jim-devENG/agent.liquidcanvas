@@ -264,10 +264,19 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
         window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        // Trigger drafts refresh so the draft appears immediately
+        window.dispatchEvent(new CustomEvent('refreshDrafts'))
       }
-      // Show success message
-      setError('✅ Draft saved successfully! The draft count in the pipeline will update shortly.')
-      setTimeout(() => setError(null), 3000)
+      // Show success message and navigate to drafts tab
+      setError('✅ Draft saved successfully! Navigating to Drafts tab...')
+      setTimeout(() => {
+        setError(null)
+        // Navigate to drafts tab
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('change-tab', { detail: 'drafts' })
+          window.dispatchEvent(event)
+        }
+      }, 1000)
     } catch (err: any) {
       console.error('Failed to save draft:', err)
       setError(err.message || 'Failed to save draft')
