@@ -153,7 +153,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   }
 
   useEffect(() => {
-    loadCategories() // Load categories first, then load prospects
+    // loadCategories() // Load categories first, then load prospects - TODO: implement if needed
     let abortController = new AbortController()
     let debounceTimeout: NodeJS.Timeout | null = null
     
@@ -491,7 +491,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       setError(`✅ ${result.message} - Migrated ${result.migrated_count} records. ${mappingDetails ? `Mappings: ${mappingDetails}` : ''} - Refreshing...`)
       
       // Reload categories after migration to reflect new category names in filter dropdown
-      await loadCategories()
+      // await loadCategories() // TODO: implement if needed
       
       // Reset to first page
       setSkip(0)
