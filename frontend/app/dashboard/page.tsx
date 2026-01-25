@@ -1,8 +1,6 @@
 'use client'
 // Version: 4.0-DIAGNOSTIC - LIQUIDCANVAS MONOREPO - RUNTIME PROOF TEST
-// CRITICAL: This page must be dynamically rendered - no static generation
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// NOTE: Dynamic directives moved to layout.tsx (Client Components ignore them)
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
