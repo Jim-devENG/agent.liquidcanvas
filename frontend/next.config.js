@@ -3,14 +3,16 @@ const nextConfig = {
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api',
-    // Add build timestamp for cache busting
-    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
-    NEXT_PUBLIC_BUILD_ID: `build-${Date.now()}-${Math.random().toString(36).substring(7)}`,
   },
-  // Force clean build - disable cache
+  // Generate unique build ID at build time
   generateBuildId: async () => {
     const buildId = `build-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const buildTime = new Date().toISOString()
     console.log('🔨 Generating build ID:', buildId)
+    console.log('🔨 Build time:', buildTime)
+    // Store in env for runtime access (Next.js will make NEXT_PUBLIC_* vars available)
+    process.env.NEXT_PUBLIC_BUILD_ID = buildId
+    process.env.NEXT_PUBLIC_BUILD_TIME = buildTime
     return buildId
   },
   // Disable ESLint during build to prevent config errors from blocking deployment
@@ -22,12 +24,9 @@ const nextConfig = {
     ignoreBuildErrors: false, // Keep this false to catch real errors
   },
   // CRITICAL: Disable static optimization and caching
-  output: 'standalone', // Use standalone output for better cache control
-  // Disable static page generation - force dynamic rendering
-  experimental: {
-    // Force all pages to be dynamic
-  },
-  // Add headers to prevent caching
+  // Remove 'standalone' output as it may cause issues with Vercel
+  // output: 'standalone', 
+  // Add headers to prevent caching at CDN and browser level
   async headers() {
     return [
       {
@@ -46,12 +45,8 @@ const nextConfig = {
             value: '0',
           },
           {
-            key: 'X-Build-ID',
-            value: process.env.NEXT_PUBLIC_BUILD_ID || 'unknown',
-          },
-          {
-            key: 'X-Build-Time',
-            value: process.env.NEXT_PUBLIC_BUILD_TIME || 'unknown',
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
           },
         ],
       },
@@ -60,4 +55,3 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
-
