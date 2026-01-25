@@ -10,7 +10,8 @@ export default function DraftsTable() {
   const [error, setError] = useState<string | null>(null)
   const [skip, setSkip] = useState(0)
   const [total, setTotal] = useState(0)
-  const limit = 50
+  // Use a higher limit for drafts to ensure we get all drafts, not just first 50
+  const limit = 1000
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [actionLoading, setActionLoading] = useState(false)
   const [editingProspect, setEditingProspect] = useState<string | null>(null)
