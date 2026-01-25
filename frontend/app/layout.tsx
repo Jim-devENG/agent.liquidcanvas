@@ -55,7 +55,7 @@ export default function RootLayout({
           }}
           suppressHydrationWarning
         >
-          <span style="color: #ff00ff; font-weight: bold;">MONOREPO v4.0</span> | Build: <span id="build-id-placeholder">loading...</span>
+          <span style={{ color: '#ff00ff', fontWeight: 'bold' }}>MONOREPO v4.0</span> | Build: <span id="build-id-placeholder">loading...</span>
         </div>
         {/* Immediate debug script - runs before React loads - proves new code is deployed */}
         <script
