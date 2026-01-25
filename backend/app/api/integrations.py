@@ -312,7 +312,7 @@ def detect_capabilities(integration: Optional[SocialIntegration]) -> Dict[str, A
     
     capabilities = {
         "is_connected": True,
-        "connection_status": integration.connection_status,
+        "connection_status": integration.connection_status.value if hasattr(integration.connection_status, 'value') else str(integration.connection_status),
         "can_discover": True,  # Discovery always works
         "scopes_granted": scopes,
         "token_expires_at": integration.token_expires_at,
