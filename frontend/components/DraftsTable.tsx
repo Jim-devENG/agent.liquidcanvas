@@ -26,6 +26,13 @@ export default function DraftsTable() {
   const [hasAutoDrafted, setHasAutoDrafted] = useState(false)
   const mountedRef = useRef(true)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Ref for checking state without causing re-renders or closure issues
+  const draftStateRef = useRef<'idle' | 'loading' | 'success' | 'error'>('idle')
+  
+  // Sync ref with state (for checking without re-renders)
+  useEffect(() => {
+    draftStateRef.current = draftState.status
+  }, [draftState.status])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -68,8 +75,8 @@ export default function DraftsTable() {
   }, [skip, limit])
 
   const handleAutoDraft = useCallback(async (showConfirm = true) => {
-    // Prevent concurrent requests - check current state, not dependency
-    if (draftState.status === 'loading') {
+    // Prevent concurrent requests - check via ref to avoid closure issues
+    if (draftStateRef.current === 'loading') {
       return
     }
 
@@ -89,6 +96,7 @@ export default function DraftsTable() {
 
     // Single state update: transition to loading
     if (mountedRef.current) {
+      draftStateRef.current = 'loading'
       setDraftState({ status: 'loading', message: null })
       setError(null)
     }
@@ -105,10 +113,13 @@ export default function DraftsTable() {
       }
       
       // Single state update: transition to success
-      setDraftState({ 
-        status: 'success', 
-        message: result.message || `Drafting job started for ${result.prospects_count} prospects`
-      })
+      if (mountedRef.current && !abortController.signal.aborted) {
+        draftStateRef.current = 'success'
+        setDraftState({ 
+          status: 'success', 
+          message: result.message || `Drafting job started for ${result.prospects_count} prospects`
+        })
+      }
       
       if (showConfirm) {
         alert(result.message || `Drafting job started for ${result.prospects_count} prospects`)
@@ -133,8 +144,11 @@ export default function DraftsTable() {
       const errorMessage = err?.message || 'Failed to generate drafts'
       
       // Single state update: transition to error (consolidated)
-      setDraftState({ status: 'error', message: errorMessage })
-      setError(errorMessage)
+      if (mountedRef.current && !abortController.signal.aborted) {
+        draftStateRef.current = 'error'
+        setDraftState({ status: 'error', message: errorMessage })
+        setError(errorMessage)
+      }
       
       if (showConfirm) {
         alert(errorMessage)
@@ -171,12 +185,13 @@ export default function DraftsTable() {
     }
   }, [skip])
 
-  // Separate effect for auto-drafting on mount - FIXED: handleAutoDraft is stable (no draftState dependency)
+  // Separate effect for auto-drafting on mount - FIXED: Completely independent, no handleAutoDraft dependency
   useEffect(() => {
     if (hasAutoDrafted) return
     
     let timeoutId: NodeJS.Timeout | null = null
     let checkTimeoutId: NodeJS.Timeout | null = null
+    let isCancelled = false
     
     const checkAndAutoDraft = async () => {
       try {
@@ -188,30 +203,101 @@ export default function DraftsTable() {
           ((p as any).source_type === 'website' || !(p as any).source_type)
         )
         
-        // Only proceed if component is still mounted
-        if (!mountedRef.current) {
+        // Only proceed if component is still mounted and not cancelled
+        if (!mountedRef.current || isCancelled) {
           return
         }
         
         // Auto-trigger drafting if no drafts exist
-        // handleAutoDraft will check loading state itself
+        // Inline draft logic completely to avoid ANY dependency loops
         if (draftedProspects.length === 0) {
-          timeoutId = setTimeout(() => {
-            if (mountedRef.current) {
-              // handleAutoDraft is stable and checks state internally
-              handleAutoDraft(false)
-              setHasAutoDrafted(true)
+          timeoutId = setTimeout(async () => {
+            // Triple-check: mount, cancel, and current state
+            if (!mountedRef.current || isCancelled) {
+              return
+            }
+            
+            // Check state via ref to avoid closure issues and React batching problems
+            if (draftStateRef.current !== 'idle' || !mountedRef.current || isCancelled) {
+              if (mountedRef.current && !isCancelled) {
+                setHasAutoDrafted(true)
+              }
+              return
+            }
+            
+            // Cancel any existing request
+            if (abortControllerRef.current) {
+              abortControllerRef.current.abort()
+            }
+            
+            const abortController = new AbortController()
+            abortControllerRef.current = abortController
+            
+            // Single state update: transition to loading
+            if (mountedRef.current && !isCancelled) {
+              draftStateRef.current = 'loading'
+              setDraftState({ status: 'loading', message: null })
+              setError(null)
+            }
+            
+            try {
+              const result = await pipelineDraft()
+              
+              if (abortController.signal.aborted || !mountedRef.current || isCancelled) {
+                return
+              }
+              
+              // Single state update: transition to success
+              if (mountedRef.current && !isCancelled && !abortController.signal.aborted) {
+                draftStateRef.current = 'success'
+                setDraftState({ 
+                  status: 'success', 
+                  message: result.message || `Drafting job started for ${result.prospects_count} prospects`
+                })
+              }
+              
+              // Refresh after delay
+              const refreshTimeoutId = setTimeout(() => {
+                if (mountedRef.current && !isCancelled && !abortController.signal.aborted) {
+                  loadDrafts()
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('jobsCompleted'))
+                  }
+                }
+              }, 2000)
+              
+              // Store timeout for cleanup (would need ref, but for now just let it run)
+            } catch (err: any) {
+              if (abortController.signal.aborted || !mountedRef.current || isCancelled) {
+                return
+              }
+              
+              // Single state update: transition to error
+              const errorMessage = err?.message || 'Failed to generate drafts'
+              if (mountedRef.current && !isCancelled && !abortController.signal.aborted) {
+                draftStateRef.current = 'error'
+                setDraftState({ status: 'error', message: errorMessage })
+                setError(errorMessage)
+              }
+            } finally {
+              if (abortControllerRef.current === abortController) {
+                abortControllerRef.current = null
+              }
+              
+              if (mountedRef.current && !isCancelled) {
+                setHasAutoDrafted(true)
+              }
             }
           }, 1500)
         } else {
-          if (mountedRef.current) {
+          if (mountedRef.current && !isCancelled) {
             setHasAutoDrafted(true) // Mark as checked even if drafts exist
           }
         }
       } catch (err) {
         console.error('Error checking for drafts:', err)
         // Only update state if component is still mounted
-        if (mountedRef.current) {
+        if (mountedRef.current && !isCancelled) {
           setHasAutoDrafted(true) // Mark as checked even on error to prevent retry loops
         }
       }
@@ -221,14 +307,20 @@ export default function DraftsTable() {
     checkTimeoutId = setTimeout(checkAndAutoDraft, 500)
     
     return () => {
+      isCancelled = true
       if (checkTimeoutId) {
         clearTimeout(checkTimeoutId)
       }
       if (timeoutId) {
         clearTimeout(timeoutId)
       }
+      // Cancel any in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
     }
-  }, [hasAutoDrafted, handleAutoDraft]) // handleAutoDraft is now stable (no draftState dependency, so no loop)
+  }, [hasAutoDrafted]) // ONLY depends on hasAutoDrafted - completely isolated
 
   const handleSend = async () => {
     if (selected.size === 0) {
@@ -335,6 +427,7 @@ export default function DraftsTable() {
           <button
             onClick={() => {
               // Reset state and trigger new request
+              draftStateRef.current = 'idle'
               setDraftState({ status: 'idle', message: null })
               handleAutoDraft(true)
             }}
