@@ -1,5 +1,8 @@
 'use client'
-// Version: 3.5 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD - CACHE BUST
+// Version: 3.6 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD - CACHE BUST - NO STATIC CACHE
+// CRITICAL: This page must be dynamically rendered - no static generation
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -266,7 +269,7 @@ export default function Dashboard() {
           visibility: 'visible'
         } as React.CSSProperties}
       >
-        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v3.5)` : '❌ DRAFTS MISSING (v3.5)'}
+        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v3.6)` : '❌ DRAFTS MISSING (v3.6)'}
       </div>
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />

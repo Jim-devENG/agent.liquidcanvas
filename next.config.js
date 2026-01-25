@@ -4,9 +4,16 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api',
   },
-  // Force clean build - disable cache
+  // Generate unique build ID at build time
   generateBuildId: async () => {
-    return `build-${Date.now()}`
+    const buildId = `build-${Date.now()}-${Math.random().toString(36).substring(7)}`
+    const buildTime = new Date().toISOString()
+    console.log('🔨 Generating build ID:', buildId)
+    console.log('🔨 Build time:', buildTime)
+    // Store in env for runtime access (Next.js will make NEXT_PUBLIC_* vars available)
+    process.env.NEXT_PUBLIC_BUILD_ID = buildId
+    process.env.NEXT_PUBLIC_BUILD_TIME = buildTime
+    return buildId
   },
   // Disable ESLint during build to prevent config errors from blocking deployment
   eslint: {
@@ -16,7 +23,32 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false, // Keep this false to catch real errors
   },
+  // Add headers to prevent caching at CDN and browser level
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+        ],
+      },
+    ]
+  },
 }
 
 module.exports = nextConfig
-
