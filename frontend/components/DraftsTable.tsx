@@ -61,8 +61,9 @@ export default function DraftsTable() {
     try {
       setLoading(true)
       setError(null)
-      // Filter prospects that have drafts (draft_subject and draft_body not null)
-      const response = await listProspects(skip, limit)
+      // Load ALL prospects with a high limit to find all drafts (not just first 50)
+      // This ensures drafts from leads and scraped emails are included, even if they're not in the first page
+      const response = await listProspects(0, 1000)
       
       // Check if component unmounted during async operation
       if (!mountedRef.current) return
@@ -71,14 +72,29 @@ export default function DraftsTable() {
       
       // Filter for prospects with drafts from ANY source (website, leads, scraped_emails)
       // Include all prospects that have draft_subject and draft_body, regardless of source_type
-      const draftedProspects = allProspects.filter((p: Prospect) => 
-        p.draft_subject && p.draft_body
-      )
+      // Check for both non-null and non-empty strings to ensure valid drafts
+      const draftedProspects = allProspects.filter((p: Prospect) => {
+        const hasSubject = p.draft_subject && p.draft_subject.trim().length > 0
+        const hasBody = p.draft_body && p.draft_body.trim().length > 0
+        return hasSubject && hasBody
+      })
+      
+      // Debug log to help diagnose filtering issues
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`🔍 [DRAFTS] Filtered ${draftedProspects.length} drafts from ${allProspects.length} total prospects`)
+        if (draftedProspects.length === 0 && allProspects.length > 0) {
+          // Check if any prospects have partial drafts
+          const withSubject = allProspects.filter((p: Prospect) => p.draft_subject && p.draft_subject.trim().length > 0)
+          const withBody = allProspects.filter((p: Prospect) => p.draft_body && p.draft_body.trim().length > 0)
+          console.log(`🔍 [DRAFTS] Debug: ${withSubject.length} with subject, ${withBody.length} with body`)
+        }
+      }
       
       // Only update state if component is still mounted
       if (mountedRef.current) {
         setProspects(draftedProspects)
-        setTotal(response?.total || draftedProspects.length)
+        // Total is the count of drafted prospects, not all prospects
+        setTotal(draftedProspects.length)
         setError(null) // Clear error on successful load
       }
     } catch (error: any) {
