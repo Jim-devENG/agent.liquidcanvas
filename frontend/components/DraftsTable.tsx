@@ -68,10 +68,10 @@ export default function DraftsTable() {
       
       const allProspects = Array.isArray(response?.data) ? response.data : []
       
-      // Filter for website prospects with drafts
+      // Filter for prospects with drafts from ANY source (website, leads, scraped_emails)
+      // Include all prospects that have draft_subject and draft_body, regardless of source_type
       const draftedProspects = allProspects.filter((p: Prospect) => 
-        p.draft_subject && p.draft_body && 
-        ((p as any).source_type === 'website' || !(p as any).source_type)
+        p.draft_subject && p.draft_body
       )
       
       // Only update state if component is still mounted

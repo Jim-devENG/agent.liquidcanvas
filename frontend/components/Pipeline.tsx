@@ -215,6 +215,8 @@ export default function Pipeline() {
     let timeoutId: NodeJS.Timeout | null = null
     
     try {
+      // Call pipelineDraft without prospect_ids to automatically draft for ALL verified prospects
+      // This includes leads and scraped emails (any prospect with verification_status='verified' and contact_email IS NOT NULL)
       const result = await pipelineDraft()
       
       // Check if component is still mounted (for Next.js client component)
@@ -223,7 +225,7 @@ export default function Pipeline() {
       }
       
       // Show success message
-      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads with scraped emails.`)
+      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads and scraped emails.`)
       
       // Refresh status once
       await loadStatus()
