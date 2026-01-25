@@ -139,10 +139,8 @@ export default function DraftsTable() {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    if (showConfirm && !confirm('Generate drafts for all verified leads and scraped emails? This will create drafts for all prospects with verification_status=\'verified\' and contact_email IS NOT NULL.')) {
-      abortControllerRef.current = null
-      return
-    }
+    // Removed confirm dialog - it's blocked by no-alert-script anyway
+    // Proceed directly with draft generation
 
     // Single state update: transition to loading
     if (mountedRef.current) {
@@ -171,9 +169,7 @@ export default function DraftsTable() {
         })
       }
       
-      if (showConfirm) {
-        alert(result.message || `Drafting job started for ${result.prospects_count} prospects`)
-      }
+      // Removed alert - it's blocked by no-alert-script anyway
       
       // Refresh after a short delay to allow job to start
       timeoutId = setTimeout(() => {
@@ -211,9 +207,7 @@ export default function DraftsTable() {
         setError(errorMessage)
       }
       
-      if (showConfirm) {
-        alert(errorMessage)
-      }
+      // Removed alert - it's blocked by no-alert-script anyway
     } finally {
       // Cleanup
       if (timeoutId) {
@@ -501,17 +495,7 @@ export default function DraftsTable() {
         </div>
       )}
       
-      {draftState.status === 'success' && draftState.message && (
-        <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
-          {draftState.message}
-        </div>
-      )}
-      
-      {draftState.status === 'error' && draftState.message && (
-        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
-          {draftState.message}
-        </div>
-      )}
+      {/* Removed draft state success/error messages - user requested removal of "draft signal at the top" */}
 
       {/* Show error state if there's an error and no prospects (don't show empty state when error exists) */}
       {error && prospects.length === 0 && !loading ? (
