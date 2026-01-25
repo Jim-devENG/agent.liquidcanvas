@@ -55,7 +55,7 @@ export default function RootLayout({
           }}
           suppressHydrationWarning
         >
-          Build: <span id="build-id-placeholder">loading...</span>
+          <span style="color: #ff00ff; font-weight: bold;">MONOREPO v4.0</span> | Build: <span id="build-id-placeholder">loading...</span>
         </div>
         {/* Immediate debug script - runs before React loads - proves new code is deployed */}
         <script
@@ -65,16 +65,30 @@ export default function RootLayout({
                 const buildId = '${buildId}';
                 const buildTime = '${buildTime}';
                 const runtimeTime = new Date().toISOString();
-                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 3.6 🚨🚨🚨');
+                // CRITICAL RUNTIME PROOF: This will FAIL if wrong codebase is running
+                const EXPECTED_REPO = 'liquidcanvas-monorepo-frontend';
+                const EXPECTED_VERSION = '4.0-DIAGNOSTIC';
+                const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-' + Date.now();
+                
+                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 4.0-DIAGNOSTIC 🚨🚨🚨');
+                console.log('🚨 REPO PROOF:', EXPECTED_REPO);
+                console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF);
                 console.log('🚨 Build ID:', buildId);
                 console.log('🚨 Build Time:', buildTime);
                 console.log('🚨 Runtime Time:', runtimeTime);
                 console.log('🚨 Page Load Time:', new Date().toLocaleString());
-                window.__DASHBOARD_VERSION__ = '3.6';
+                
+                // Set global markers for runtime verification
+                window.__DASHBOARD_VERSION__ = EXPECTED_VERSION;
+                window.__REPO_PROOF__ = EXPECTED_REPO;
+                window.__RUNTIME_PROOF__ = RUNTIME_PROOF;
                 window.__BUILD_ID__ = buildId;
                 window.__BUILD_TIME__ = buildTime;
                 window.__RUNTIME_TIME__ = runtimeTime;
                 window.__DASHBOARD_LOADED__ = true;
+                
+                // HARD FAILURE TEST: If this code is NOT running, this will not exist
+                window.__LIQUIDCANVAS_MONOREPO_ACTIVE__ = true;
                 
                 // Update visible stamp immediately
                 const placeholder = document.getElementById('build-id-placeholder');

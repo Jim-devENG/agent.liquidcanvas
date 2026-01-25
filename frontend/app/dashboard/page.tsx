@@ -1,5 +1,5 @@
 'use client'
-// Version: 3.6 - Drafts tab with immediate debug logs - FORCE CLEAN BUILD - CACHE BUST - NO STATIC CACHE
+// Version: 4.0-DIAGNOSTIC - LIQUIDCANVAS MONOREPO - RUNTIME PROOF TEST
 // CRITICAL: This page must be dynamically rendered - no static generation
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -231,7 +231,14 @@ export default function Dashboard() {
   // CRITICAL: Immediate console logs that run on EVERY render
   // Force these to run immediately - no conditions
   if (typeof window !== 'undefined') {
-    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 3.4 🚨🚨🚨')
+    // RUNTIME PROOF: This proves liquidcanvas monorepo frontend is running
+    const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-DASHBOARD-' + Date.now();
+    window.__DASHBOARD_RUNTIME_PROOF__ = RUNTIME_PROOF;
+    window.__DASHBOARD_REPO__ = 'liquidcanvas-monorepo-frontend';
+    
+    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 4.0-DIAGNOSTIC 🚨🚨🚨')
+    console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF)
+    console.log('🚨 REPO:', 'liquidcanvas-monorepo-frontend')
     console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
     console.log('🚨 RENDER - All tab IDs:', tabs.map(t => t.id).join(', '))
     console.log('🚨 RENDER - Active tab:', activeTab)

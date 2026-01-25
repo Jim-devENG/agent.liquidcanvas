@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Runtime Proof Test - Liquid Canvas</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #0f0;
+        }
+        .pass { color: #0f0; }
+        .fail { color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>Runtime Proof Test</h1>
+    <p>This page tests if the correct codebase is running in production.</p>
+    
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        const tests = [];
+        
+        // Test 1: Check for monorepo marker
+        const test1 = {
+            name: 'Monorepo Active Flag',
+            pass: typeof window.__LIQUIDCANVAS_MONOREPO_ACTIVE__ !== 'undefined' && window.__LIQUIDCANVAS_MONOREPO_ACTIVE__ === true,
+            value: window.__LIQUIDCANVAS_MONOREPO_ACTIVE__
+        };
+        tests.push(test1);
+        
+        // Test 2: Check repo proof
+        const test2 = {
+            name: 'Repo Proof',
+            pass: window.__REPO_PROOF__ === 'liquidcanvas-monorepo-frontend',
+            value: window.__REPO_PROOF__
+        };
+        tests.push(test2);
+        
+        // Test 3: Check runtime proof exists
+        const test3 = {
+            name: 'Runtime Proof Exists',
+            pass: typeof window.__RUNTIME_PROOF__ !== 'undefined',
+            value: window.__RUNTIME_PROOF__ ? 'EXISTS' : 'MISSING'
+        };
+        tests.push(test3);
+        
+        // Test 4: Check dashboard runtime proof
+        const test4 = {
+            name: 'Dashboard Runtime Proof',
+            pass: typeof window.__DASHBOARD_RUNTIME_PROOF__ !== 'undefined',
+            value: window.__DASHBOARD_RUNTIME_PROOF__ ? 'EXISTS' : 'MISSING'
+        };
+        tests.push(test4);
+        
+        // Test 5: Check version
+        const test5 = {
+            name: 'Version Check',
+            pass: window.__DASHBOARD_VERSION__ === '4.0-DIAGNOSTIC',
+            value: window.__DASHBOARD_VERSION__
+        };
+        tests.push(test5);
+        
+        // Render results
+        let html = '';
+        tests.forEach(test => {
+            const status = test.pass ? 'PASS' : 'FAIL';
+            const className = test.pass ? 'pass' : 'fail';
+            html += `
+                <div class="test">
+                    <strong class="${className}">${status}</strong>: ${test.name}<br>
+                    Value: ${JSON.stringify(test.value)}
+                </div>
+            `;
+        });
+        
+        const allPass = tests.every(t => t.pass);
+        html = `
+            <div class="test" style="border: 2px solid ${allPass ? '#0f0' : '#f00'};">
+                <h2>Overall: ${allPass ? '✅ CORRECT CODEBASE RUNNING' : '❌ WRONG CODEBASE OR NOT LOADED'}</h2>
+            </div>
+        ` + html;
+        
+        results.innerHTML = html;
+        
+        // Also log to console
+        console.log('=== RUNTIME PROOF TEST RESULTS ===');
+        tests.forEach(test => {
+            console.log(`${test.pass ? '✅' : '❌'} ${test.name}:`, test.value);
+        });
+        console.log('=== END TEST RESULTS ===');
+    </script>
+</body>
+</html>
+
