@@ -243,7 +243,7 @@ export default function Dashboard() {
     console.log('🚨 RENDER - DraftsTab object:', draftsTab)
     
     // Also set a global variable that can be checked
-    ;(window as any).__DRAFTS_TAB_DEBUG__ = {
+    window.__DRAFTS_TAB_DEBUG__ = {
       exists: !!draftsTab,
       tabId: draftsTab?.id,
       label: draftsTab?.label,
