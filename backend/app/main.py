@@ -120,7 +120,7 @@ app.include_router(health.router, tags=["health"])  # Health check endpoints
 app.include_router(social.router, tags=["social"])  # Social outreach - separate from website outreach
 app.include_router(social_pipeline.router, tags=["social-pipeline"])  # Social pipeline - completely separate from website pipeline
 app.include_router(diagnostics.router, tags=["diagnostics"])  # Database forensics endpoints
-app.include_router(integrations.router, tags=["integrations"])  # Social integrations and OAuth management
+app.include_router(integrations.router, prefix="/api", tags=["integrations"])  # Social integrations and OAuth management
 
 # Webhook routes
 from app.api import webhooks
