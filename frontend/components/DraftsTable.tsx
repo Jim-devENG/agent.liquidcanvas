@@ -359,6 +359,61 @@ export default function DraftsTable() {
     }
   }
 
+  // Extract location from domain or email TLD
+  const extractLocationFromDomain = (domain?: string, email?: string): string => {
+    // First, try discovery_location if available (most accurate)
+    // This is handled in the component where we have access to prospect.discovery_location
+    
+    // Extract from domain TLD
+    const domainToCheck = domain || (email ? email.split('@')[1] : '')
+    if (!domainToCheck) return 'N/A'
+    
+    // Common TLD to country mappings
+    const tldToCountry: Record<string, string> = {
+      'uk': 'United Kingdom',
+      'co.uk': 'United Kingdom',
+      'au': 'Australia',
+      'com.au': 'Australia',
+      'ca': 'Canada',
+      'de': 'Germany',
+      'fr': 'France',
+      'it': 'Italy',
+      'es': 'Spain',
+      'nl': 'Netherlands',
+      'be': 'Belgium',
+      'ch': 'Switzerland',
+      'at': 'Austria',
+      'se': 'Sweden',
+      'no': 'Norway',
+      'dk': 'Denmark',
+      'fi': 'Finland',
+      'ie': 'Ireland',
+      'nz': 'New Zealand',
+      'sg': 'Singapore',
+      'jp': 'Japan',
+      'cn': 'China',
+      'in': 'India',
+      'br': 'Brazil',
+      'mx': 'Mexico',
+      'za': 'South Africa',
+    }
+    
+    // Extract TLD (last part after last dot)
+    const parts = domainToCheck.toLowerCase().split('.')
+    if (parts.length >= 2) {
+      const tld = parts.slice(-2).join('.') // Check for two-part TLDs like .co.uk
+      if (tldToCountry[tld]) {
+        return tldToCountry[tld]
+      }
+      const singleTld = parts[parts.length - 1]
+      if (tldToCountry[singleTld]) {
+        return tldToCountry[singleTld]
+      }
+    }
+    
+    return 'N/A'
+  }
+
   if (loading && prospects.length === 0) {
     return (
       <div className="glass rounded-xl shadow-lg border border-white/20 p-6">
@@ -562,7 +617,9 @@ export default function DraftsTable() {
                       <span className="text-gray-700 font-medium">{prospect.discovery_category || 'N/A'}</span>
                     </td>
                     <td className="p-2">
-                      <span className="text-gray-700 font-medium">{prospect.discovery_location || 'N/A'}</span>
+                      <span className="text-gray-700 font-medium">
+                        {prospect.discovery_location || extractLocationFromDomain(prospect.domain, prospect.contact_email) || 'N/A'}
+                      </span>
                     </td>
                     <td className="p-2">
                       <div className="flex items-center space-x-1">
