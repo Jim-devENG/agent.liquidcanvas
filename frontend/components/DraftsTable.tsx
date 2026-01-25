@@ -558,8 +558,12 @@ export default function DraftsTable() {
                         <span className="text-gray-700">{prospect.draft_subject || 'N/A'}</span>
                       )}
                     </td>
-                    <td className="p-2 text-gray-600">{prospect.discovery_category || 'N/A'}</td>
-                    <td className="p-2 text-gray-600">{prospect.discovery_location || 'N/A'}</td>
+                    <td className="p-2">
+                      <span className="text-gray-700 font-medium">{prospect.discovery_category || 'N/A'}</span>
+                    </td>
+                    <td className="p-2">
+                      <span className="text-gray-700 font-medium">{prospect.discovery_location || 'N/A'}</span>
+                    </td>
                     <td className="p-2">
                       <div className="flex items-center space-x-1">
                         {editingProspect === prospect.id ? (
