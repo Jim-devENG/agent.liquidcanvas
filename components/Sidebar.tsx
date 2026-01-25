@@ -58,9 +58,9 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
       {/* Logo/Header Section */}
-      <div className="p-4 border-b border-gray-200/50 bg-gradient-to-br from-white to-olive-50/30">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-olive-600 flex items-center justify-center shadow-lg hover-glow transition-all">
+      <div className="p-3 border-b border-gray-200/50 bg-gradient-to-br from-white to-gray-50">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 rounded-lg bg-olive-600 flex items-center justify-center shadow-lg">
             <span className="text-white text-sm font-bold">LC</span>
           </div>
           <div>
@@ -110,8 +110,8 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
                   }
                   setMobileMenuOpen(false) // Close mobile menu when tab is selected
                 }}
-                  className={`
-                  w-full flex items-center space-x-2 px-3 py-2.5 rounded-lg font-medium text-xs transition-all duration-200
+                className={`
+                  w-full flex items-center space-x-2 px-2 py-2 rounded-lg font-medium text-xs transition-all duration-200
                   ${
                     isActive
                       ? 'bg-olive-600 text-white shadow-md hover-glow'

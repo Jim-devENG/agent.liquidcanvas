@@ -1,0 +1,98 @@
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import NoAlertScript from './no-alert-script'
+
+const inter = Inter({ subsets: ['latin'] })
+
+// CRITICAL: Force dynamic rendering - no static generation
+// This ensures the page is always server-rendered and never cached
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+export const metadata: Metadata = {
+  title: 'Liquid Canvas | Outreach Automation',
+  description: 'Beautiful outreach automation powered by Liquid Canvas - Transform your creative connections',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  // Get build info - will be injected at build time via env vars
+  const buildId = process.env.NEXT_PUBLIC_BUILD_ID || `runtime-${Date.now()}`
+  const buildTime = process.env.NEXT_PUBLIC_BUILD_TIME || new Date().toISOString()
+  
+  return (
+    <html lang="en">
+      <head>
+        {/* Fix favicon 404 error by providing proper link tag */}
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+        <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+        {/* CRITICAL: Meta tags to prevent caching */}
+        <meta httpEquiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+      </head>
+      <body className={inter.className}>
+        <NoAlertScript />
+        {/* CRITICAL: Visible version stamp - always in DOM - proves code is running */}
+        <div 
+          id="build-version-stamp" 
+          style={{ 
+            position: 'fixed', 
+            bottom: 0, 
+            left: 0, 
+            zIndex: 99999, 
+            background: 'rgba(0,0,0,0.8)', 
+            color: 'white', 
+            padding: '4px 8px', 
+            fontSize: '10px', 
+            fontFamily: 'monospace',
+            pointerEvents: 'none',
+            display: 'block'
+          }}
+          suppressHydrationWarning
+        >
+          Build: <span id="build-id-placeholder">loading...</span>
+        </div>
+        {/* Immediate debug script - runs before React loads - proves new code is deployed */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                const buildId = '${buildId}';
+                const buildTime = '${buildTime}';
+                const runtimeTime = new Date().toISOString();
+                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 3.6 🚨🚨🚨');
+                console.log('🚨 Build ID:', buildId);
+                console.log('🚨 Build Time:', buildTime);
+                console.log('🚨 Runtime Time:', runtimeTime);
+                console.log('🚨 Page Load Time:', new Date().toLocaleString());
+                window.__DASHBOARD_VERSION__ = '3.6';
+                window.__BUILD_ID__ = buildId;
+                window.__BUILD_TIME__ = buildTime;
+                window.__RUNTIME_TIME__ = runtimeTime;
+                window.__DASHBOARD_LOADED__ = true;
+                
+                // Update visible stamp immediately
+                const placeholder = document.getElementById('build-id-placeholder');
+                if (placeholder) {
+                  const timeStr = buildTime !== 'unknown' && buildTime.startsWith('2') 
+                    ? new Date(buildTime).toLocaleString() 
+                    : runtimeTime;
+                  placeholder.textContent = buildId.substring(0, 20) + '... | ' + timeStr;
+                }
+                
+                // Also log to console for debugging
+                console.log('✅ Build version stamp updated in DOM');
+              })();
+            `,
+          }}
+        />
+        {children}
+      </body>
+    </html>
+  )
+}
