@@ -216,13 +216,16 @@ export default function Pipeline() {
     
     try {
       const result = await pipelineDraft()
-      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads with scraped emails.`)
       
-      // Only proceed if component is still mounted
+      // Check if component is still mounted (for Next.js client component)
       if (typeof window === 'undefined') {
         return
       }
       
+      // Show success message
+      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads with scraped emails.`)
+      
+      // Refresh status once
       await loadStatus()
       
       // Refresh after a short delay to allow job to start
@@ -237,7 +240,13 @@ export default function Pipeline() {
       if (timeoutId) {
         clearTimeout(timeoutId)
       }
-      alert(err?.message || 'Failed to start drafting')
+      
+      // Show error message - 422 is a valid business rule, not a crash
+      const errorMessage = err?.message || 'Failed to start drafting'
+      alert(errorMessage)
+      
+      // Do NOT update state here - let the error be handled by the alert
+      // This prevents React invariant violations
     }
   }
 

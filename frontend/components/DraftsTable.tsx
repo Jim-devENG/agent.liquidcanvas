@@ -16,17 +16,27 @@ export default function DraftsTable() {
   const [editingProspect, setEditingProspect] = useState<string | null>(null)
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
-  // Draft request state machine: idle | loading | success | error
-  const [draftState, setDraftState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [draftError, setDraftError] = useState<string | null>(null)
+  
+  // Draft request state machine: single source of truth
+  const [draftState, setDraftState] = useState<{
+    status: 'idle' | 'loading' | 'success' | 'error'
+    message: string | null
+  }>({ status: 'idle', message: null })
+  
   const [hasAutoDrafted, setHasAutoDrafted] = useState(false)
   const mountedRef = useRef(true)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      // Cancel any in-flight requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
     }
   }, [])
 
@@ -58,18 +68,30 @@ export default function DraftsTable() {
   }, [skip, limit])
 
   const handleAutoDraft = useCallback(async (showConfirm = true) => {
+    // Prevent concurrent requests - check current state, not dependency
+    if (draftState.status === 'loading') {
+      return
+    }
+
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
     if (showConfirm && !confirm('Generate drafts for all leads with scraped emails? This will create drafts for all verified prospects.')) {
+      abortControllerRef.current = null
       return
     }
 
-    // Prevent concurrent requests
-    if (draftState === 'loading') {
-      return
+    // Single state update: transition to loading
+    if (mountedRef.current) {
+      setDraftState({ status: 'loading', message: null })
+      setError(null)
     }
-
-    setDraftState('loading')
-    setDraftError(null)
-    setError(null)
     
     let timeoutId: NodeJS.Timeout | null = null
     
@@ -77,21 +99,24 @@ export default function DraftsTable() {
       // Call pipelineDraft without prospect_ids to automatically draft for all verified prospects with emails
       const result = await pipelineDraft()
       
-      // Only update state if component is still mounted
-      if (!mountedRef.current) {
+      // Check if request was aborted
+      if (abortController.signal.aborted || !mountedRef.current) {
         return
       }
       
-      setDraftState('success')
+      // Single state update: transition to success
+      setDraftState({ 
+        status: 'success', 
+        message: result.message || `Drafting job started for ${result.prospects_count} prospects`
+      })
       
       if (showConfirm) {
         alert(result.message || `Drafting job started for ${result.prospects_count} prospects`)
       }
       
       // Refresh after a short delay to allow job to start
-      // Use ref to track if component is still mounted
       timeoutId = setTimeout(() => {
-        if (mountedRef.current) {
+        if (mountedRef.current && !abortController.signal.aborted) {
           loadDrafts()
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('jobsCompleted'))
@@ -99,32 +124,31 @@ export default function DraftsTable() {
         }
       }, 2000)
     } catch (err: any) {
-      // Only update state if component is still mounted
-      if (!mountedRef.current) {
+      // Check if request was aborted or component unmounted
+      if (abortController.signal.aborted || !mountedRef.current) {
         return
       }
       
+      // Extract error message - backend 422 is a valid business rule, not a crash
       const errorMessage = err?.message || 'Failed to generate drafts'
-      setDraftState('error')
-      setDraftError(errorMessage)
+      
+      // Single state update: transition to error (consolidated)
+      setDraftState({ status: 'error', message: errorMessage })
       setError(errorMessage)
       
       if (showConfirm) {
         alert(errorMessage)
       }
     } finally {
-      // Only update state if component is still mounted
-      if (mountedRef.current) {
-        // Don't reset to idle immediately - let user see error state
-        // State will reset when user retries or component unmounts
-      }
-      
-      // Cleanup timeout on error
+      // Cleanup
       if (timeoutId) {
         clearTimeout(timeoutId)
       }
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null
+      }
     }
-  }, [draftState, loadDrafts])
+  }, [loadDrafts]) // Removed draftState from dependencies to prevent recreation loop
 
   useEffect(() => {
     loadDrafts()
@@ -147,11 +171,12 @@ export default function DraftsTable() {
     }
   }, [skip])
 
-  // Separate effect for auto-drafting on mount
+  // Separate effect for auto-drafting on mount - FIXED: handleAutoDraft is stable (no draftState dependency)
   useEffect(() => {
     if (hasAutoDrafted) return
     
     let timeoutId: NodeJS.Timeout | null = null
+    let checkTimeoutId: NodeJS.Timeout | null = null
     
     const checkAndAutoDraft = async () => {
       try {
@@ -169,15 +194,19 @@ export default function DraftsTable() {
         }
         
         // Auto-trigger drafting if no drafts exist
+        // handleAutoDraft will check loading state itself
         if (draftedProspects.length === 0) {
           timeoutId = setTimeout(() => {
             if (mountedRef.current) {
-              handleAutoDraft(false) // Auto-draft without confirmation
+              // handleAutoDraft is stable and checks state internally
+              handleAutoDraft(false)
               setHasAutoDrafted(true)
             }
           }, 1500)
         } else {
-          setHasAutoDrafted(true) // Mark as checked even if drafts exist
+          if (mountedRef.current) {
+            setHasAutoDrafted(true) // Mark as checked even if drafts exist
+          }
         }
       } catch (err) {
         console.error('Error checking for drafts:', err)
@@ -189,14 +218,17 @@ export default function DraftsTable() {
     }
     
     // Delay to ensure component is mounted
-    const timer = setTimeout(checkAndAutoDraft, 500)
+    checkTimeoutId = setTimeout(checkAndAutoDraft, 500)
+    
     return () => {
-      clearTimeout(timer)
+      if (checkTimeoutId) {
+        clearTimeout(checkTimeoutId)
+      }
       if (timeoutId) {
         clearTimeout(timeoutId)
       }
     }
-  }, [hasAutoDrafted, handleAutoDraft, loadDrafts])
+  }, [hasAutoDrafted, handleAutoDraft]) // handleAutoDraft is now stable (no draftState dependency, so no loop)
 
   const handleSend = async () => {
     if (selected.size === 0) {
@@ -302,19 +334,19 @@ export default function DraftsTable() {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => {
-              setDraftState('idle')
-              setDraftError(null)
+              // Reset state and trigger new request
+              setDraftState({ status: 'idle', message: null })
               handleAutoDraft(true)
             }}
-            disabled={draftState === 'loading'}
+            disabled={draftState.status === 'loading'}
             className="px-3 py-1.5 text-xs font-medium bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
           >
-            {draftState === 'loading' ? (
+            {draftState.status === 'loading' ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Generating...</span>
               </>
-            ) : draftState === 'error' ? (
+            ) : draftState.status === 'error' ? (
               <>
                 <X className="w-3 h-3" />
                 <span>Retry</span>
@@ -364,15 +396,21 @@ export default function DraftsTable() {
         </div>
       </div>
 
-      {(error || draftError) && (
+      {error && (
         <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
-          {draftError || error}
+          {error}
         </div>
       )}
       
-      {draftState === 'success' && (
+      {draftState.status === 'success' && draftState.message && (
         <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
-          Drafting job started successfully. Drafts will appear here when ready.
+          {draftState.message}
+        </div>
+      )}
+      
+      {draftState.status === 'error' && draftState.message && (
+        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+          {draftState.message}
         </div>
       )}
 
