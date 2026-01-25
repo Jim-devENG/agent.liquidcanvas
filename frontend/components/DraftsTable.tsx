@@ -31,9 +31,8 @@ export default function DraftsTable() {
   const draftStateRef = useRef<'idle' | 'loading' | 'success' | 'error'>('idle')
   
   // Sync ref with state (for checking without re-renders)
-  useEffect(() => {
-    draftStateRef.current = draftState.status
-  }, [draftState.status])
+  // Use a ref callback to avoid triggering re-renders
+  draftStateRef.current = draftState.status
 
   // Cleanup on unmount
   useEffect(() => {
@@ -219,6 +218,12 @@ export default function DraftsTable() {
     }
   }, [loadDrafts]) // Removed draftState from dependencies to prevent recreation loop
 
+  // Use a ref to store the latest loadDrafts function to avoid dependency issues
+  const loadDraftsRef = useRef(loadDrafts)
+  useEffect(() => {
+    loadDraftsRef.current = loadDrafts
+  }, [loadDrafts])
+
   useEffect(() => {
     // Only run if component is mounted
     if (!mountedRef.current) return
@@ -226,24 +231,36 @@ export default function DraftsTable() {
     // Reset initial load flag when skip changes (new page)
     isInitialLoadRef.current = true
     
-    loadDrafts()
+    // Use setTimeout to defer state updates to avoid React invariant errors
+    // This ensures state updates happen after render is complete
+    const timeoutId = setTimeout(() => {
+      if (mountedRef.current) {
+        loadDraftsRef.current()
+      }
+    }, 0)
     
     const interval = setInterval(() => {
       if (mountedRef.current) {
-        loadDrafts()
+        loadDraftsRef.current()
       }
     }, 15000)
     
     const handleJobCompleted = () => {
-      if (mountedRef.current) {
-        loadDrafts()
-      }
+      // Defer to avoid state updates during render
+      setTimeout(() => {
+        if (mountedRef.current) {
+          loadDraftsRef.current()
+        }
+      }, 0)
     }
     
     const handleRefreshDrafts = () => {
-      if (mountedRef.current) {
-        loadDrafts()
-      }
+      // Defer to avoid state updates during render
+      setTimeout(() => {
+        if (mountedRef.current) {
+          loadDraftsRef.current()
+        }
+      }, 0)
     }
     
     if (typeof window !== 'undefined') {
@@ -252,13 +269,14 @@ export default function DraftsTable() {
     }
     
     return () => {
+      clearTimeout(timeoutId)
       clearInterval(interval)
       if (typeof window !== 'undefined') {
         window.removeEventListener('jobsCompleted', handleJobCompleted)
         window.removeEventListener('refreshDrafts', handleRefreshDrafts)
       }
     }
-  }, [skip, loadDrafts]) // Include loadDrafts explicitly to satisfy React hooks rules
+  }, [skip]) // Only depend on skip, use ref for loadDrafts
 
   // DISABLED: Auto-draft on mount to prevent React invariant errors
   // Auto-drafting is now opt-in only via the "Generate Drafts" button
