@@ -298,7 +298,7 @@ def detect_capabilities(integration: Optional[SocialIntegration]) -> Dict[str, A
     if not integration or not integration.is_connected():
         return {
             "is_connected": False,
-            "connection_status": integration.connection_status if integration else "not_connected",
+            "connection_status": integration.connection_status.value if integration and integration.connection_status else "not_connected",
             "can_send_dm": False,
             "can_discover": True,  # Discovery works without integrations
             "can_read_messages": False,
