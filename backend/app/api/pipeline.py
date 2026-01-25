@@ -605,168 +605,184 @@ async def draft_emails(
     If prospect_ids provided, use those (manual selection).
     If prospect_ids empty or not provided, query all draft-ready prospects automatically.
     """
-    # Check master switch
-    master_enabled = await check_master_switch(db)
-    if not master_enabled:
-        raise HTTPException(
-            status_code=403,
-            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
-        )
+    job_id: Optional[UUID] = None
+    prospects_count = 0
     
-    # DATA-DRIVEN: Query draft-ready prospects directly from database
-    # Draft-ready = verified + email + (draft_status = 'pending' OR draft_status IS NULL)
-    # Accept NULL for existing prospects created before draft_status column was added
-    prospects = []  # Initialize prospects list
-    
-    # CRITICAL: Filter by source_type='website' to separate from social outreach
-    website_filter = or_(
-        Prospect.source_type == 'website',
-        Prospect.source_type.is_(None)  # Legacy prospects (default to website)
-    )
-    
-    if request.prospect_ids is not None and len(request.prospect_ids) > 0:
-        # Manual selection: use provided prospect_ids but validate they meet draft-ready criteria
-        result = await db.execute(
-            select(Prospect).where(
-                and_(
-                    Prospect.id.in_(request.prospect_ids),
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.contact_email.isnot(None),
-                    or_(
-                        Prospect.draft_status == DraftStatus.PENDING.value,
-                        Prospect.draft_status.is_(None)
-                    ),
-                    website_filter  # Only website prospects
-                )
-        )
-    )
-    prospects = result.scalars().all()
-    
-    if len(prospects) != len(request.prospect_ids):
-        raise HTTPException(
-                status_code=422,
-                detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending' or NULL."
-            )
-    else:
-        # Automatic: query all draft-ready WEBSITE prospects
-        # First, let's check what we have in the database for debugging
-        debug_verified = await db.execute(
-            select(func.count(Prospect.id)).where(
-                and_(
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    website_filter
-                )
-            )
-        )
-        verified_total = debug_verified.scalar() or 0
-        
-        debug_with_email = await db.execute(
-            select(func.count(Prospect.id)).where(
-                and_(
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.contact_email.isnot(None),
-                    website_filter
-                )
-            )
-        )
-        verified_with_email = debug_with_email.scalar() or 0
-        
-        debug_draft_status = await db.execute(
-            select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None),
-                Prospect.draft_status == DraftStatus.PENDING.value
-            )
-        )
-        verified_pending = debug_draft_status.scalar() or 0
-        
-        debug_draft_null = await db.execute(
-            select(func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None),
-                Prospect.draft_status.is_(None)
-            )
-        )
-        verified_null = debug_draft_null.scalar() or 0
-        
-        # Check what draft_status values actually exist
-        debug_draft_statuses = await db.execute(
-            select(Prospect.draft_status, func.count(Prospect.id)).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None)
-            ).group_by(Prospect.draft_status)
-        )
-        draft_status_counts = {row[0]: row[1] for row in debug_draft_statuses.fetchall()}
-        
-        logger.info(f"🔍 [DRAFT DEBUG] Verified total: {verified_total}, With email: {verified_with_email}, Draft pending: {verified_pending}, Draft NULL: {verified_null}")
-        logger.info(f"🔍 [DRAFT DEBUG] Draft status breakdown: {draft_status_counts}")
-        
-        # Query draft-ready prospects
-        # SIMPLIFIED: Accept ALL verified prospects with emails, regardless of draft_status
-        # The drafting task will handle setting draft_status correctly
-        # This allows re-drafting if needed and handles any edge cases
-        result = await db.execute(
-            select(Prospect).where(
-                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                Prospect.contact_email.isnot(None),
-                website_filter  # CRITICAL: Only website prospects for website outreach
-                # No draft_status filter - accept all verified prospects with emails
-            )
-        )
-        prospects = result.scalars().all()
-        
-        if len(prospects) == 0:
-            error_detail = (
-                f"No prospects ready for drafting. "
-                f"Debug: verified_total={verified_total}, verified_with_email={verified_with_email}, "
-                f"draft_pending={verified_pending}, draft_null={verified_null}. "
-                f"Ensure prospects have verification_status='verified', contact_email IS NOT NULL, "
-                f"and draft_status is 'pending' or NULL."
-            )
-            logger.warning(f"⚠️  [DRAFT] {error_detail}")
-            raise HTTPException(
-                status_code=422,
-                detail=error_detail
-        )
-    
-    logger.info(f"✍️  [PIPELINE STEP 6] Drafting emails for {len(prospects)} verified prospects")
-    
-    # Create drafting job
-    job = Job(
-        job_type="draft",
-        params={
-            "prospect_ids": [str(p.id) for p in prospects],
-            "pipeline_mode": True,
-        },
-        status="pending"
-    )
-    
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-    
-    # Start drafting task in background
     try:
-        from app.tasks.drafting import draft_prospects_async
-        import asyncio
-        from app.task_manager import register_task
+        # Check master switch
+        try:
+            master_enabled = await check_master_switch(db)
+        except Exception as e:
+            logger.error(f"❌ [DRAFT] Failed to check master switch: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to check automation settings. Please try again."
+            )
         
-        task = asyncio.create_task(draft_prospects_async(str(job.id)))
-        register_task(str(job.id), task)
-        logger.info(f"✅ [PIPELINE STEP 6] Drafting job {job.id} started")
-    except Exception as e:
-        logger.error(f"❌ [PIPELINE STEP 6] Failed to start drafting job: {e}", exc_info=True)
-        job.status = "failed"
-        job.error_message = str(e)
-        await db.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to start drafting job: {str(e)}")
+        if not master_enabled:
+            logger.warning("⚠️  [DRAFT] Master switch disabled")
+            raise HTTPException(
+                status_code=403,
+                detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+            )
+        
+        # DATA-DRIVEN: Query draft-ready prospects directly from database
+        # Draft-ready = verified + email + (draft_status = 'pending' OR draft_status IS NULL)
+        # Accept NULL for existing prospects created before draft_status column was added
+        prospects = []  # Initialize prospects list
+        
+        # CRITICAL: Filter by source_type='website' to separate from social outreach
+        website_filter = or_(
+            Prospect.source_type == 'website',
+            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
+        )
+        
+        if request.prospect_ids is not None and len(request.prospect_ids) > 0:
+            # Manual selection: use provided prospect_ids but validate they meet draft-ready criteria
+            try:
+                result = await db.execute(
+                    select(Prospect).where(
+                        and_(
+                            Prospect.id.in_(request.prospect_ids),
+                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                            Prospect.contact_email.isnot(None),
+                            or_(
+                                Prospect.draft_status == DraftStatus.PENDING.value,
+                                Prospect.draft_status.is_(None)
+                            ),
+                            website_filter  # Only website prospects
+                        )
+                    )
+                )
+                prospects = result.scalars().all()
+            except Exception as e:
+                logger.error(f"❌ [DRAFT] Database query failed for manual selection: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Database query failed: {str(e)}"
+                )
+            
+            if len(prospects) != len(request.prospect_ids):
+                logger.warning(f"⚠️  [DRAFT] Only {len(prospects)}/{len(request.prospect_ids)} prospects ready")
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending' or NULL."
+                )
+        else:
+            # Automatic: query all draft-ready WEBSITE prospects
+            try:
+                # Query draft-ready prospects
+                # SIMPLIFIED: Accept ALL verified prospects with emails, regardless of draft_status
+                # The drafting task will handle setting draft_status correctly
+                # This allows re-drafting if needed and handles any edge cases
+                result = await db.execute(
+                    select(Prospect).where(
+                        and_(
+                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                            Prospect.contact_email.isnot(None),
+                            website_filter  # CRITICAL: Only website prospects for website outreach
+                        )
+                    )
+                )
+                prospects = result.scalars().all()
+            except Exception as e:
+                logger.error(f"❌ [DRAFT] Database query failed for automatic selection: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Database query failed: {str(e)}"
+                )
+            
+            if len(prospects) == 0:
+                logger.warning("⚠️  [DRAFT] No prospects ready for drafting")
+                raise HTTPException(
+                    status_code=422,
+                    detail="No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
+                )
+        
+        prospects_count = len(prospects)
+        logger.info(f"✍️  [DRAFT] Drafting emails for {prospects_count} verified prospects")
+        
+        # Create drafting job
+        try:
+            job = Job(
+                job_type="draft",
+                params={
+                    "prospect_ids": [str(p.id) for p in prospects],
+                    "pipeline_mode": True,
+                },
+                status="pending"
+            )
+            
+            db.add(job)
+            await db.commit()
+            await db.refresh(job)
+            job_id = job.id
+            logger.info(f"✅ [DRAFT] Created job {job_id} for {prospects_count} prospects")
+        except Exception as e:
+            logger.error(f"❌ [DRAFT] Failed to create job: {e}", exc_info=True)
+            try:
+                await db.rollback()
+            except Exception as rollback_err:
+                logger.error(f"❌ [DRAFT] Rollback failed: {rollback_err}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create drafting job: {str(e)}"
+            )
+        
+        # Start drafting task in background
+        try:
+            from app.tasks.drafting import draft_prospects_async
+            import asyncio
+            from app.task_manager import register_task
+            
+            task = asyncio.create_task(draft_prospects_async(str(job_id)))
+            register_task(str(job_id), task)
+            logger.info(f"✅ [DRAFT] Drafting job {job_id} started successfully")
+        except ImportError as import_err:
+            logger.error(f"❌ [DRAFT] Failed to import drafting module: {import_err}", exc_info=True)
+            try:
+                job.status = "failed"
+                job.error_message = f"Unable to import drafting task module: {import_err}"
+                await db.commit()
+            except Exception as commit_err:
+                logger.error(f"❌ [DRAFT] Failed to update job status: {commit_err}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to import drafting task module. Please contact support."
+            )
+        except Exception as e:
+            logger.error(f"❌ [DRAFT] Failed to start drafting job {job_id}: {e}", exc_info=True)
+            try:
+                job.status = "failed"
+                job.error_message = str(e)
+                await db.commit()
+            except Exception as commit_err:
+                logger.error(f"❌ [DRAFT] Failed to update job status: {commit_err}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start drafting job: {str(e)}"
+            )
+        
+        return DraftResponse(
+            success=True,
+            job_id=job_id,
+            message=f"Drafting job started for {prospects_count} verified prospects",
+            prospects_count=prospects_count
+        )
     
-    return DraftResponse(
-        success=True,
-        job_id=job.id,
-        message=f"Drafting job started for {len(prospects)} verified prospects",
-        prospects_count=len(prospects)
-    )
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (they're already properly formatted)
+        raise
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logger.error(
+            f"❌ [DRAFT] Unexpected error - job_id={job_id}, prospects_count={prospects_count}: {e}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 # ============================================

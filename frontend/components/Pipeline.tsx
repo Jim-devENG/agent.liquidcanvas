@@ -211,19 +211,33 @@ export default function Pipeline() {
       alert('Master switch is disabled. Please enable it in Automation Control to run pipeline activities.')
       return
     }
+    
+    let timeoutId: NodeJS.Timeout | null = null
+    
     try {
       const result = await pipelineDraft()
       alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads with scraped emails.`)
+      
+      // Only proceed if component is still mounted
+      if (typeof window === 'undefined') {
+        return
+      }
+      
       await loadStatus()
+      
       // Refresh after a short delay to allow job to start
-      setTimeout(() => {
-        loadStatus()
+      timeoutId = setTimeout(() => {
         if (typeof window !== 'undefined') {
+          loadStatus()
           window.dispatchEvent(new CustomEvent('jobsCompleted'))
         }
       }, 2000)
     } catch (err: any) {
-      alert(err.message || 'Failed to start drafting')
+      // Cleanup timeout on error
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+      alert(err?.message || 'Failed to start drafting')
     }
   }
 
