@@ -87,21 +87,25 @@ async def draft_prospects_async(job_id: str):
                 
                 if len(prospects) == 0:
                     logger.warning("⚠️  [DRAFTING] No prospects ready for drafting")
-                job.status = "failed"
+                    job.status = "failed"
                     job.error_message = "No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
-                await db.commit()
+                    await db.commit()
                     return {"error": "No prospects ready for drafting"}
             else:
                 # Manual mode: use provided prospect_ids
-            result = await db.execute(
-                select(Prospect).where(
-                    Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
-                        Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                        Prospect.contact_email.isnot(None)
+                result = await db.execute(
+                    select(Prospect).where(
+                        and_(
+                            Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                            Prospect.contact_email.isnot(None)
+                        )
+                    )
                 )
-            )
-            prospects = result.scalars().all()
-            
+                )
+                )
+                prospects = result.scalars().all()
+                
                 if len(prospects) == 0:
                     logger.warning("⚠️  [DRAFTING] No valid prospects found for provided IDs")
                     job.status = "failed"
