@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '20250120180000'
-down_revision = 'add_discovery_query_table'  # Adjust based on your latest migration
+down_revision = 'add_discovery_query'  # Chain after add_discovery_query_table migration (revision ID: add_discovery_query)
 branch_labels = None
 depends_on = None
 
