@@ -4,6 +4,12 @@
   "installCommand": "npm ci",
   "framework": "nextjs",
   "ignoreCommand": "false",
+  "rootDirectory": "",
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
   "cleanUrls": true,
   "rewrites": [
     {

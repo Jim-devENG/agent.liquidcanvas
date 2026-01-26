@@ -55,7 +55,9 @@ export default function RootLayout({
           }}
           suppressHydrationWarning
         >
-          <span style={{ color: '#ff00ff', fontWeight: 'bold' }}>MONOREPO v4.0</span> | Build: <span id="build-id-placeholder">loading...</span>
+          <span style={{ color: '#ff00ff', fontWeight: 'bold' }}>MONOREPO v5.0-DRAFTS-FIX</span> | 
+          <span style={{ color: '#00ff00', fontWeight: 'bold' }}>ROOT-DIR</span> | 
+          Build: <span id="build-id-placeholder">loading...</span>
         </div>
         {/* Immediate debug script - runs before React loads - proves new code is deployed */}
         <script
@@ -67,10 +69,17 @@ export default function RootLayout({
                 const runtimeTime = new Date().toISOString();
                 // CRITICAL RUNTIME PROOF: This will FAIL if wrong codebase is running
                 const EXPECTED_REPO = 'liquidcanvas-monorepo-frontend';
-                const EXPECTED_VERSION = '4.0-DIAGNOSTIC';
+                const EXPECTED_VERSION = '5.0-DRAFTS-FIX';
                 const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-' + Date.now();
                 
-                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 4.0-DIAGNOSTIC 🚨🚨🚨');
+                // FORENSIC MARKER: This proves root directory code is running
+                const FORENSIC_MARKER = 'ROOT-DIRECTORY-BUILD-' + Date.now() + '-' + Math.random().toString(36).substring(7);
+                window.__FORENSIC_MARKER__ = FORENSIC_MARKER;
+                document.body.setAttribute('data-forensic-marker', FORENSIC_MARKER);
+                
+                console.log('🚨🚨🚨 DASHBOARD CODE LOADED - VERSION 5.0-DRAFTS-FIX 🚨🚨🚨');
+                console.log('🚨🚨🚨 IF YOU SEE THIS, NEW CODE IS DEPLOYED 🚨🚨🚨');
+                console.log('🚨 FORENSIC MARKER:', FORENSIC_MARKER);
                 console.log('🚨 REPO PROOF:', EXPECTED_REPO);
                 console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF);
                 console.log('🚨 Build ID:', buildId);

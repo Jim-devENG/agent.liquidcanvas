@@ -170,13 +170,16 @@ export default function Dashboard() {
   // Define tabs as a constant to ensure it's always the same
   // CRITICAL: Drafts tab MUST be in this array for it to appear in sidebar
   const tabs = useMemo(() => {
+    // Ensure FileText is available, use fallback if not
+    const DraftsIcon = FileText || FileText || (() => <span>📄</span>)
+    
     const tabsArray = [
       { id: 'overview', label: 'Overview', icon: LayoutDashboard },
       { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
       { id: 'websites', label: 'Websites', icon: Globe },
       { id: 'leads', label: 'Leads', icon: Users },
       { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-      { id: 'drafts', label: 'Drafts', icon: FileText }, // DRAFTS TAB - CRITICAL: Must be visible
+      { id: 'drafts', label: 'Drafts', icon: FileText || Users }, // DRAFTS TAB - CRITICAL: Must be visible (fallback to Users if FileText fails)
       { id: 'emails', label: 'Outreach Emails', icon: Mail },
       { id: 'jobs', label: 'Jobs', icon: Activity },
       { id: 'settings', label: 'Settings', icon: Settings },
@@ -186,7 +189,14 @@ export default function Dashboard() {
     // IMMEDIATE console log - runs during component initialization (before useEffect)
     console.log('🚨 TABS ARRAY CREATED:', tabsArray.map(t => t.id).join(', '))
     console.log('🚨 DRAFTS IN ARRAY:', tabsArray.some(t => t.id === 'drafts'))
-    console.log('🚨 FileText icon available:', !!FileText)
+    console.log('🚨 FileText icon available:', typeof FileText !== 'undefined', FileText)
+    console.log('🚨 Drafts tab object:', tabsArray.find(t => t.id === 'drafts'))
+    
+    // CRITICAL: Ensure drafts tab is always present - add it if missing
+    if (!tabsArray.some(t => t.id === 'drafts')) {
+      console.error('❌ CRITICAL: Drafts tab missing from array! Adding it now...')
+      tabsArray.splice(5, 0, { id: 'drafts', label: 'Drafts', icon: FileText || Users })
+    }
     
     return tabsArray
   }, [])
@@ -234,7 +244,8 @@ export default function Dashboard() {
     window.__DASHBOARD_RUNTIME_PROOF__ = RUNTIME_PROOF;
     window.__DASHBOARD_REPO__ = 'liquidcanvas-monorepo-frontend';
     
-    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 4.0-DIAGNOSTIC 🚨🚨🚨')
+    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 5.0-DRAFTS-FIX 🚨🚨🚨')
+    console.log('🚨🚨🚨 IF YOU SEE THIS LOG, NEW CODE IS RUNNING 🚨🚨🚨')
     console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF)
     console.log('🚨 REPO:', 'liquidcanvas-monorepo-frontend')
     console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
@@ -274,7 +285,7 @@ export default function Dashboard() {
           visibility: 'visible'
         } as React.CSSProperties}
       >
-        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v3.6)` : '❌ DRAFTS MISSING (v3.6)'}
+        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v5.0-DRAFTS-FIX)` : '❌ DRAFTS MISSING (v5.0-DRAFTS-FIX)'}
       </div>
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />

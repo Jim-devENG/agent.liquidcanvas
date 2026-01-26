@@ -169,7 +169,7 @@ export default function SettingsPage() {
             setLoading(true)
             if (oauthCallback && code) {
               // @ts-ignore - TypeScript incorrectly infers function signature
-              await handleOAuthCallback(oauthCallback, code, state || undefined)
+            await handleOAuthCallback(oauthCallback, code, state || undefined)
             }
             alert(`✅ Successfully connected ${oauthCallback}!`)
             // Clean up URL

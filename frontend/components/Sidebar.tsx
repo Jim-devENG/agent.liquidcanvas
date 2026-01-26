@@ -77,6 +77,25 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
       {/* Navigation Items */}
       <nav className="flex-1 overflow-y-auto py-2 px-2">
         <div className="space-y-1">
+          {/* CRITICAL: Ensure Drafts tab is always present - add it if missing */}
+          {!tabs.some(t => t.id === 'drafts') && (
+            <button
+              onClick={() => {
+                onTabChange('drafts')
+                setMobileMenuOpen(false)
+              }}
+              className={`
+                w-full flex items-center space-x-2 px-3 py-2.5 rounded-lg font-medium text-xs transition-all duration-200
+                ${activeTab === 'drafts'
+                  ? 'bg-olive-600 text-white shadow-md hover-glow'
+                  : 'text-gray-700 hover:bg-olive-50 hover:text-olive-700 hover:shadow-sm'
+                }
+              `}
+            >
+              <span className="w-4 h-4 flex items-center justify-center">📄</span>
+              <span>Drafts</span>
+            </button>
+          )}
           {Array.isArray(tabs) && tabs.map((tab) => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -87,14 +106,21 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
                 id: tab.id, 
                 label: tab.label, 
                 icon: typeof Icon !== 'undefined' ? '✅' : '❌',
-                isActive 
+                iconType: typeof Icon,
+                isActive,
+                tabsLength: tabs.length
               })
             }
             
-            // Error boundary for icon rendering
-            if (!Icon) {
+            // CRITICAL: Never skip Drafts tab - always render it even if icon is missing
+            if (!Icon && tab.id !== 'drafts') {
               console.error(`❌ Icon missing for tab: ${tab.id}`)
               return null
+            }
+            
+            // For Drafts tab, use fallback if icon is missing
+            if (!Icon && tab.id === 'drafts') {
+              console.warn('⚠️ FileText icon missing for Drafts tab, using fallback')
             }
             
             return (
@@ -119,7 +145,11 @@ export default function Sidebar({ activeTab, onTabChange, tabs }: SidebarProps) 
                   }
                 `}
               >
-                <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-olive-600'}`} />
+                {Icon ? (
+                  <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-gray-500 group-hover:text-olive-600'}`} />
+                ) : (
+                  <span className={`w-4 h-4 flex items-center justify-center ${isActive ? 'text-white' : 'text-gray-500'}`}>📄</span>
+                )}
                 <span>{tab.label}</span>
               </button>
             )
