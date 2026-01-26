@@ -597,16 +597,16 @@ async def draft_emails(
     """
     STEP 6: Generate email drafts using Gemini
     
-    Requirements (DATA-DRIVEN):
-    - verification_status = 'verified'
-    - contact_email IS NOT NULL
-    - draft_status = 'pending' (not already drafted)
+    BACKGROUND JOB MODE:
+    - Creates job immediately and returns
+    - Eligibility check happens in background task
+    - Progress tracked via job.drafts_created and job.total_targets
+    - Status available via GET /api/pipeline/draft/jobs/{job_id}
     
     If prospect_ids provided, use those (manual selection).
-    If prospect_ids empty or not provided, query all draft-ready prospects automatically.
+    If prospect_ids empty or not provided, background task will query all draft-ready prospects.
     """
     job_id: Optional[UUID] = None
-    prospects_count = 0
     
     try:
         # Check master switch
@@ -626,98 +626,26 @@ async def draft_emails(
                 detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
             )
         
-        # DATA-DRIVEN: Query draft-ready prospects directly from database
-        # Draft-ready = verified + email + (draft_status = 'pending' OR draft_status IS NULL)
-        # Accept NULL for existing prospects created before draft_status column was added
-        prospects = []  # Initialize prospects list
-        
-        # CRITICAL: Filter by source_type='website' to separate from social outreach
-        website_filter = or_(
-            Prospect.source_type == 'website',
-            Prospect.source_type.is_(None)  # Legacy prospects (default to website)
-        )
-        
-        if request.prospect_ids is not None and len(request.prospect_ids) > 0:
-            # Manual selection: use provided prospect_ids but validate they meet draft-ready criteria
-            try:
-                result = await db.execute(
-                    select(Prospect).where(
-                        and_(
-                            Prospect.id.in_(request.prospect_ids),
-                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                            Prospect.contact_email.isnot(None),
-                            or_(
-                                Prospect.draft_status == DraftStatus.PENDING.value,
-                                Prospect.draft_status.is_(None)
-                            ),
-                            website_filter  # Only website prospects
-                        )
-                    )
-                )
-                prospects = result.scalars().all()
-            except Exception as e:
-                logger.error(f"❌ [DRAFT] Database query failed for manual selection: {e}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Database query failed: {str(e)}"
-                )
-            
-            if len(prospects) != len(request.prospect_ids):
-                logger.warning(f"⚠️  [DRAFT] Only {len(prospects)}/{len(request.prospect_ids)} prospects ready")
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Some prospects not found or not ready for drafting. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they are verified, have emails, and draft_status is 'pending' or NULL."
-                )
-        else:
-            # Automatic: query all draft-ready WEBSITE prospects
-            try:
-                # Query draft-ready prospects
-                # SIMPLIFIED: Accept ALL verified prospects with emails, regardless of draft_status
-                # The drafting task will handle setting draft_status correctly
-                # This allows re-drafting if needed and handles any edge cases
-                result = await db.execute(
-                    select(Prospect).where(
-                        and_(
-                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                            Prospect.contact_email.isnot(None),
-                            website_filter  # CRITICAL: Only website prospects for website outreach
-                        )
-                    )
-                )
-                prospects = result.scalars().all()
-            except Exception as e:
-                logger.error(f"❌ [DRAFT] Database query failed for automatic selection: {e}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Database query failed: {str(e)}"
-                )
-            
-            if len(prospects) == 0:
-                logger.warning("⚠️  [DRAFT] No prospects ready for drafting")
-                raise HTTPException(
-                    status_code=422,
-                    detail="No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
-                )
-        
-        prospects_count = len(prospects)
-        logger.info(f"✍️  [DRAFT] Drafting emails for {prospects_count} verified prospects")
-        
-        # Create drafting job
+        # Create drafting job IMMEDIATELY - do NOT query prospects here
+        # Eligibility check and prospect querying happens in background task
         try:
             job = Job(
                 job_type="draft",
                 params={
-                    "prospect_ids": [str(p.id) for p in prospects],
+                    "prospect_ids": [str(pid) for pid in request.prospect_ids] if request.prospect_ids else None,
                     "pipeline_mode": True,
+                    "auto_mode": request.prospect_ids is None or len(request.prospect_ids) == 0,
                 },
-                status="pending"
+                status="pending",
+                drafts_created=0,
+                total_targets=None  # Will be set by background task
             )
             
             db.add(job)
             await db.commit()
             await db.refresh(job)
             job_id = job.id
-            logger.info(f"✅ [DRAFT] Created job {job_id} for {prospects_count} prospects")
+            logger.info(f"✅ [DRAFT] Created job {job_id} - status: pending (background task will start)")
         except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to create job: {e}", exc_info=True)
             try:
@@ -729,7 +657,7 @@ async def draft_emails(
                 detail=f"Failed to create drafting job: {str(e)}"
             )
         
-        # Start drafting task in background
+        # Start drafting task in background (non-blocking)
         try:
             from app.tasks.drafting import draft_prospects_async
             import asyncio
@@ -737,7 +665,7 @@ async def draft_emails(
             
             task = asyncio.create_task(draft_prospects_async(str(job_id)))
             register_task(str(job_id), task)
-            logger.info(f"✅ [DRAFT] Drafting job {job_id} started successfully")
+            logger.info(f"✅ [DRAFT] Drafting job {job_id} started in background")
         except ImportError as import_err:
             logger.error(f"❌ [DRAFT] Failed to import drafting module: {import_err}", exc_info=True)
             try:
@@ -763,11 +691,12 @@ async def draft_emails(
                 detail=f"Failed to start drafting job: {str(e)}"
             )
         
+        # Return immediately - do NOT wait for drafting to complete
         return DraftResponse(
             success=True,
             job_id=job_id,
-            message=f"Drafting job started for {prospects_count} verified prospects",
-            prospects_count=prospects_count
+            message="Drafting job queued. Check status endpoint for progress.",
+            prospects_count=0  # Unknown until background task queries prospects
         )
     
     except HTTPException:
@@ -776,12 +705,70 @@ async def draft_emails(
     except Exception as e:
         # Catch-all for unexpected errors
         logger.error(
-            f"❌ [DRAFT] Unexpected error - job_id={job_id}, prospects_count={prospects_count}: {e}",
+            f"❌ [DRAFT] Unexpected error - job_id={job_id}: {e}",
             exc_info=True
         )
         raise HTTPException(
             status_code=500,
             detail=f"An unexpected error occurred: {str(e)}"
+        )
+
+
+# ============================================
+# DRAFT JOB STATUS ENDPOINT
+# ============================================
+
+class DraftJobStatusResponse(BaseModel):
+    job_id: UUID
+    status: str  # pending/running/completed/failed
+    total_targets: Optional[int] = None
+    drafts_created: int
+    started_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+@router.get("/draft/jobs/{job_id}", response_model=DraftJobStatusResponse)
+async def get_draft_job_status(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Get status of a drafting job with progress tracking.
+    
+    Returns:
+    - job_id: The job identifier
+    - status: pending/running/completed/failed
+    - total_targets: Total number of prospects to draft (set when job starts running)
+    - drafts_created: Number of drafts created so far (incremented during execution)
+    - started_at: When job transitioned to running
+    - updated_at: Last update time
+    - error_message: Error details if status is failed
+    """
+    try:
+        result = await db.execute(select(Job).where(Job.id == job_id, Job.job_type == "draft"))
+        job = result.scalar_one_or_none()
+        
+        if not job:
+            raise HTTPException(status_code=404, detail=f"Draft job {job_id} not found")
+        
+        return DraftJobStatusResponse(
+            job_id=job.id,
+            status=job.status,
+            total_targets=job.total_targets,
+            drafts_created=job.drafts_created or 0,
+            started_at=job.updated_at.isoformat() if job.status != "pending" and job.updated_at else None,
+            updated_at=job.updated_at.isoformat() if job.updated_at else None,
+            error_message=job.error_message
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [DRAFT STATUS] Failed to get job status {job_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get job status: {str(e)}"
         )
 
 

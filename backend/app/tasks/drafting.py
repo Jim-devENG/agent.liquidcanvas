@@ -22,11 +22,14 @@ async def draft_prospects_async(job_id: str):
     """
     Generate email drafts for verified prospects using Gemini
     
-    STRICT MODE:
-    - Only drafts verified prospects
-    - Gemini receives: website info, category, location, email type, outreach intent
-    - Sets draft_status = "drafted"
+    BACKGROUND JOB MODE:
+    - Queries prospects in background (eligibility check happens here)
+    - Updates progress incrementally (drafts_created, total_targets)
+    - Sets draft_status = "drafted" for each prospect
     """
+    from sqlalchemy import and_, or_
+    from app.models.prospect import VerificationStatus
+    
     async with AsyncSessionLocal() as db:
         try:
             # Get job
@@ -37,29 +40,64 @@ async def draft_prospects_async(job_id: str):
                 logger.error(f"❌ [DRAFTING] Job {job_id} not found")
                 return {"error": "Job not found"}
             
+            # Transition to running
             job.status = "running"
             await db.commit()
+            await db.refresh(job)
             
-            # Get prospects to draft
-            prospect_ids = job.params.get("prospect_ids", [])
-            if not prospect_ids:
-                logger.error(f"❌ [DRAFTING] No prospect IDs in job params")
-                job.status = "failed"
-                job.error_message = "No prospect IDs provided"
-                await db.commit()
-                return {"error": "No prospect IDs provided"}
+            # Query prospects in background (eligibility check happens here)
+            prospect_ids = job.params.get("prospect_ids")
+            auto_mode = job.params.get("auto_mode", False)
             
-            result = await db.execute(
-                select(Prospect).where(
-                    Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
-                    Prospect.verification_status.in_(["verified", "unverified"]),
-                    Prospect.contact_email.isnot(None),
-                    Prospect.draft_status == "pending"
+            if auto_mode or not prospect_ids:
+                # Automatic mode: query all draft-ready WEBSITE prospects
+                website_filter = or_(
+                    Prospect.source_type == 'website',
+                    Prospect.source_type.is_(None)  # Legacy prospects
                 )
-            )
-            prospects = result.scalars().all()
+                
+                result = await db.execute(
+                    select(Prospect).where(
+                        and_(
+                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                            Prospect.contact_email.isnot(None),
+                            website_filter
+                        )
+                    )
+                )
+                prospects = result.scalars().all()
+                
+                if len(prospects) == 0:
+                    logger.warning("⚠️  [DRAFTING] No prospects ready for drafting")
+                    job.status = "failed"
+                    job.error_message = "No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
+                    await db.commit()
+                    return {"error": "No prospects ready for drafting"}
+            else:
+                # Manual mode: use provided prospect_ids
+                result = await db.execute(
+                    select(Prospect).where(
+                        Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+                        Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                        Prospect.contact_email.isnot(None)
+                    )
+                )
+                prospects = result.scalars().all()
+                
+                if len(prospects) == 0:
+                    logger.warning("⚠️  [DRAFTING] No valid prospects found for provided IDs")
+                    job.status = "failed"
+                    job.error_message = "No valid prospects found. Ensure they are verified and have emails."
+                    await db.commit()
+                    return {"error": "No valid prospects found"}
             
-            logger.info(f"✍️  [DRAFTING] Starting drafting for {len(prospects)} verified prospects")
+            # Set total_targets for progress tracking
+            job.total_targets = len(prospects)
+            job.drafts_created = 0
+            await db.commit()
+            await db.refresh(job)
+            
+            logger.info(f"✍️  [DRAFTING] Starting drafting for {len(prospects)} prospects (job {job_id})")
             
             # Initialize Gemini client
             try:
@@ -103,7 +141,13 @@ async def draft_prospects_async(job_id: str):
                         prospect.draft_body = gemini_result.get("body")
                         prospect.draft_status = "drafted"
                         drafted_count += 1
-                        logger.info(f"✅ [DRAFTING] Drafted email for {prospect.domain}: {prospect.draft_subject}")
+                        
+                        # Update progress incrementally
+                        job.drafts_created = drafted_count
+                        await db.commit()
+                        await db.refresh(job)
+                        
+                        logger.info(f"✅ [DRAFTING] [{drafted_count}/{len(prospects)}] Drafted email for {prospect.domain}: {prospect.draft_subject}")
                     else:
                         error = gemini_result.get("error", "Unknown error")
                         logger.error(f"❌ [DRAFTING] Gemini failed for {prospect.domain}: {error}")

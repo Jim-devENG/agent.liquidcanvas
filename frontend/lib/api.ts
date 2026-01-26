@@ -1195,6 +1195,25 @@ export interface PipelineDraftResponse {
   prospects_count: number
 }
 
+export interface DraftJobStatusResponse {
+  job_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  total_targets: number | null
+  drafts_created: number
+  started_at: string | null
+  updated_at: string | null
+  error_message: string | null
+}
+
+export async function getDraftJobStatus(jobId: string): Promise<DraftJobStatusResponse> {
+  const res = await authenticatedFetch(`${API_BASE}/pipeline/draft/jobs/${jobId}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to get draft job status' }))
+    throw new Error(error.detail || 'Failed to get draft job status')
+  }
+  return res.json()
+}
+
 export async function pipelineDraft(request?: PipelineDraftRequest): Promise<PipelineDraftResponse> {
   const res = await authenticatedFetch(`${API_BASE}/pipeline/draft`, {
     method: 'POST',
@@ -1202,7 +1221,9 @@ export async function pipelineDraft(request?: PipelineDraftRequest): Promise<Pip
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Failed to start drafting' }))
-    throw new Error(error.detail || 'Failed to start drafting')
+    const errorObj: any = new Error(error.detail || 'Failed to start drafting')
+    errorObj.status = res.status
+    throw errorObj
   }
   return res.json()
 }

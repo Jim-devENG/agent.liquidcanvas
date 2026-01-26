@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { FileText, RefreshCw, Send, Edit, X, Loader2, Download, Mail, CheckCircle } from 'lucide-react'
-import { listProspects, pipelineDraft, pipelineSend, updateProspectDraft, exportProspectsCSV, type Prospect } from '@/lib/api'
+import { listProspects, pipelineDraft, pipelineSend, updateProspectDraft, exportProspectsCSV, getDraftJobStatus, type Prospect, type DraftJobStatusResponse } from '@/lib/api'
 
 export default function DraftsTable() {
   const [prospects, setProspects] = useState<Prospect[]>([])
@@ -22,7 +22,18 @@ export default function DraftsTable() {
   const [draftState, setDraftState] = useState<{
     status: 'idle' | 'loading' | 'success' | 'error'
     message: string | null
-  }>({ status: 'idle', message: null })
+    jobId: string | null
+    progress: {
+      drafts_created: number
+      total_targets: number | null
+      status: 'pending' | 'running' | 'completed' | 'failed'
+    } | null
+  }>({ 
+    status: 'idle', 
+    message: null,
+    jobId: null,
+    progress: null
+  })
   
   const [hasAutoDrafted, setHasAutoDrafted] = useState(false)
   const mountedRef = useRef(true)
@@ -144,7 +155,12 @@ export default function DraftsTable() {
     // Single state update: transition to loading
     if (mountedRef.current) {
       draftStateRef.current = 'loading'
-      setDraftState({ status: 'loading', message: null })
+      setDraftState({ 
+        status: 'loading', 
+        message: null,
+        jobId: null,
+        progress: null
+      })
       setError(null)
     }
     
@@ -159,26 +175,23 @@ export default function DraftsTable() {
         return
       }
       
-      // Single state update: transition to success
+      // Store job_id and start polling for progress
       if (mountedRef.current && !abortController.signal.aborted) {
-        draftStateRef.current = 'success'
+        draftStateRef.current = 'loading'
         setDraftState({ 
-          status: 'success', 
-          message: result.message || `Drafting job started for ${result.prospects_count} prospects`
-        })
-      }
-      
-      // Removed alert - it's blocked by no-alert-script anyway
-      
-      // Refresh after a short delay to allow job to start
-      timeoutId = setTimeout(() => {
-        if (mountedRef.current && !abortController.signal.aborted) {
-          loadDrafts()
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('jobsCompleted'))
+          status: 'loading', 
+          message: 'Drafting job queued. Starting...',
+          jobId: result.job_id,
+          progress: {
+            drafts_created: 0,
+            total_targets: null,
+            status: 'pending'
           }
-        }
-      }, 2000)
+        })
+        
+        // Start polling for progress
+        startPollingProgress(result.job_id)
+      }
     } catch (err: any) {
       // Check if request was aborted or component unmounted
       if (abortController.signal.aborted || !mountedRef.current) {
@@ -201,7 +214,12 @@ export default function DraftsTable() {
       // Single state update: transition to error (consolidated)
       if (mountedRef.current && !abortController.signal.aborted) {
         draftStateRef.current = 'error'
-        setDraftState({ status: 'error', message: errorMessage })
+        setDraftState({ 
+          status: 'error', 
+          message: errorMessage,
+          jobId: null,
+          progress: null
+        })
         // Also set in main error state so it shows in the error banner
         setError(errorMessage)
       }
@@ -223,6 +241,105 @@ export default function DraftsTable() {
   useEffect(() => {
     loadDraftsRef.current = loadDrafts
   }, [loadDrafts])
+
+  // Polling for draft job progress
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  
+  const startPollingProgress = useCallback((jobId: string) => {
+    // Clear any existing polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+    
+    const pollProgress = async () => {
+      if (!mountedRef.current) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current)
+          pollingIntervalRef.current = null
+        }
+        return
+      }
+      
+      try {
+        const status = await getDraftJobStatus(jobId)
+        
+        if (!mountedRef.current) return
+        
+        // Update progress state
+        setDraftState(prev => ({
+          ...prev,
+          progress: {
+            drafts_created: status.drafts_created,
+            total_targets: status.total_targets,
+            status: status.status
+          },
+          message: status.status === 'running' 
+            ? `Drafting in progress... ${status.drafts_created}${status.total_targets ? ` / ${status.total_targets}` : ''} drafts created`
+            : status.status === 'pending'
+            ? 'Drafting job queued. Starting...'
+            : prev.message
+        }))
+        
+        // Handle completion
+        if (status.status === 'completed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+          
+          draftStateRef.current = 'success'
+          setDraftState(prev => ({
+            ...prev,
+            status: 'success',
+            message: `Drafting completed! ${status.drafts_created} drafts created.`
+          }))
+          
+          // Refresh drafts list
+          setTimeout(() => {
+            if (mountedRef.current) {
+              loadDrafts()
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('jobsCompleted'))
+              }
+            }
+          }, 1000)
+        }
+        
+        // Handle failure
+        if (status.status === 'failed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+          
+          draftStateRef.current = 'error'
+          setDraftState(prev => ({
+            ...prev,
+            status: 'error',
+            message: status.error_message || 'Drafting job failed'
+          }))
+          setError(status.error_message || 'Drafting job failed')
+        }
+      } catch (err: any) {
+        // Don't stop polling on network errors - retry next interval
+        console.error('Failed to poll draft job status:', err)
+      }
+    }
+    
+    // Poll immediately, then every 3 seconds
+    pollProgress()
+    pollingIntervalRef.current = setInterval(pollProgress, 3000)
+  }, [loadDrafts])
+  
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     // Only run if component is mounted
@@ -304,10 +421,11 @@ export default function DraftsTable() {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('jobsCompleted'))
       }
-      alert(`Sending job started for ${selected.size} prospect(s)`)
+      // Removed alert - it's blocked by no-alert-script anyway
+      // Success is indicated by the table refresh and job completion event
     } catch (err: any) {
       setError(err.message || 'Failed to send emails')
-      alert(err.message || 'Failed to send emails')
+      // Removed alert - error is shown in the error banner above the table
     } finally {
       setActionLoading(false)
     }
