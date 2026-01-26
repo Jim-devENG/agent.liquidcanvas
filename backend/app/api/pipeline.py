@@ -629,25 +629,63 @@ async def draft_emails(
         # Create drafting job IMMEDIATELY - do NOT query prospects here
         # Eligibility check and prospect querying happens in background task
         try:
-            # WORKAROUND: Don't set progress columns during job creation
-            # These columns may not exist if migration hasn't been applied
-            # Background task will set them if columns exist
-            job = Job(
-                job_type="draft",
-                params={
+            # WORKAROUND: Check if progress columns exist before creating job
+            # If columns don't exist, use raw SQL to insert without them
+            from sqlalchemy import text
+            
+            # Check if drafts_created column exists
+            column_check = await db.execute(
+                text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'jobs' 
+                    AND column_name IN ('drafts_created', 'total_targets')
+                """)
+            )
+            existing_columns = {row[0] for row in column_check.fetchall()}
+            has_progress_columns = 'drafts_created' in existing_columns and 'total_targets' in existing_columns
+            
+            if has_progress_columns:
+                # Columns exist - use normal ORM
+                job = Job(
+                    job_type="draft",
+                    params={
+                        "prospect_ids": [str(pid) for pid in request.prospect_ids] if request.prospect_ids else None,
+                        "pipeline_mode": True,
+                        "auto_mode": request.prospect_ids is None or len(request.prospect_ids) == 0,
+                    },
+                    status="pending",
+                )
+                db.add(job)
+                await db.commit()
+                await db.refresh(job)
+                job_id = job.id
+            else:
+                # Columns don't exist - use raw SQL
+                import uuid
+                import json
+                job_id = uuid.uuid4()
+                params_dict = {
                     "prospect_ids": [str(pid) for pid in request.prospect_ids] if request.prospect_ids else None,
                     "pipeline_mode": True,
                     "auto_mode": request.prospect_ids is None or len(request.prospect_ids) == 0,
-                },
-                status="pending",
-                # NOTE: drafts_created and total_targets are NOT set here
-                # They will be set by background task if columns exist
-            )
+                }
+                
+                await db.execute(
+                    text("""
+                        INSERT INTO jobs (id, job_type, params, status, created_at, updated_at)
+                        VALUES (:id, :job_type, :params, :status, NOW(), NOW())
+                    """),
+                    {
+                        "id": str(job_id),
+                        "job_type": "draft",
+                        "params": json.dumps(params_dict),
+                        "status": "pending"
+                    }
+                )
+                await db.commit()
+                logger.warning("⚠️  [DRAFT] Created job without progress columns (columns missing)")
             
-            db.add(job)
-            await db.commit()
-            await db.refresh(job)
-            job_id = job.id
             logger.info(f"✅ [DRAFT] Created job {job_id} - status: pending (background task will start)")
         except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to create job: {e}", exc_info=True)
