@@ -58,6 +58,8 @@ async def list_jobs(
         result = await db.execute(query)
         jobs = result.scalars().all()
         
+        # Ensure empty list returns 200 OK, not error
+        # This is critical - frontend polls this endpoint and expects 200 even with no jobs
         return {
             "data": [JobResponse.model_validate(job) for job in jobs],
             "total": total,
@@ -66,6 +68,18 @@ async def list_jobs(
         }
     except Exception as e:
         logger.error(f"Error listing jobs: {e}", exc_info=True)
+        # CRITICAL: Return 200 with empty data instead of 500 if query fails
+        # This prevents frontend polling from breaking
+        # Log the error but don't crash the API
+        if "drafts_created" in str(e) or "total_targets" in str(e) or "UndefinedColumnError" in str(e):
+            logger.error("⚠️  Schema mismatch detected - migration may not have run. Returning empty result.")
+            logger.error("⚠️  Run: alembic upgrade head")
+            return {
+                "data": [],
+                "total": 0,
+                "skip": skip,
+                "limit": limit
+            }
         raise HTTPException(status_code=500, detail=f"Failed to list jobs: {str(e)}")
 
 

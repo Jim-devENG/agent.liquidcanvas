@@ -23,6 +23,8 @@ class JobResponse(BaseModel):
     params: Optional[Dict[str, Any]] = None
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    drafts_created: int = 0  # Progress tracking for drafting jobs
+    total_targets: Optional[int] = None  # Total targets for drafting jobs
     created_at: datetime
     updated_at: datetime
     

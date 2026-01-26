@@ -44,7 +44,9 @@ def upgrade() -> None:
         op.add_column('jobs', 
             sa.Column('drafts_created', sa.Integer(), nullable=False, server_default='0')
         )
-        print("✅ Added drafts_created column to jobs table")
+        # Backfill existing jobs with default value (server_default handles new rows)
+        conn.execute(text("UPDATE jobs SET drafts_created = 0 WHERE drafts_created IS NULL"))
+        print("✅ Added drafts_created column to jobs table (backfilled existing rows)")
     else:
         print("ℹ️  drafts_created column already exists, skipping")
     
@@ -53,6 +55,7 @@ def upgrade() -> None:
         op.add_column('jobs', 
             sa.Column('total_targets', sa.Integer(), nullable=True)
         )
+        # No backfill needed - column is nullable, existing jobs will have NULL (which is correct)
         print("✅ Added total_targets column to jobs table")
     else:
         print("ℹ️  total_targets column already exists, skipping")
