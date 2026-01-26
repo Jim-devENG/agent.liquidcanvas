@@ -89,14 +89,23 @@ export default function DraftsTable() {
         return hasSubject && hasBody
       })
       
-      // Debug log to help diagnose filtering issues
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`🔍 [DRAFTS] Filtered ${draftedProspects.length} drafts from ${allProspects.length} total prospects`)
-        if (draftedProspects.length === 0 && allProspects.length > 0) {
-          // Check if any prospects have partial drafts
-          const withSubject = allProspects.filter((p: Prospect) => p.draft_subject && p.draft_subject.trim().length > 0)
-          const withBody = allProspects.filter((p: Prospect) => p.draft_body && p.draft_body.trim().length > 0)
-          console.log(`🔍 [DRAFTS] Debug: ${withSubject.length} with subject, ${withBody.length} with body`)
+      // Debug log to help diagnose filtering issues (always log in production for debugging)
+      console.log(`🔍 [DRAFTS] Filtered ${draftedProspects.length} drafts from ${allProspects.length} total prospects`)
+      if (draftedProspects.length === 0 && allProspects.length > 0) {
+        // Check if any prospects have partial drafts
+        const withSubject = allProspects.filter((p: Prospect) => p.draft_subject && p.draft_subject.trim().length > 0)
+        const withBody = allProspects.filter((p: Prospect) => p.draft_body && p.draft_body.trim().length > 0)
+        console.log(`🔍 [DRAFTS] Debug: ${withSubject.length} with subject, ${withBody.length} with body`)
+        // Log sample prospects to see what we're getting
+        if (allProspects.length > 0) {
+          const sample = allProspects[0]
+          console.log(`🔍 [DRAFTS] Sample prospect:`, {
+            id: sample.id,
+            has_draft_subject: !!sample.draft_subject,
+            has_draft_body: !!sample.draft_body,
+            draft_subject_length: sample.draft_subject?.length || 0,
+            draft_body_length: sample.draft_body?.length || 0
+          })
         }
       }
       
@@ -564,7 +573,12 @@ export default function DraftsTable() {
             onClick={() => {
               // Reset state and trigger new request
               draftStateRef.current = 'idle'
-              setDraftState({ status: 'idle', message: null })
+              setDraftState({ 
+                status: 'idle', 
+                message: null,
+                jobId: null,
+                progress: null
+              })
               handleAutoDraft(true)
             }}
             disabled={draftState.status === 'loading'}
