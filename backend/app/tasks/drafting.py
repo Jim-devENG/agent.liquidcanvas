@@ -102,8 +102,6 @@ async def draft_prospects_async(job_id: str):
                         )
                     )
                 )
-                )
-                )
                 prospects = result.scalars().all()
                 
                 if len(prospects) == 0:
