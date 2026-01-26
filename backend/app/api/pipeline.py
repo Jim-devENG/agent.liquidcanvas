@@ -788,18 +788,74 @@ async def get_draft_job_status(
     - error_message: Error details if status is failed
     """
     try:
-        result = await db.execute(select(Job).where(Job.id == job_id, Job.job_type == "draft"))
-        job = result.scalar_one_or_none()
+        # WORKAROUND: Use raw SQL to query only columns that exist
+        # This prevents UndefinedColumnError if drafts_created/total_targets don't exist yet
+        from sqlalchemy import text
         
-        if not job:
-            raise HTTPException(status_code=404, detail=f"Draft job {job_id} not found")
+        # Check if progress columns exist
+        column_check = await db.execute(
+            text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'jobs' 
+                AND column_name IN ('drafts_created', 'total_targets')
+            """)
+        )
+        existing_columns = {row[0] for row in column_check.fetchall()}
+        has_progress_columns = 'drafts_created' in existing_columns and 'total_targets' in existing_columns
         
-        # WORKAROUND: Use getattr to handle missing columns gracefully
-        total_targets = getattr(job, 'total_targets', None)
-        drafts_created = getattr(job, 'drafts_created', 0) or 0
+        if has_progress_columns:
+            # Columns exist - use ORM query
+            result = await db.execute(select(Job).where(Job.id == job_id, Job.job_type == "draft"))
+            job = result.scalar_one_or_none()
+            
+            if not job:
+                raise HTTPException(status_code=404, detail=f"Draft job {job_id} not found")
+            
+            total_targets = getattr(job, 'total_targets', None)
+            drafts_created = getattr(job, 'drafts_created', 0) or 0
+        else:
+            # Columns don't exist - use raw SQL to query without them
+            logger.warning("⚠️  [DRAFT STATUS] Progress columns missing, using raw SQL query")
+            result = await db.execute(
+                text("""
+                    SELECT id, job_type, params, status, result, error_message, created_at, updated_at
+                    FROM jobs
+                    WHERE id = :job_id AND job_type = 'draft'
+                """),
+                {"job_id": str(job_id)}
+            )
+            row = result.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Draft job {job_id} not found")
+            
+            # Parse row manually
+            total_targets = None
+            drafts_created = 0
+            
+            # Try to get status from row
+            job_status = row[3]  # status column
+            error_message = row[5] if len(row) > 5 else None
+            updated_at = row[7] if len(row) > 7 else None
+            
+            # Create a minimal job-like object for compatibility
+            class MinimalJob:
+                def __init__(self, id, status, error_message, updated_at):
+                    self.id = id
+                    self.status = status
+                    self.error_message = error_message
+                    self.updated_at = updated_at
+            
+            job = MinimalJob(
+                id=row[0],
+                status=job_status,
+                error_message=error_message,
+                updated_at=updated_at
+            )
         
         return DraftJobStatusResponse(
-        job_id=job.id,
+            job_id=job.id,
             status=job.status,
             total_targets=total_targets,
             drafts_created=drafts_created,
@@ -814,7 +870,7 @@ async def get_draft_job_status(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get job status: {str(e)}"
-    )
+        )
 
 
 # ============================================
