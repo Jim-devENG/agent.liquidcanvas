@@ -52,30 +52,46 @@ async def draft_prospects_async(job_id: str):
             if auto_mode or not prospect_ids:
                 # Automatic mode: query all draft-ready prospects (leads, scraped emails, websites)
                 # Include ALL verified prospects with emails, regardless of source_type
-                # This ensures leads and scraped emails are also drafted
+                # EXCLUDE prospects that already have drafts (draft_subject AND draft_body are not null)
+                # This ensures we only draft prospects that don't already have drafts
                 try:
-                    # Try to query - include all verified prospects with emails
-                    # Don't filter by source_type to include leads and scraped emails
+                    # Query verified prospects with emails that DON'T already have drafts
+                    # A prospect has a draft if both draft_subject and draft_body are not null
                     result = await db.execute(
                         select(Prospect).where(
                             and_(
                                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                                Prospect.contact_email.isnot(None)
+                                Prospect.contact_email.isnot(None),
+                                # Exclude prospects that already have complete drafts
+                                or_(
+                                    Prospect.draft_subject.is_(None),
+                                    Prospect.draft_body.is_(None)
+                                )
                             )
                         )
                     )
                     prospects = result.scalars().all()
-                    logger.info(f"📋 [DRAFTING] Found {len(prospects)} verified prospects with emails (all sources)")
+                    logger.info(f"📋 [DRAFTING] Found {len(prospects)} verified prospects without drafts (all sources)")
                 except Exception as e:
                     logger.error(f"❌ [DRAFTING] Query error: {e}", exc_info=True)
                     raise
                 
                 if len(prospects) == 0:
-                    logger.warning("⚠️  [DRAFTING] No prospects ready for drafting")
-                    job.status = "failed"
-                    job.error_message = "No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
+                    logger.warning("⚠️  [DRAFTING] No prospects ready for drafting (all verified prospects already have drafts)")
+                    job.status = "completed"  # Mark as completed, not failed - all prospects already have drafts
+                    job.error_message = None
+                    if hasattr(job, 'drafts_created'):
+                        job.drafts_created = 0
+                    if hasattr(job, 'total_targets'):
+                        job.total_targets = 0
                     await db.commit()
-                    return {"error": "No prospects ready for drafting"}
+                    return {
+                        "job_id": job_id,
+                        "status": "completed",
+                        "drafted": 0,
+                        "failed": 0,
+                        "message": "All verified prospects already have drafts. No new drafts needed."
+                    }
             else:
                 # Manual mode: use provided prospect_ids
                 result = await db.execute(
