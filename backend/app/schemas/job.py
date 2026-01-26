@@ -23,13 +23,31 @@ class JobResponse(BaseModel):
     params: Optional[Dict[str, Any]] = None
     result: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
-    drafts_created: int = 0  # Progress tracking for drafting jobs
-    total_targets: Optional[int] = None  # Total targets for drafting jobs
+    drafts_created: int = Field(default=0)  # Progress tracking for drafting jobs (may not exist in DB)
+    total_targets: Optional[int] = Field(default=None)  # Total targets for drafting jobs (may not exist in DB)
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
+    
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        """Override to handle missing columns gracefully"""
+        # Use getattr to safely access columns that may not exist
+        data = {
+            "id": obj.id,
+            "job_type": obj.job_type,
+            "status": obj.status,
+            "params": getattr(obj, 'params', None),
+            "result": getattr(obj, 'result', None),
+            "error_message": getattr(obj, 'error_message', None),
+            "drafts_created": getattr(obj, 'drafts_created', 0) or 0,
+            "total_targets": getattr(obj, 'total_targets', None),
+            "created_at": obj.created_at,
+            "updated_at": obj.updated_at,
+        }
+        return cls(**data)
 
 
 class JobStatusResponse(BaseModel):

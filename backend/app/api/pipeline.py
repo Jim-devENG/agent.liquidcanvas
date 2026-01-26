@@ -609,9 +609,9 @@ async def draft_emails(
     job_id: Optional[UUID] = None
     
     try:
-        # Check master switch
+    # Check master switch
         try:
-            master_enabled = await check_master_switch(db)
+    master_enabled = await check_master_switch(db)
         except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to check master switch: {e}", exc_info=True)
             raise HTTPException(
@@ -619,31 +619,34 @@ async def draft_emails(
                 detail="Failed to check automation settings. Please try again."
             )
         
-        if not master_enabled:
+    if not master_enabled:
             logger.warning("⚠️  [DRAFT] Master switch disabled")
-            raise HTTPException(
-                status_code=403,
-                detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
-            )
-        
+        raise HTTPException(
+            status_code=403,
+            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+        )
+    
         # Create drafting job IMMEDIATELY - do NOT query prospects here
         # Eligibility check and prospect querying happens in background task
         try:
-            job = Job(
-                job_type="draft",
-                params={
+            # WORKAROUND: Don't set progress columns during job creation
+            # These columns may not exist if migration hasn't been applied
+            # Background task will set them if columns exist
+    job = Job(
+        job_type="draft",
+        params={
                     "prospect_ids": [str(pid) for pid in request.prospect_ids] if request.prospect_ids else None,
-                    "pipeline_mode": True,
+            "pipeline_mode": True,
                     "auto_mode": request.prospect_ids is None or len(request.prospect_ids) == 0,
-                },
+        },
                 status="pending",
-                drafts_created=0,
-                total_targets=None  # Will be set by background task
-            )
-            
-            db.add(job)
-            await db.commit()
-            await db.refresh(job)
+                # NOTE: drafts_created and total_targets are NOT set here
+                # They will be set by background task if columns exist
+    )
+    
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
             job_id = job.id
             logger.info(f"✅ [DRAFT] Created job {job_id} - status: pending (background task will start)")
         except Exception as e:
@@ -656,13 +659,13 @@ async def draft_emails(
                 status_code=500,
                 detail=f"Failed to create drafting job: {str(e)}"
             )
-        
+    
         # Start drafting task in background (non-blocking)
-        try:
-            from app.tasks.drafting import draft_prospects_async
-            import asyncio
-            from app.task_manager import register_task
-            
+    try:
+        from app.tasks.drafting import draft_prospects_async
+        import asyncio
+        from app.task_manager import register_task
+        
             task = asyncio.create_task(draft_prospects_async(str(job_id)))
             register_task(str(job_id), task)
             logger.info(f"✅ [DRAFT] Drafting job {job_id} started in background")
@@ -678,22 +681,22 @@ async def draft_emails(
                 status_code=500,
                 detail="Unable to import drafting task module. Please contact support."
             )
-        except Exception as e:
+    except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to start drafting job {job_id}: {e}", exc_info=True)
             try:
-                job.status = "failed"
-                job.error_message = str(e)
-                await db.commit()
+        job.status = "failed"
+        job.error_message = str(e)
+        await db.commit()
             except Exception as commit_err:
                 logger.error(f"❌ [DRAFT] Failed to update job status: {commit_err}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to start drafting job: {str(e)}"
             )
-        
+    
         # Return immediately - do NOT wait for drafting to complete
-        return DraftResponse(
-            success=True,
+    return DraftResponse(
+        success=True,
             job_id=job_id,
             message="Drafting job queued. Check status endpoint for progress.",
             prospects_count=0  # Unknown until background task queries prospects
@@ -753,11 +756,15 @@ async def get_draft_job_status(
         if not job:
             raise HTTPException(status_code=404, detail=f"Draft job {job_id} not found")
         
+        # WORKAROUND: Use getattr to handle missing columns gracefully
+        total_targets = getattr(job, 'total_targets', None)
+        drafts_created = getattr(job, 'drafts_created', 0) or 0
+        
         return DraftJobStatusResponse(
-            job_id=job.id,
+        job_id=job.id,
             status=job.status,
-            total_targets=job.total_targets,
-            drafts_created=job.drafts_created or 0,
+            total_targets=total_targets,
+            drafts_created=drafts_created,
             started_at=job.updated_at.isoformat() if job.status != "pending" and job.updated_at else None,
             updated_at=job.updated_at.isoformat() if job.updated_at else None,
             error_message=job.error_message
@@ -769,7 +776,7 @@ async def get_draft_job_status(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get job status: {str(e)}"
-        )
+    )
 
 
 # ============================================
@@ -825,27 +832,27 @@ async def send_emails(
     )
     
     if request.prospect_ids is not None and len(request.prospect_ids) > 0:
-        # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
-        result = await db.execute(
-            select(Prospect).where(
-                and_(
-                    Prospect.id.in_(request.prospect_ids),
-                    Prospect.contact_email.isnot(None),
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                    Prospect.draft_subject.isnot(None),
-                    Prospect.draft_body.isnot(None),
-                    Prospect.send_status != SendStatus.SENT.value,
-                    website_filter  # Only website prospects
-                )
+    # Manual selection: use provided prospect_ids but validate they meet send-ready criteria
+    result = await db.execute(
+        select(Prospect).where(
+            and_(
+                Prospect.id.in_(request.prospect_ids),
+                Prospect.contact_email.isnot(None),
+                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                Prospect.draft_subject.isnot(None),
+                Prospect.draft_body.isnot(None),
+                Prospect.send_status != SendStatus.SENT.value,
+                website_filter  # Only website prospects
             )
         )
-        prospects = result.scalars().all()
-        
-        if len(prospects) != len(request.prospect_ids):
-            raise HTTPException(
-                status_code=422,
-                detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
-            )
+    )
+    prospects = result.scalars().all()
+    
+    if len(prospects) != len(request.prospect_ids):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Some prospects not found or not ready for sending. Found {len(prospects)} ready out of {len(request.prospect_ids)} requested. Ensure they have verified email, draft subject, and draft body."
+        )
     else:
         # Automatic: query all send-ready WEBSITE prospects
         result = await db.execute(
@@ -866,7 +873,7 @@ async def send_emails(
             raise HTTPException(
                 status_code=422,
                 detail="No prospects ready for sending. Ensure prospects have verified email, draft subject, and draft body."
-            )
+        )
     
     logger.info(f"📧 [PIPELINE STEP 7] Sending emails for {len(prospects)} send-ready prospects (data-driven)")
     

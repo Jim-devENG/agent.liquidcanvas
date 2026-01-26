@@ -51,39 +51,57 @@ async def draft_prospects_async(job_id: str):
             
             if auto_mode or not prospect_ids:
                 # Automatic mode: query all draft-ready WEBSITE prospects
-                website_filter = or_(
-                    Prospect.source_type == 'website',
-                    Prospect.source_type.is_(None)  # Legacy prospects
-                )
-                
-                result = await db.execute(
-                    select(Prospect).where(
-                        and_(
-                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                            Prospect.contact_email.isnot(None),
-                            website_filter
+                # WORKAROUND: Check if source_type column exists before filtering
+                try:
+                    # Try to query with source_type filter
+                    website_filter = or_(
+                        Prospect.source_type == 'website',
+                        Prospect.source_type.is_(None)  # Legacy prospects
+                    )
+                    
+                    result = await db.execute(
+                        select(Prospect).where(
+                            and_(
+                                Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                                Prospect.contact_email.isnot(None),
+                                website_filter
+                            )
                         )
                     )
-                )
-                prospects = result.scalars().all()
+                    prospects = result.scalars().all()
+                except Exception as e:
+                    # If source_type column doesn't exist, query without it
+                    if 'source_type' in str(e) or 'UndefinedColumn' in str(e):
+                        logger.warning("⚠️  [DRAFTING] source_type column missing, querying all verified prospects")
+                        result = await db.execute(
+                            select(Prospect).where(
+                                and_(
+                                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
+                                    Prospect.contact_email.isnot(None)
+                                )
+                            )
+                        )
+                        prospects = result.scalars().all()
+                    else:
+                        raise
                 
                 if len(prospects) == 0:
                     logger.warning("⚠️  [DRAFTING] No prospects ready for drafting")
-                    job.status = "failed"
+                job.status = "failed"
                     job.error_message = "No prospects ready for drafting. Ensure prospects have verification_status='verified' and contact_email IS NOT NULL."
-                    await db.commit()
+                await db.commit()
                     return {"error": "No prospects ready for drafting"}
             else:
                 # Manual mode: use provided prospect_ids
-                result = await db.execute(
-                    select(Prospect).where(
-                        Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
+            result = await db.execute(
+                select(Prospect).where(
+                    Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
                         Prospect.verification_status == VerificationStatus.VERIFIED.value,
                         Prospect.contact_email.isnot(None)
-                    )
                 )
-                prospects = result.scalars().all()
-                
+            )
+            prospects = result.scalars().all()
+            
                 if len(prospects) == 0:
                     logger.warning("⚠️  [DRAFTING] No valid prospects found for provided IDs")
                     job.status = "failed"
@@ -91,9 +109,12 @@ async def draft_prospects_async(job_id: str):
                     await db.commit()
                     return {"error": "No valid prospects found"}
             
-            # Set total_targets for progress tracking
-            job.total_targets = len(prospects)
-            job.drafts_created = 0
+            # Set total_targets for progress tracking (if columns exist)
+            # WORKAROUND: Use getattr/setattr to handle missing columns gracefully
+            if hasattr(job, 'total_targets'):
+                job.total_targets = len(prospects)
+            if hasattr(job, 'drafts_created'):
+                job.drafts_created = 0
             await db.commit()
             await db.refresh(job)
             
@@ -142,10 +163,14 @@ async def draft_prospects_async(job_id: str):
                         prospect.draft_status = "drafted"
                         drafted_count += 1
                         
-                        # Update progress incrementally
-                        job.drafts_created = drafted_count
-                        await db.commit()
-                        await db.refresh(job)
+                        # Update progress incrementally (if column exists)
+                        if hasattr(job, 'drafts_created'):
+                            job.drafts_created = drafted_count
+                            await db.commit()
+                            await db.refresh(job)
+                        else:
+                            # Columns don't exist - just commit the prospect update
+                            await db.commit()
                         
                         logger.info(f"✅ [DRAFTING] [{drafted_count}/{len(prospects)}] Drafted email for {prospect.domain}: {prospect.draft_subject}")
                     else:
