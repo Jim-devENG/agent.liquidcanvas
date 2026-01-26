@@ -50,40 +50,25 @@ async def draft_prospects_async(job_id: str):
             auto_mode = job.params.get("auto_mode", False)
             
             if auto_mode or not prospect_ids:
-                # Automatic mode: query all draft-ready WEBSITE prospects
-                # WORKAROUND: Check if source_type column exists before filtering
+                # Automatic mode: query all draft-ready prospects (leads, scraped emails, websites)
+                # Include ALL verified prospects with emails, regardless of source_type
+                # This ensures leads and scraped emails are also drafted
                 try:
-                    # Try to query with source_type filter
-                    website_filter = or_(
-                        Prospect.source_type == 'website',
-                        Prospect.source_type.is_(None)  # Legacy prospects
-                    )
-                    
+                    # Try to query - include all verified prospects with emails
+                    # Don't filter by source_type to include leads and scraped emails
                     result = await db.execute(
                         select(Prospect).where(
                             and_(
                                 Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                                Prospect.contact_email.isnot(None),
-                                website_filter
+                                Prospect.contact_email.isnot(None)
                             )
                         )
                     )
                     prospects = result.scalars().all()
+                    logger.info(f"📋 [DRAFTING] Found {len(prospects)} verified prospects with emails (all sources)")
                 except Exception as e:
-                    # If source_type column doesn't exist, query without it
-                    if 'source_type' in str(e) or 'UndefinedColumn' in str(e):
-                        logger.warning("⚠️  [DRAFTING] source_type column missing, querying all verified prospects")
-                        result = await db.execute(
-                            select(Prospect).where(
-                                and_(
-                                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                                    Prospect.contact_email.isnot(None)
-                                )
-                            )
-                        )
-                        prospects = result.scalars().all()
-                    else:
-                        raise
+                    logger.error(f"❌ [DRAFTING] Query error: {e}", exc_info=True)
+                    raise
                 
                 if len(prospects) == 0:
                     logger.warning("⚠️  [DRAFTING] No prospects ready for drafting")
