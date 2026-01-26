@@ -152,12 +152,14 @@ async def draft_prospects_async(job_id: str):
                             email_type = "personal"
                     
                     # Compose email using Gemini
+                    # Pass discovery_category for better personalization
                     gemini_result = await gemini_client.compose_email(
                         domain=prospect.domain,
                         page_title=prospect.page_title,
                         page_url=prospect.page_url,
                         page_snippet=prospect.dataforseo_payload.get("description") if prospect.dataforseo_payload else None,
-                        contact_name=None  # Could be extracted from email if personal
+                        contact_name=None,  # Could be extracted from email if personal
+                        category=prospect.discovery_category  # Use discovery category for better personalization
                     )
                     
                     if gemini_result.get("success"):
