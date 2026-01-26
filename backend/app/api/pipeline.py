@@ -609,9 +609,9 @@ async def draft_emails(
     job_id: Optional[UUID] = None
     
     try:
-    # Check master switch
+        # Check master switch
         try:
-    master_enabled = await check_master_switch(db)
+            master_enabled = await check_master_switch(db)
         except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to check master switch: {e}", exc_info=True)
             raise HTTPException(
@@ -619,34 +619,34 @@ async def draft_emails(
                 detail="Failed to check automation settings. Please try again."
             )
         
-    if not master_enabled:
+        if not master_enabled:
             logger.warning("⚠️  [DRAFT] Master switch disabled")
-        raise HTTPException(
-            status_code=403,
-            detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
-        )
-    
+            raise HTTPException(
+                status_code=403,
+                detail="Master switch is disabled. Please enable it in Automation Control to run pipeline activities."
+            )
+        
         # Create drafting job IMMEDIATELY - do NOT query prospects here
         # Eligibility check and prospect querying happens in background task
         try:
             # WORKAROUND: Don't set progress columns during job creation
             # These columns may not exist if migration hasn't been applied
             # Background task will set them if columns exist
-    job = Job(
-        job_type="draft",
-        params={
+            job = Job(
+                job_type="draft",
+                params={
                     "prospect_ids": [str(pid) for pid in request.prospect_ids] if request.prospect_ids else None,
-            "pipeline_mode": True,
+                    "pipeline_mode": True,
                     "auto_mode": request.prospect_ids is None or len(request.prospect_ids) == 0,
-        },
+                },
                 status="pending",
                 # NOTE: drafts_created and total_targets are NOT set here
                 # They will be set by background task if columns exist
-    )
-    
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
+            )
+            
+            db.add(job)
+            await db.commit()
+            await db.refresh(job)
             job_id = job.id
             logger.info(f"✅ [DRAFT] Created job {job_id} - status: pending (background task will start)")
         except Exception as e:
@@ -659,13 +659,13 @@ async def draft_emails(
                 status_code=500,
                 detail=f"Failed to create drafting job: {str(e)}"
             )
-    
-        # Start drafting task in background (non-blocking)
-    try:
-        from app.tasks.drafting import draft_prospects_async
-        import asyncio
-        from app.task_manager import register_task
         
+        # Start drafting task in background (non-blocking)
+        try:
+            from app.tasks.drafting import draft_prospects_async
+            import asyncio
+            from app.task_manager import register_task
+            
             task = asyncio.create_task(draft_prospects_async(str(job_id)))
             register_task(str(job_id), task)
             logger.info(f"✅ [DRAFT] Drafting job {job_id} started in background")
@@ -681,12 +681,12 @@ async def draft_emails(
                 status_code=500,
                 detail="Unable to import drafting task module. Please contact support."
             )
-    except Exception as e:
+        except Exception as e:
             logger.error(f"❌ [DRAFT] Failed to start drafting job {job_id}: {e}", exc_info=True)
             try:
-        job.status = "failed"
-        job.error_message = str(e)
-        await db.commit()
+                job.status = "failed"
+                job.error_message = str(e)
+                await db.commit()
             except Exception as commit_err:
                 logger.error(f"❌ [DRAFT] Failed to update job status: {commit_err}", exc_info=True)
             raise HTTPException(
@@ -695,8 +695,8 @@ async def draft_emails(
             )
     
         # Return immediately - do NOT wait for drafting to complete
-    return DraftResponse(
-        success=True,
+        return DraftResponse(
+            success=True,
             job_id=job_id,
             message="Drafting job queued. Check status endpoint for progress.",
             prospects_count=0  # Unknown until background task queries prospects
