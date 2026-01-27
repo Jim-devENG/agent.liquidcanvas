@@ -478,14 +478,44 @@ async def verify_emails(
     logger.info(f"✅ [PIPELINE STEP 4] Verifying {len(prospects)} scraped prospects with emails")
     
     # Create verification job
-    job = Job(
-        job_type="verify",
-        params={
-            "prospect_ids": [str(p.id) for p in prospects],
-            "pipeline_mode": True,
-        },
-        status="pending"
+    # WORKAROUND: Check if progress columns exist before creating job
+    # If columns don't exist, use raw SQL to insert without them
+    from sqlalchemy import text
+    
+    # Check if drafts_created column exists
+    column_check = await db.execute(
+        text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'jobs' 
+            AND column_name IN ('drafts_created', 'total_targets')
+        """)
     )
+    existing_columns = {row[0] for row in column_check.fetchall()}
+    has_progress_columns = 'drafts_created' in existing_columns and 'total_targets' in existing_columns
+    
+    if has_progress_columns:
+        # Normal path: create job with progress columns
+        job = Job(
+            job_type="verify",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "pipeline_mode": True,
+            },
+            status="pending",
+            drafts_created=0,  # Will be updated by verification task
+            total_targets=len(prospects)
+        )
+    else:
+        # Fallback: create job without progress columns
+        job = Job(
+            job_type="verify",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "pipeline_mode": True,
+            },
+            status="pending"
+        )
     
     try:
         db.add(job)
