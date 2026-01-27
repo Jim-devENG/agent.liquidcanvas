@@ -20,7 +20,8 @@ class Job(Base):
     result = Column(JSON)  # Job result data
     error_message = Column(Text)
     # Progress tracking fields for drafting jobs
-    drafts_created = Column(Integer, default=0)  # Number of drafts created so far
+    # Note: These may not exist in all database schemas - handled via conditional logic in API
+    drafts_created = Column(Integer, default=0, nullable=True)  # Number of drafts created so far
     total_targets = Column(Integer, nullable=True)  # Total number of prospects to draft (set when job starts)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -506,25 +506,51 @@ async def verify_emails(
             drafts_created=0,  # Will be updated by verification task
             total_targets=len(prospects)
         )
+        
+        try:
+            db.add(job)
+            await db.commit()
+            await db.refresh(job)
+        except Exception as commit_err:
+            logger.error(f"❌ [PIPELINE STEP 4] Commit error: {commit_err}", exc_info=True)
+            await db.rollback()  # Rollback on commit failure
+            raise HTTPException(status_code=500, detail=f"Failed to create verification job: {str(commit_err)}")
     else:
-        # Fallback: create job without progress columns
-        job = Job(
-            job_type="verify",
-            params={
-                "prospect_ids": [str(p.id) for p in prospects],
-                "pipeline_mode": True,
-            },
-            status="pending"
-        )
-    
-    try:
-        db.add(job)
-        await db.commit()
-        await db.refresh(job)
-    except Exception as commit_err:
-        logger.error(f"❌ [PIPELINE STEP 4] Commit error: {commit_err}", exc_info=True)
-        await db.rollback()  # Rollback on commit failure
-        raise HTTPException(status_code=500, detail=f"Failed to create verification job: {str(commit_err)}")
+        # Fallback: use raw SQL to insert job without progress columns
+        import uuid
+        job_id = str(uuid.uuid4())
+        
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO jobs (id, user_id, job_type, params, status, error_message, created_at, updated_at)
+                    VALUES (:id, :user_id, :job_type, :params, :status, :error_message, NOW(), NOW())
+                """),
+                {
+                    "id": job_id,
+                    "user_id": None,
+                    "job_type": "verify",
+                    "params": {
+                        "prospect_ids": [str(p.id) for p in prospects],
+                        "pipeline_mode": True,
+                    },
+                    "status": "pending",
+                    "error_message": None
+                }
+            )
+            await db.commit()
+            
+            # Create a minimal job object for response
+            job = type('Job', (), {
+                'id': job_id,
+                'job_type': 'verify',
+                'status': 'pending'
+            })()
+            
+        except Exception as commit_err:
+            logger.error(f"❌ [PIPELINE STEP 4] Raw SQL commit error: {commit_err}", exc_info=True)
+            await db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to create verification job: {str(commit_err)}")
     
     # Start verification task in background
     try:
