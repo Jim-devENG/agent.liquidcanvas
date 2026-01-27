@@ -5,10 +5,10 @@ import logging
 import asyncio
 import json
 import uuid
+import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-import os
 from dotenv import load_dotenv
 import time
 from datetime import datetime, timezone
@@ -294,13 +294,18 @@ def start_scheduler():
         max_instances=1  # Prevent overlapping runs
     )
 
-    scheduler.add_job(
-        check_and_run_drafting,
-        trigger=IntervalTrigger(minutes=1),
-        id="drafting_check",
-        name="Check and Run Automatic Drafting",
-        max_instances=1
-    )
+    # Auto drafting is opt-in; gate it behind an env flag to prevent starting on refresh.
+    if os.getenv("AUTO_DRAFTING_ENABLED", "false").lower() == "true":
+        scheduler.add_job(
+            check_and_run_drafting,
+            trigger=IntervalTrigger(minutes=1),
+            id="drafting_check",
+            name="Check and Run Automatic Drafting",
+            max_instances=1
+        )
+        logger.info("Auto drafting scheduler enabled")
+    else:
+        logger.info("Auto drafting scheduler disabled (AUTO_DRAFTING_ENABLED not true)")
     
     # Schedule follow-ups daily at 9 AM
     scheduler.add_job(
