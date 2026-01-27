@@ -212,12 +212,14 @@ export default function Pipeline() {
       return
     }
     
-    let timeoutId: NodeJS.Timeout | null = null
-    
     try {
       // Call pipelineDraft without prospect_ids to automatically draft for ALL verified prospects
       // This includes leads and scraped emails (any prospect with verification_status='verified' and contact_email IS NOT NULL)
       const result = await pipelineDraft()
+      
+      if (!result.job_id) {
+        throw new Error('No job ID returned from drafting request')
+      }
       
       // Check if component is still mounted (for Next.js client component)
       if (typeof window === 'undefined') {
@@ -225,26 +227,70 @@ export default function Pipeline() {
       }
       
       // Show success message
-      alert(result.message || `Drafting job started for ${result.prospects_count} prospects. Drafts will be generated automatically for all verified leads and scraped emails.`)
+      console.log('✅ Drafting job started:', result.job_id)
       
-      // Refresh status once
+      // Start polling for job status (same as LeadsTable) - continue until completion
+      const { getDraftJobStatus } = await import('@/lib/api')
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await getDraftJobStatus(result.job_id)
+          
+          if (status.status === 'failed') {
+            clearInterval(pollInterval)
+            console.error('❌ Drafting failed:', status.error_message)
+            return
+          }
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval)
+            console.log(`✅ Drafting completed! ${status.drafts_created} drafts created.`)
+            
+            // Trigger pipeline status refresh
+            await loadStatus()
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+              window.dispatchEvent(new CustomEvent('jobsCompleted'))
+              window.dispatchEvent(new CustomEvent('refreshDrafts'))
+            }
+            return
+          }
+          
+          // Update progress
+          if (status.status === 'running') {
+            console.log(`⏳ Drafting in progress... ${status.drafts_created}${status.total_targets ? ` / ${status.total_targets}` : ''} drafts created`)
+            
+            // Refresh drafts list periodically while drafting
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('refreshDrafts'))
+            }
+          }
+        } catch (pollErr: any) {
+          console.error('Error polling draft job status:', pollErr)
+          // Keep polling on error - job might still be running
+        }
+      }, 3000) // Poll every 3 seconds
+      
+      // Trigger pipeline status refresh immediately
       await loadStatus()
       
-      // Refresh after a short delay to allow job to start
-      timeoutId = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          loadStatus()
-          window.dispatchEvent(new CustomEvent('jobsCompleted'))
-        }
-      }, 2000)
-    } catch (err: any) {
-      // Cleanup timeout on error
-      if (timeoutId) {
-        clearTimeout(timeoutId)
+      // Trigger refresh events
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        window.dispatchEvent(new CustomEvent('refreshDrafts'))
       }
       
+      // Navigate to Drafts tab after a short delay
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('change-tab', { detail: 'drafts' })
+          window.dispatchEvent(event)
+        }
+      }, 1500)
+    } catch (err: any) {
       // Show error message - 422 is a valid business rule, not a crash
       const errorMessage = err?.message || 'Failed to start drafting'
+      console.error('❌', errorMessage)
       alert(errorMessage)
       
       // Do NOT update state here - let the error be handled by the alert

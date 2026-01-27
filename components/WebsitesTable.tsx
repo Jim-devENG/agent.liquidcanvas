@@ -370,10 +370,19 @@ export default function WebsitesTable() {
           <Globe className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 font-medium mb-2">No websites discovered yet</p>
           <p className="text-gray-500 text-sm mb-4">
-            Run a discovery job in the Pipeline tab to find websites.
+            Start your outreach journey by discovering websites in your target categories.
           </p>
+          <div className="text-left max-w-md mx-auto space-y-2 text-xs text-gray-400 mb-4">
+            <p><strong>Getting Started:</strong></p>
+            <p>1. 🚀 Go to Pipeline tab and click "Start Discovery"</p>
+            <p>2. 📂 Select categories (e.g., Art Lovers, Interior Design)</p>
+            <p>3. 🌍 Choose locations (e.g., United States, Canada)</p>
+            <p>4. 🔍 Add keywords to refine your search</p>
+            <p>5. ✅ Approve websites you want to contact</p>
+          </div>
           <p className="text-gray-400 text-xs">
-            Discovery results will appear here once jobs complete.
+            Discovered websites will appear here once the discovery job completes. 
+            Then you can approve them and proceed to email extraction.
           </p>
         </div>
       ) : (

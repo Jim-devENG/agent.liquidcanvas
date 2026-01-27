@@ -40,10 +40,6 @@ export default function DraftsTable() {
   const abortControllerRef = useRef<AbortController | null>(null)
   // Ref for checking state without causing re-renders or closure issues
   const draftStateRef = useRef<'idle' | 'loading' | 'success' | 'error'>('idle')
-  
-  // Sync ref with state (for checking without re-renders)
-  // Use a ref callback to avoid triggering re-renders
-  draftStateRef.current = draftState.status
 
   // Cleanup on unmount
   useEffect(() => {
@@ -57,6 +53,11 @@ export default function DraftsTable() {
       }
     }
   }, [])
+  
+  // Sync ref with state in useEffect to avoid render-time side effects
+  useEffect(() => {
+    draftStateRef.current = draftState.status
+  }, [draftState.status])
 
   // Track if this is the initial load to determine error handling behavior
   const isInitialLoadRef = useRef(true)
@@ -163,7 +164,6 @@ export default function DraftsTable() {
 
     // Single state update: transition to loading
     if (mountedRef.current) {
-      draftStateRef.current = 'loading'
       setDraftState({ 
         status: 'loading', 
         message: null,
@@ -171,6 +171,7 @@ export default function DraftsTable() {
         progress: null
       })
       setError(null)
+      // Ref will be synced by useEffect
     }
     
     let timeoutId: NodeJS.Timeout | null = null
@@ -186,7 +187,6 @@ export default function DraftsTable() {
       
       // Store job_id and start polling for progress
       if (mountedRef.current && !abortController.signal.aborted) {
-        draftStateRef.current = 'loading'
         setDraftState({ 
           status: 'loading', 
           message: 'Drafting job queued. Starting...',
@@ -222,7 +222,6 @@ export default function DraftsTable() {
       
       // Single state update: transition to error (consolidated)
       if (mountedRef.current && !abortController.signal.aborted) {
-        draftStateRef.current = 'error'
         setDraftState({ 
           status: 'error', 
           message: errorMessage,
@@ -289,6 +288,13 @@ export default function DraftsTable() {
             : prev.message
         }))
         
+        // Refresh drafts list periodically while job is running to show new drafts as they're created
+        if (status.status === 'running' && status.drafts_created > 0) {
+          // Refresh drafts list every time we see progress (drafts_created increased)
+          // This ensures new drafts appear in the list as they're generated
+          loadDraftsRef.current()
+        }
+        
         // Handle completion
         if (status.status === 'completed') {
           if (pollingIntervalRef.current) {
@@ -296,7 +302,6 @@ export default function DraftsTable() {
             pollingIntervalRef.current = null
           }
           
-          draftStateRef.current = 'success'
           setDraftState(prev => ({
             ...prev,
             status: 'success',
@@ -321,7 +326,6 @@ export default function DraftsTable() {
             pollingIntervalRef.current = null
           }
           
-          draftStateRef.current = 'error'
           setDraftState(prev => ({
             ...prev,
             status: 'error',
@@ -572,7 +576,6 @@ export default function DraftsTable() {
           <button
             onClick={() => {
               // Reset state and trigger new request
-              draftStateRef.current = 'idle'
               setDraftState({ 
                 status: 'idle', 
                 message: null,
@@ -601,22 +604,39 @@ export default function DraftsTable() {
               </>
             )}
           </button>
+          {prospects.length > 0 && selected.size < prospects.length && (
+            <button
+              onClick={() => {
+                // Select all prospects
+                setSelected(new Set(prospects.map(p => p.id)))
+              }}
+              className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1"
+              title="Select all drafts for bulk sending"
+            >
+              <CheckCircle className="w-3 h-3" />
+              <span>Select All ({prospects.length})</span>
+            </button>
+          )}
           {selected.size > 0 && (
             <>
               <button
                 onClick={handleSend}
                 disabled={actionLoading}
-                className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                className={`px-3 py-1.5 text-xs font-medium text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${
+                  selected.size === prospects.length && prospects.length > 0
+                    ? 'bg-green-700 hover:bg-green-800'
+                    : 'bg-green-600'
+                }`}
               >
                 {actionLoading ? (
                   <>
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Sending...</span>
+                    <span>{selected.size === prospects.length ? 'Sending All...' : 'Sending...'}</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-3 h-3" />
-                    <span>Send ({selected.size})</span>
+                    <span>{selected.size === prospects.length ? `Send All (${prospects.length})` : `Send (${selected.size})`}</span>
                   </>
                 )}
               </button>

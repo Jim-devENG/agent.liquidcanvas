@@ -399,6 +399,18 @@ export default function Pipeline() {
     }
   ]
 
+  // Auto-show discovery form for first-time users when no websites exist
+  useEffect(() => {
+    if (normalizedStatus.discovered === 0 && !loading && masterSwitchEnabled) {
+      // Auto-show discovery form after a short delay if no websites exist
+      const timer = setTimeout(() => {
+        const event = new CustomEvent('show-discovery-form')
+        window.dispatchEvent(event)
+      }, 1500) // Delay to let user see the pipeline first
+      return () => clearTimeout(timer)
+    }
+  }, [normalizedStatus.discovered, loading, masterSwitchEnabled])
+
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Header */}
@@ -573,6 +585,7 @@ function Step1Discovery({ onComplete }: { onComplete: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  // Auto-show discovery form for first-time users
   useEffect(() => {
     const handleShowForm = () => setShowForm(true)
     window.addEventListener('show-discovery-form', handleShowForm)

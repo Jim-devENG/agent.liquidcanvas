@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download } from 'lucide-react'
-import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download, FileText } from 'lucide-react'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, pipelineDraft, getDraftJobStatus, type Prospect } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -40,6 +40,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isMigratingCategories, setIsMigratingCategories] = useState(false)
+  const [isAutoDrafting, setIsAutoDrafting] = useState(false)
   const [availableCategories, setAvailableCategories] = useState<string[]>([
     'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
     'Holidays', 'Famous Quotes', 'Home Decor', 
@@ -296,6 +297,109 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     }
   }
 
+  const handleAutoDraftAllLeads = async () => {
+    try {
+      setIsAutoDrafting(true)
+      setError(null)
+      
+      // Call pipelineDraft without prospect_ids to auto-draft all leads
+      const result = await pipelineDraft()
+      
+      if (!result.job_id) {
+        throw new Error('No job ID returned from drafting request')
+      }
+      
+      // Show success message
+      setError('✅ Auto-drafting started! Checking progress...')
+      
+      // Poll for job status until completion or failure
+      // Continue polling indefinitely until job completes or fails (drafting can take several minutes)
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await getDraftJobStatus(result.job_id)
+          
+          if (status.status === 'failed') {
+            clearInterval(pollInterval)
+            setIsAutoDrafting(false)
+            setError(`❌ Drafting failed: ${status.error_message || 'Unknown error'}`)
+            return
+          }
+          
+          if (status.status === 'completed') {
+            clearInterval(pollInterval)
+            setIsAutoDrafting(false)
+            setError(`✅ Drafting completed! ${status.drafts_created} drafts created. Navigating to Drafts tab...`)
+            
+            // Trigger pipeline status refresh
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+              window.dispatchEvent(new CustomEvent('jobsCompleted'))
+              window.dispatchEvent(new CustomEvent('refreshDrafts'))
+            }
+            
+            // Navigate to drafts tab after a short delay
+            setTimeout(() => {
+              setError(null)
+              if (typeof window !== 'undefined') {
+                const event = new CustomEvent('change-tab', { detail: 'drafts' })
+                window.dispatchEvent(event)
+              }
+            }, 2000)
+            return
+          }
+          
+          // Update progress message
+          if (status.status === 'running') {
+            const progressMsg = status.total_targets 
+              ? `⏳ Drafting in progress... ${status.drafts_created} / ${status.total_targets} drafts created`
+              : `⏳ Drafting in progress... ${status.drafts_created} drafts created so far`
+            setError(progressMsg)
+            
+            // Refresh drafts list periodically while drafting to show new drafts as they're created
+            // Trigger refresh event so DraftsTable updates
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('refreshDrafts'))
+            }
+          } else if (status.status === 'pending') {
+            setError('⏳ Drafting job queued. Starting soon...')
+          }
+        } catch (pollErr: any) {
+          console.error('Error polling draft job status:', pollErr)
+          // Don't clear interval on poll error - job might still be running
+          // Just show a warning but keep polling
+          if (pollErr.message?.includes('500') || pollErr.message?.includes('Failed to get job status')) {
+            // If it's a 500 error, the columns might be missing - but job is still running
+            // Keep polling but show a different message
+            setError('⏳ Drafting in progress... (checking status)')
+          }
+        }
+      }, 3000) // Poll every 3 seconds
+      
+      // Store interval ID so we can clear it on component unmount
+      const cleanup = () => {
+        if (pollInterval) {
+          clearInterval(pollInterval)
+        }
+      }
+      
+      // Cleanup on unmount
+      if (typeof window !== 'undefined') {
+        window.addEventListener('beforeunload', cleanup)
+      }
+      
+      // Trigger pipeline status refresh immediately
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
+        window.dispatchEvent(new CustomEvent('refreshDrafts'))
+      }
+    } catch (err: any) {
+      console.error('Failed to auto-draft leads:', err)
+      setError(err.message || 'Failed to start auto-drafting')
+      setIsAutoDrafting(false)
+    }
+  }
+
   const handleSendNow = async () => {
     if (!activeProspect) return
     
@@ -540,6 +644,26 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           <p className="text-xs text-gray-500 mt-1">Liquid Canvas Outreach</p>
         </div>
         <div className="flex items-center space-x-2 flex-wrap gap-2 overflow-visible">
+          {!emailsOnly && (
+            <button
+              onClick={handleAutoDraftAllLeads}
+              disabled={isAutoDrafting || loading}
+              className="px-3 py-1.5 text-xs font-medium bg-olive-600 text-white rounded-lg hover:bg-olive-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
+              title="Auto-draft emails for all leads and navigate to Drafts tab"
+            >
+              {isAutoDrafting ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Drafting...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="w-3 h-3" />
+                  <span>Auto-Draft All Leads</span>
+                </>
+              )}
+            </button>
+          )}
           <select
             value={selectedCategory}
             onChange={(e) => {

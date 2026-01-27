@@ -1,0 +1,53 @@
+name: Verify Deployment Configuration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Verify vercel.json
+        run: |
+          if grep -q "rootDirectory" vercel.json; then
+            echo "❌ ERROR: vercel.json contains 'rootDirectory' - this is invalid!"
+            echo "Remove it from vercel.json. Root directory must be set in Vercel dashboard only."
+            exit 1
+          fi
+          echo "✅ vercel.json is valid"
+      
+      - name: Verify git remotes
+        run: |
+          if ! git remote get-url jim-frontend 2>/dev/null | grep -q "Jim-devENG/agent-frontend"; then
+            echo "⚠️  WARNING: jim-frontend remote may be incorrect"
+            echo "Expected: Jim-devENG/agent-frontend"
+            git remote -v
+          else
+            echo "✅ jim-frontend remote is correct"
+          fi
+      
+      - name: Verify package.json
+        run: |
+          if [ ! -f package.json ]; then
+            echo "❌ ERROR: package.json not found in root"
+            exit 1
+          fi
+          echo "✅ package.json exists"
+      
+      - name: Verify app directory structure
+        run: |
+          if [ ! -d "app" ]; then
+            echo "❌ ERROR: app/ directory not found in root"
+            exit 1
+          fi
+          if [ -d "frontend/app" ]; then
+            echo "⚠️  WARNING: frontend/app/ exists - ensure Vercel Root Directory is empty, not '/frontend'"
+          fi
+          echo "✅ Directory structure is correct"
+
+

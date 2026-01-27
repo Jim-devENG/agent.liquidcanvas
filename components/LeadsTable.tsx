@@ -780,13 +780,20 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
           </p>
           <p className="text-gray-500 text-sm mb-4">
             {emailsOnly 
-              ? 'No prospects with emails yet. Scrape discovered websites to extract contact information.'
-              : 'No prospects yet. Scrape discovered websites to create prospects.'}
+              ? 'No prospects with emails yet. The pipeline will create them automatically.'
+              : 'No prospects yet. Follow the pipeline steps to create them.'}
           </p>
+          <div className="text-left max-w-md mx-auto space-y-2 text-xs text-gray-400 mb-4">
+            <p><strong>Pipeline Steps:</strong></p>
+            <p>1. 🌐 Use Pipeline tab to discover websites</p>
+            <p>2. ✅ Approve websites you want to scrape</p>
+            <p>3. 🔄 Start scraping to extract emails</p>
+            <p>4. ✅ Verify emails to create leads</p>
+          </div>
           <p className="text-gray-400 text-xs">
             {emailsOnly 
-              ? 'Prospects appear here after scraping finds emails. Go to the Websites tab to approve and scrape websites.'
-              : 'Prospects are created after scraping. Go to the Websites tab to approve websites, then use the Pipeline tab to scrape them.'}
+              ? 'Prospects appear here after scraping finds emails. Check the Pipeline tab for progress.'
+              : 'Use the Pipeline tab to guide you through each step, or check the Websites tab to approve discovered sites.'}
           </p>
         </div>
       ) : (

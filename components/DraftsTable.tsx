@@ -111,14 +111,25 @@ export default function DraftsTable() {
           ((p as any).source_type === 'website' || !(p as any).source_type)
         )
         
-        // Auto-trigger drafting if no drafts exist
+        // Auto-trigger drafting if no drafts exist and we have verified leads
         if (draftedProspects.length === 0) {
-          setTimeout(() => {
-            handleAutoDraft(false) // Auto-draft without confirmation
-            setHasAutoDrafted(true)
-          }, 1500)
+          // Check if we have verified leads before auto-drafting
+          const verifiedLeads = allProspects.filter((p: Prospect) => 
+            p.contact_email && 
+            p.verification_status === 'verified' &&
+            ((p as any).source_type === 'website' || !(p as any).source_type)
+          )
+          
+          if (verifiedLeads.length > 0) {
+            setTimeout(() => {
+              handleAutoDraft(false) // Auto-draft without confirmation
+              setHasAutoDrafted(true)
+            }, 1500)
+          } else {
+            setHasAutoDrafted(true) // No verified leads to draft
+          }
         } else {
-          setHasAutoDrafted(true) // Mark as checked even if drafts exist
+          setHasAutoDrafted(true) // Drafts already exist
         }
       } catch (err) {
         console.error('Error checking for drafts:', err)
@@ -298,7 +309,15 @@ export default function DraftsTable() {
         <div className="text-center py-8 text-gray-500">
           <FileText className="w-12 h-12 mx-auto mb-3 text-gray-400" />
           <p className="text-sm font-medium mb-1">No drafts found</p>
-          <p className="text-xs">Click "Generate Drafts" to create drafts for all leads with scraped emails</p>
+          <p className="text-xs mb-2">Email drafts will appear here after:</p>
+          <div className="text-left max-w-md mx-auto space-y-1 text-xs text-gray-400">
+            <p>1. ✅ Websites are discovered and approved</p>
+            <p>2. ✅ Emails are extracted and verified</p>
+            <p>3. ✅ Drafts are generated using AI</p>
+          </div>
+          <p className="text-xs mt-3">
+            Click "Generate Drafts" to create drafts for all verified leads with emails, or use the Pipeline tab to progress through each step.
+          </p>
         </div>
       ) : (
         <>

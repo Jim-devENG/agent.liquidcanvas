@@ -41,11 +41,87 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState(false)
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'emails' | 'drafts' | 'jobs' | 'websites' | 'settings' | 'guide'
+    'overview' | 'pipeline' | 'leads' | 'emails' | 'drafts' | 'jobs' | 'websites' | 'settings' | 'guide'
   >('pipeline')  // Pipeline-first: default to Pipeline tab
 
   // Track if we've already triggered refresh for completed jobs to prevent loops
   const hasTriggeredRefresh = useRef(false)
+
+  // CRITICAL: All hooks must be called before any early returns
+  // Define tabs as a constant to ensure it's always the same
+  // CRITICAL: Drafts tab MUST be in this array for it to appear in sidebar
+  const tabs = useMemo(() => {
+    // Ensure FileText is available, use fallback if not
+    const DraftsIcon = FileText || FileText || (() => <span>📄</span>)
+    
+    const tabsArray = [
+      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
+      { id: 'websites', label: 'Websites', icon: Globe },
+      { id: 'leads', label: 'Leads', icon: Users },
+      { id: 'drafts', label: 'Drafts', icon: FileText || Users }, // DRAFTS TAB - CRITICAL: Must be visible (fallback to Users if FileText fails)
+      { id: 'emails', label: 'Outreach Emails', icon: Mail },
+      { id: 'jobs', label: 'Jobs', icon: Activity },
+      { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'guide', label: 'Guide', icon: BookOpen },
+    ]
+    
+    // CRITICAL: Ensure drafts tab is always present - add it if missing
+    if (!tabsArray.some(t => t.id === 'drafts')) {
+      tabsArray.splice(5, 0, { id: 'drafts', label: 'Drafts', icon: FileText || Users })
+    }
+    
+    return tabsArray
+  }, [])
+  
+  // CRITICAL: Use ref to track tabs to avoid useEffect dependency issues
+  // tabs is a stable useMemo, but including it in dependencies can cause React errors
+  const tabsRef = useRef(tabs)
+  // Update ref synchronously during render (refs are safe to update during render)
+  tabsRef.current = tabs
+  
+  // CRITICAL: Consolidate all side effects into a single useEffect to avoid hook order issues
+  // Side effects (window mutations, console.log) must not happen during render
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Use ref to access tabs to avoid dependency issues
+      const currentTabs = tabsRef.current
+      const draftsTab = currentTabs.find(t => t.id === 'drafts')
+      
+      // RUNTIME PROOF: This proves liquidcanvas monorepo frontend is running
+      const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-DASHBOARD-' + Date.now();
+      window.__DASHBOARD_RUNTIME_PROOF__ = RUNTIME_PROOF;
+      window.__DASHBOARD_REPO__ = 'liquidcanvas-monorepo-frontend';
+      
+      // All console logs consolidated here
+      console.log('🚨 TABS ARRAY CREATED:', currentTabs.map(t => t.id).join(', '))
+      console.log('🚨 DRAFTS IN ARRAY:', currentTabs.some(t => t.id === 'drafts'))
+      console.log('🚨 FileText icon available:', typeof FileText !== 'undefined', FileText)
+      console.log('🚨 Drafts tab object:', currentTabs.find(t => t.id === 'drafts'))
+      console.log('📋 Dashboard Tabs Array:', currentTabs.map(t => ({ id: t.id, label: t.label })))
+      console.log('📋 Drafts tab exists:', currentTabs.some(t => t.id === 'drafts'))
+      console.log('📋 FileText icon:', typeof FileText !== 'undefined' ? '✅ Imported' : '❌ Missing')
+      console.log('📋 Tabs count:', currentTabs.length)
+      console.log('📋 Tabs passed to Sidebar:', currentTabs)
+      console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 5.0-DRAFTS-FIX 🚨🚨🚨')
+      console.log('🚨🚨🚨 IF YOU SEE THIS LOG, NEW CODE IS RUNNING 🚨🚨🚨')
+      console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF)
+      console.log('🚨 REPO:', 'liquidcanvas-monorepo-frontend')
+      console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', currentTabs.length)
+      console.log('🚨 RENDER - All tab IDs:', currentTabs.map(t => t.id).join(', '))
+      console.log('🚨 RENDER - Active tab:', activeTab)
+      console.log('🚨 RENDER - DraftsTab object:', draftsTab)
+      
+      // Also set a global variable that can be checked
+      window.__DRAFTS_TAB_DEBUG__ = {
+        exists: !!draftsTab,
+        tabId: draftsTab?.id,
+        label: draftsTab?.label,
+        allTabs: currentTabs.map(t => t.id),
+        timestamp: Date.now()
+      }
+    }
+  }, [activeTab]) // Only depend on activeTab - tabs accessed via ref to avoid dependency issues
 
   const loadData = useCallback(async (isInitialLoad = false) => {
     try {
@@ -145,7 +221,7 @@ export default function Dashboard() {
     // Listen for tab change events from Pipeline component
     const handleTabChange = (e: CustomEvent) => {
       const tabId = e.detail as string
-      if (tabId && ['overview', 'pipeline', 'leads', 'scraped_emails', 'drafts', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
+      if (tabId && ['overview', 'pipeline', 'leads', 'drafts', 'emails', 'jobs', 'websites', 'settings', 'guide'].includes(tabId)) {
         setActiveTab(tabId as any)
       }
     }
@@ -159,6 +235,49 @@ export default function Dashboard() {
     }
   }, [router, loadData])
 
+  // CRITICAL: ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS
+  // This useEffect must be here, before the loading check, to maintain consistent hook order
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Use ref to access tabs to avoid dependency issues
+      const currentTabs = tabsRef.current
+      const draftsTab = currentTabs.find(t => t.id === 'drafts')
+      
+      // RUNTIME PROOF: This proves liquidcanvas monorepo frontend is running
+      const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-DASHBOARD-' + Date.now();
+      window.__DASHBOARD_RUNTIME_PROOF__ = RUNTIME_PROOF;
+      window.__DASHBOARD_REPO__ = 'liquidcanvas-monorepo-frontend';
+      
+      // All console logs consolidated here
+      console.log('🚨 TABS ARRAY CREATED:', currentTabs.map(t => t.id).join(', '))
+      console.log('🚨 DRAFTS IN ARRAY:', currentTabs.some(t => t.id === 'drafts'))
+      console.log('🚨 FileText icon available:', typeof FileText !== 'undefined', FileText)
+      console.log('🚨 Drafts tab object:', currentTabs.find(t => t.id === 'drafts'))
+      console.log('📋 Dashboard Tabs Array:', currentTabs.map(t => ({ id: t.id, label: t.label })))
+      console.log('📋 Drafts tab exists:', currentTabs.some(t => t.id === 'drafts'))
+      console.log('📋 FileText icon:', typeof FileText !== 'undefined' ? '✅ Imported' : '❌ Missing')
+      console.log('📋 Tabs count:', currentTabs.length)
+      console.log('📋 Tabs passed to Sidebar:', currentTabs)
+      console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 5.0-DRAFTS-FIX 🚨🚨🚨')
+      console.log('🚨🚨🚨 IF YOU SEE THIS LOG, NEW CODE IS RUNNING 🚨🚨🚨')
+      console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF)
+      console.log('🚨 REPO:', 'liquidcanvas-monorepo-frontend')
+      console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', currentTabs.length)
+      console.log('🚨 RENDER - All tab IDs:', currentTabs.map(t => t.id).join(', '))
+      console.log('🚨 RENDER - Active tab:', activeTab)
+      console.log('🚨 RENDER - DraftsTab object:', draftsTab)
+      
+      // Also set a global variable that can be checked
+      window.__DRAFTS_TAB_DEBUG__ = {
+        exists: !!draftsTab,
+        tabId: draftsTab?.id,
+        label: draftsTab?.label,
+        allTabs: currentTabs.map(t => t.id),
+        timestamp: Date.now()
+      }
+    }
+  }, [activeTab]) // Only depend on activeTab - tabs accessed via ref to avoid dependency issues
+
   const refreshData = () => {
     loadData(false)
     // Also trigger the jobsCompleted event to refresh all tables
@@ -167,49 +286,12 @@ export default function Dashboard() {
     }
   }
 
-  // Define tabs as a constant to ensure it's always the same
-  // CRITICAL: Drafts tab MUST be in this array for it to appear in sidebar
-  const tabs = useMemo(() => {
-    // Ensure FileText is available, use fallback if not
-    const DraftsIcon = FileText || FileText || (() => <span>📄</span>)
-    
-    const tabsArray = [
-      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-      { id: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
-      { id: 'websites', label: 'Websites', icon: Globe },
-      { id: 'leads', label: 'Leads', icon: Users },
-      { id: 'scraped_emails', label: 'Scraped Emails', icon: AtSign },
-      { id: 'drafts', label: 'Drafts', icon: FileText || Users }, // DRAFTS TAB - CRITICAL: Must be visible (fallback to Users if FileText fails)
-      { id: 'emails', label: 'Outreach Emails', icon: Mail },
-      { id: 'jobs', label: 'Jobs', icon: Activity },
-      { id: 'settings', label: 'Settings', icon: Settings },
-      { id: 'guide', label: 'Guide', icon: BookOpen },
-    ]
-    
-    // IMMEDIATE console log - runs during component initialization (before useEffect)
-    console.log('🚨 TABS ARRAY CREATED:', tabsArray.map(t => t.id).join(', '))
-    console.log('🚨 DRAFTS IN ARRAY:', tabsArray.some(t => t.id === 'drafts'))
-    console.log('🚨 FileText icon available:', typeof FileText !== 'undefined', FileText)
-    console.log('🚨 Drafts tab object:', tabsArray.find(t => t.id === 'drafts'))
-    
-    // CRITICAL: Ensure drafts tab is always present - add it if missing
-    if (!tabsArray.some(t => t.id === 'drafts')) {
-      console.error('❌ CRITICAL: Drafts tab missing from array! Adding it now...')
-      tabsArray.splice(5, 0, { id: 'drafts', label: 'Drafts', icon: FileText || Users })
-    }
-    
-    return tabsArray
-  }, [])
-  
-  // Debug: Log tabs to verify Drafts is included (works in both dev and prod)
-  useEffect(() => {
-    console.log('📋 Dashboard Tabs Array:', tabs.map(t => ({ id: t.id, label: t.label })))
-    console.log('📋 Drafts tab exists:', tabs.some(t => t.id === 'drafts'))
-    console.log('📋 FileText icon:', typeof FileText !== 'undefined' ? '✅ Imported' : '❌ Missing')
-    console.log('📋 Tabs count:', tabs.length)
-    console.log('📋 Tabs passed to Sidebar:', tabs)
-  }, [tabs])
+  // Wrapper function to handle type compatibility with Sidebar component
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'drafts' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
+  }
 
+  // CRITICAL: Early return MUST come after ALL hooks are called
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20">
@@ -227,41 +309,6 @@ export default function Dashboard() {
       </div>
     )
   }
-
-  // Wrapper function to handle type compatibility with Sidebar component
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab as 'overview' | 'pipeline' | 'leads' | 'scraped_emails' | 'drafts' | 'emails' | 'jobs' | 'websites' | 'settings' | 'guide')
-  }
-
-  // Force render Drafts tab - emergency fallback to verify it exists
-  const draftsTab = tabs.find(t => t.id === 'drafts')
-  
-  // CRITICAL: Immediate console logs that run on EVERY render
-  // Force these to run immediately - no conditions
-  if (typeof window !== 'undefined') {
-    // RUNTIME PROOF: This proves liquidcanvas monorepo frontend is running
-    const RUNTIME_PROOF = 'LIQUIDCANVAS-MONOREPO-DASHBOARD-' + Date.now();
-    window.__DASHBOARD_RUNTIME_PROOF__ = RUNTIME_PROOF;
-    window.__DASHBOARD_REPO__ = 'liquidcanvas-monorepo-frontend';
-    
-    console.log('🚨🚨🚨 DASHBOARD RENDER - VERSION 5.0-DRAFTS-FIX 🚨🚨🚨')
-    console.log('🚨🚨🚨 IF YOU SEE THIS LOG, NEW CODE IS RUNNING 🚨🚨🚨')
-    console.log('🚨 RUNTIME PROOF:', RUNTIME_PROOF)
-    console.log('🚨 REPO:', 'liquidcanvas-monorepo-frontend')
-    console.log('🚨 RENDER - Drafts tab found:', !!draftsTab, 'Total tabs:', tabs.length)
-    console.log('🚨 RENDER - All tab IDs:', tabs.map(t => t.id).join(', '))
-    console.log('🚨 RENDER - Active tab:', activeTab)
-    console.log('🚨 RENDER - DraftsTab object:', draftsTab)
-    
-    // Also set a global variable that can be checked
-    window.__DRAFTS_TAB_DEBUG__ = {
-      exists: !!draftsTab,
-      tabId: draftsTab?.id,
-      label: draftsTab?.label,
-      allTabs: tabs.map(t => t.id),
-      timestamp: Date.now()
-    }
-  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-liquid-50 to-white flex">
@@ -274,7 +321,7 @@ export default function Dashboard() {
           top: 0, 
           right: 0, 
           zIndex: 99999, 
-          background: draftsTab ? 'green' : 'red', 
+          background: tabs.some(t => t.id === 'drafts') ? 'green' : 'red', 
           color: 'white', 
           padding: '8px 12px', 
           fontSize: '11px', 
@@ -285,7 +332,7 @@ export default function Dashboard() {
           visibility: 'visible'
         } as React.CSSProperties}
       >
-        {draftsTab ? `✅ DRAFTS: ${draftsTab.label} (v5.0-DRAFTS-FIX)` : '❌ DRAFTS MISSING (v5.0-DRAFTS-FIX)'}
+        {tabs.some(t => t.id === 'drafts') ? `✅ DRAFTS: ${tabs.find(t => t.id === 'drafts')?.label || 'Drafts'} (v5.0-DRAFTS-FIX)` : '❌ DRAFTS MISSING (v5.0-DRAFTS-FIX)'}
       </div>
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} onTabChange={handleTabChange} tabs={tabs} />
@@ -399,28 +446,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {activeTab === 'scraped_emails' && (
-          <div className="max-w-7xl mx-auto">
-            <LeadsTable emailsOnly={true} />
-          </div>
-        )}
-
         {activeTab === 'drafts' && (
           <div className="max-w-7xl mx-auto">
-            {(() => {
-              try {
-                return <DraftsTable />
-              } catch (error: any) {
-                console.error('Error rendering DraftsTable:', error)
-                return (
-                  <div className="glass rounded-xl shadow-lg border border-red-200 p-6">
-                    <h2 className="text-lg font-bold text-red-600 mb-2">Error Loading Drafts</h2>
-                    <p className="text-sm text-gray-600">{error?.message || 'Unknown error'}</p>
-                    <p className="text-xs text-gray-500 mt-2">Check console for details</p>
-                  </div>
-                )
-              }
-            })()}
+            <DraftsTable />
           </div>
         )}
 

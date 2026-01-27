@@ -2,6 +2,19 @@
 
 TypeScript/Next.js dashboard for the Autonomous Art Outreach Scraper.
 
+## ⚠️ CRITICAL: Deployment Configuration
+
+**Before deploying, read:** [`README_DEPLOYMENT.md`](./README_DEPLOYMENT.md)
+
+**Required Vercel Settings:**
+- Root Directory: **Empty** (not `/frontend`)
+- Repository: **`Jim-devENG/agent-frontend`**
+- Production Branch: **`main`**
+
+**Always push to:** `git push jim-frontend main`
+
+See [`DEPLOYMENT_SAFEGUARDS.md`](./DEPLOYMENT_SAFEGUARDS.md) for complete deployment safeguards.
+
 ## Features
 
 - 📊 **Statistics Dashboard** - View leads, emails, and website metrics
