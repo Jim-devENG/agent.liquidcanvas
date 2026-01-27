@@ -1234,14 +1234,24 @@ async def get_pipeline_status(
         )
         emails_verified_count = emails_verified.scalar() or 0
         
-        # Step 5: DRAFT-READY = Prospects where verification_status == "verified" AND email IS NOT NULL AND source_type='website'
-        # SINGLE SOURCE OF TRUTH: verification_status = "verified" AND contact_email IS NOT NULL AND source_type='website'
+        # Step 5: DRAFT-READY = Leads/scraped emails with contact_email present and missing drafts
+        # SINGLE SOURCE OF TRUTH: scrape_status IN (SCRAPED, ENRICHED) AND contact_email present AND source_type='website' AND no draft yet
         draft_ready = await db.execute(
             select(func.count(Prospect.id)).where(
                 and_(
-                    Prospect.verification_status == VerificationStatus.VERIFIED.value,
                     Prospect.contact_email.isnot(None),
-                    website_filter
+                    func.length(func.trim(Prospect.contact_email)) > 0,
+                    Prospect.scrape_status.in_([
+                        ScrapeStatus.SCRAPED.value,
+                        ScrapeStatus.ENRICHED.value
+                    ]),
+                    website_filter,
+                    or_(
+                        Prospect.draft_subject.is_(None),
+                        func.length(func.trim(Prospect.draft_subject)) == 0,
+                        Prospect.draft_body.is_(None),
+                        func.length(func.trim(Prospect.draft_body)) == 0
+                    )
                 )
             )
         )

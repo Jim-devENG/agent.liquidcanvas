@@ -173,7 +173,7 @@ async def check_and_run_drafting():
         from app.db.database import AsyncSessionLocal
         from app.api.scraper import check_master_switch
         from app.models.job import Job
-        from app.models.prospect import Prospect, VerificationStatus
+        from app.models.prospect import Prospect, ScrapeStatus
         from app.task_manager import get_running_task, register_task
         from app.tasks.drafting import draft_prospects_async
         from sqlalchemy import select, and_, or_, func, text
@@ -212,8 +212,14 @@ async def check_and_run_drafting():
                 Prospect.draft_body.is_(None),
                 func.length(func.trim(Prospect.draft_body)) == 0,
             )
-            verified_filter = func.lower(Prospect.verification_status) == VerificationStatus.VERIFIED.value
-            eligible_filter = and_(verified_filter, email_present_filter, draft_missing_filter)
+            website_filter = and_(
+                or_(Prospect.source_type == "website", Prospect.source_type.is_(None)),
+                Prospect.scrape_status.in_([
+                    ScrapeStatus.SCRAPED.value,
+                    ScrapeStatus.ENRICHED.value,
+                ]),
+            )
+            eligible_filter = and_(website_filter, email_present_filter, draft_missing_filter)
 
             eligible_count_result = await db.execute(
                 select(func.count(Prospect.id)).where(eligible_filter)

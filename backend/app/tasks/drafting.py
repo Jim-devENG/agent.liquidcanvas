@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select, and_, or_, func, update, text
 
 from app.db.database import AsyncSessionLocal
-from app.models.prospect import Prospect, VerificationStatus, DraftStatus, ProspectStage
+from app.models.prospect import Prospect, ScrapeStatus, DraftStatus, ProspectStage
 from app.models.job import Job
 from app.clients.gemini import GeminiClient
 
@@ -50,7 +50,7 @@ def _has_complete_draft(prospect: Prospect) -> bool:
 
 async def draft_prospects_async(job_id: str):
     """
-    Generate email drafts for verified prospects using Gemini
+    Generate email drafts for leads and scraped emails using Gemini
     
     BACKGROUND JOB MODE:
     - Queries prospects in background (eligibility check happens here)
@@ -142,14 +142,26 @@ async def draft_prospects_async(job_id: str):
                 Prospect.draft_body.is_(None),
                 func.length(func.trim(Prospect.draft_body)) == 0,
             )
-            verified_filter = func.lower(Prospect.verification_status) == VerificationStatus.VERIFIED.value
-            eligible_filter = and_(verified_filter, email_present_filter, draft_missing_filter)
+            website_filter = or_(
+                Prospect.source_type == "website",
+                Prospect.source_type.is_(None),
+            )
+            scraped_filter = Prospect.scrape_status.in_([
+                ScrapeStatus.SCRAPED.value,
+                ScrapeStatus.ENRICHED.value,
+            ])
+            eligible_filter = and_(
+                website_filter,
+                scraped_filter,
+                email_present_filter,
+                draft_missing_filter,
+            )
 
             if auto_mode:
                 result = await db.execute(select(Prospect).where(eligible_filter))
                 prospects = result.scalars().all()
                 logger.info(
-                    f"📋 [DRAFTING] Found {len(prospects)} verified prospects without drafts (all sources)"
+                    f"📋 [DRAFTING] Found {len(prospects)} leads/scraped emails without drafts"
                 )
             else:
                 try:
@@ -183,7 +195,7 @@ async def draft_prospects_async(job_id: str):
 
                 if len(prospects) == 0:
                     error_message = (
-                        "No valid prospects found. Ensure they are verified, have emails, and no existing drafts."
+                        "No valid prospects found. Ensure they appear in Leads/Scraped Emails, have emails, and no existing drafts."
                     )
                     logger.warning("⚠️  [DRAFTING] No valid prospects found for provided IDs")
                     if has_progress_columns and job:
@@ -224,7 +236,7 @@ async def draft_prospects_async(job_id: str):
                 total_targets = max(existing_total_targets, total_targets)
 
             if total_targets == 0:
-                error_message = "No eligible prospects ready for drafting"
+                error_message = "No eligible leads/scraped emails ready for drafting"
                 if existing_total_targets and existing_drafts_created >= (existing_total_targets or 0):
                     status = "completed"
                     error_message = None
@@ -499,7 +511,7 @@ async def draft_prospects_async(job_id: str):
                 error_message = (
                     "No drafts created. Check Gemini configuration and prospect eligibility."
                     if failed_count > 0
-                    else "No eligible prospects were available to draft."
+                    else "No eligible leads/scraped emails were available to draft."
                 )
             else:
                 status = "completed"
