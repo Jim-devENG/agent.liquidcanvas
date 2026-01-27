@@ -106,6 +106,7 @@ from app.api import auth, settings, scraper, pipeline, manual, health, social
 from app.api import social_pipeline  # Separate pipeline API for social outreach
 from app.api import diagnostics  # Database forensics endpoints
 from app.api import integrations  # Social integrations and OAuth management
+from app.api import admin  # Admin endpoints
 # To use Supabase Auth instead, replace the line below with:
 # from app.api import auth_supabase
 # app.include_router(auth_supabase.router, prefix="/api/auth", tags=["auth"])
@@ -117,6 +118,7 @@ app.include_router(scraper.router, prefix="/api/scraper", tags=["scraper"])
 app.include_router(pipeline.router, tags=["pipeline"])  # Already has /api/pipeline prefix (WEBSITE OUTREACH)
 app.include_router(manual.router, tags=["manual"])  # Already has /api/manual prefix
 app.include_router(health.router, tags=["health"])  # Health check endpoints
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])  # Admin endpoints
 app.include_router(social.router, tags=["social"])  # Social outreach - separate from website outreach
 app.include_router(social_pipeline.router, tags=["social-pipeline"])  # Social pipeline - completely separate from website pipeline
 app.include_router(diagnostics.router, tags=["diagnostics"])  # Database forensics endpoints
