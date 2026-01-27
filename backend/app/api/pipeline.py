@@ -1283,6 +1283,75 @@ async def configure_gmail(
         )
 
 
+@router.get("/test-gmail")
+async def test_gmail():
+    """
+    Test Gmail API configuration and return success/failure with error details
+    No secrets are exposed in the response
+    """
+    try:
+        from app.clients.gmail import GmailClient
+        
+        # Initialize Gmail client
+        gmail_client = GmailClient()
+        
+        # Check if configured
+        if not gmail_client.is_configured():
+            return {
+                "success": False,
+                "error": "Gmail client is not configured",
+                "details": "Set GMAIL_ACCESS_TOKEN or (GMAIL_REFRESH_TOKEN + GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET) environment variables"
+            }
+        
+        # If using refresh token, test that it works
+        if gmail_client.refresh_token and not gmail_client.access_token:
+            try:
+                import asyncio
+                refreshed = await asyncio.wait_for(gmail_client.refresh_access_token(), timeout=10)
+                if not refreshed:
+                    return {
+                        "success": False,
+                        "error": "Gmail refresh token is invalid or expired",
+                        "details": "Please generate a new refresh token from Google OAuth Playground or re-authenticate"
+                    }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": "Failed to refresh Gmail access token",
+                    "details": str(e)
+                }
+        
+        # Test Gmail API by fetching user profile
+        try:
+            import asyncio
+            profile = await asyncio.wait_for(gmail_client.get_user_profile(), timeout=10)
+            if profile and profile.get("emailAddress"):
+                return {
+                    "success": True,
+                    "message": "Gmail API is working",
+                    "details": f"Connected to: {profile['emailAddress']}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Gmail API returned invalid profile",
+                    "details": "Profile response missing email address"
+                }
+        except Exception as api_err:
+            return {
+                "success": False,
+                "error": "Gmail API call failed",
+                "details": str(api_err)
+            }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "Failed to initialize Gmail client",
+            "details": str(e)
+        }
+
+
 @router.get("/check-gmail-config")
 async def check_gmail_config():
     """
