@@ -1048,19 +1048,68 @@ async def send_emails(
     
     logger.info(f"📧 [PIPELINE STEP 7] Sending emails for {len(prospects)} send-ready prospects (data-driven)")
     
+    # Check if 'drafts_created' and 'total_targets' columns exist in the 'jobs' table
+    # This is a workaround for schema drift between local dev and deployed environments
+    column_check = await db.execute(
+        text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'jobs'
+            AND column_name IN ('drafts_created', 'total_targets')
+        """)
+    )
+    existing_columns = {row[0] for row in column_check.fetchall()}
+    has_progress_columns = 'drafts_created' in existing_columns and 'total_targets' in existing_columns
+
     # Create sending job
-    job = Job(
-        job_type="send",
-        params={
+    if has_progress_columns:
+        job = Job(
+            job_type="send",
+            params={
+                "prospect_ids": [str(p.id) for p in prospects],
+                "pipeline_mode": True,
+            },
+            status="pending"
+        )
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
+    else:
+        # Fallback for older schema without progress columns
+        # Use raw SQL to insert to avoid SQLAlchemy trying to insert non-existent columns
+        import uuid
+        job_id = uuid.uuid4()
+        params_dict = {
             "prospect_ids": [str(p.id) for p in prospects],
             "pipeline_mode": True,
-        },
-        status="pending"
-    )
-    
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
+        }
+        
+        await db.execute(
+            text("""
+                INSERT INTO jobs (id, user_id, job_type, params, status, created_at, updated_at)
+                VALUES (:id, :user_id, :job_type, :params, :status, NOW(), NOW())
+            """),
+            {
+                "id": str(job_id),
+                "user_id": current_user if current_user else None,
+                "job_type": "send",
+                "params": json.dumps(params_dict),
+                "status": "pending",
+            }
+        )
+        await db.commit()
+        logger.warning("⚠️  [SEND] Created job without progress columns (columns missing)")
+        
+        # Create a minimal Job object for response as it's not loaded via ORM
+        job = Job(
+            id=job_id,
+            user_id=current_user if current_user else None,
+            job_type="send",
+            params=params_dict,
+            status="pending",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
     
     # Start sending task in background
     try:
