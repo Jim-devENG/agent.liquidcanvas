@@ -974,13 +974,8 @@ async def startup():
     else:
         logger.warning("⚠️  Server is starting with validation issues - some features may not work")
     
-    # Start scheduler for periodic tasks (always start - scraper check runs every minute)
-    try:
-        from app.scheduler import start_scheduler
-        start_scheduler()
-        logger.info("✅ Scheduler started successfully (automatic scraper check enabled)")
-    except Exception as e:
-        logger.error(f"❌ Failed to start scheduler: {e}", exc_info=True)
+    # Scheduler disabled to prevent auto-triggering on refresh
+    logger.info("⚠️ Scheduler disabled - auto-drafting will not run")
     
     # Log that startup is complete (server is ready to accept requests)
     logger.info("✅ Server startup complete - ready to accept requests")
