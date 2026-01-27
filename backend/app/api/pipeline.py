@@ -8,6 +8,7 @@ from sqlalchemy import select, or_, and_, func, text
 from typing import List, Optional
 from uuid import UUID
 import logging
+import json
 from pydantic import BaseModel
 
 from app.db.database import get_db
@@ -833,6 +834,26 @@ async def get_draft_job_status(
             # Parse row manually
             total_targets = None
             drafts_created = 0
+
+            result_payload = row[4] if len(row) > 4 else None
+            result_data = {}
+            if isinstance(result_payload, dict):
+                result_data = result_payload
+            elif isinstance(result_payload, str):
+                try:
+                    result_data = json.loads(result_payload)
+                except Exception:
+                    result_data = {}
+
+            if result_data:
+                drafts_created = (
+                    result_data.get("drafts_created")
+                    or result_data.get("drafted")
+                    or 0
+                )
+                total_targets = result_data.get("total_targets")
+                if total_targets is None:
+                    total_targets = result_data.get("total")
             
             # Try to get status from row
             job_status = row[3]  # status column

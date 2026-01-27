@@ -3,19 +3,49 @@ Drafting task - STEP 6 of strict pipeline
 Generates email drafts using Gemini
 """
 import asyncio
+import json
 import logging
-from typing import List
 from uuid import UUID
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from datetime import datetime, timezone
+from sqlalchemy import select, and_, or_, func, update, text
 
 from app.db.database import AsyncSessionLocal
-from app.models.prospect import Prospect
+from app.models.prospect import Prospect, VerificationStatus, DraftStatus, ProspectStage
 from app.models.job import Job
 from app.clients.gemini import GeminiClient
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_json_value(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return {}
+    return {}
+
+
+async def _job_progress_columns_exist(db) -> bool:
+    result = await db.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'jobs'
+            AND column_name IN ('drafts_created', 'total_targets')
+            """
+        )
+    )
+    existing_columns = {row[0] for row in result.fetchall()}
+    return "drafts_created" in existing_columns and "total_targets" in existing_columns
+
+
+def _has_complete_draft(prospect: Prospect) -> bool:
+    subject = prospect.draft_subject or ""
+    body = prospect.draft_body or ""
+    return bool(subject.strip()) and bool(body.strip())
 
 
 async def draft_prospects_async(job_id: str):
@@ -27,204 +57,516 @@ async def draft_prospects_async(job_id: str):
     - Updates progress incrementally (drafts_created, total_targets)
     - Sets draft_status = "drafted" for each prospect
     """
-    from sqlalchemy import and_, or_
-    from app.models.prospect import VerificationStatus
-    
     async with AsyncSessionLocal() as db:
         try:
-            # Get job
-            result = await db.execute(select(Job).where(Job.id == UUID(job_id)))
-            job = result.scalar_one_or_none()
-            
-            if not job:
-                logger.error(f"❌ [DRAFTING] Job {job_id} not found")
-                return {"error": "Job not found"}
-            
-            # Transition to running
-            job.status = "running"
-            await db.commit()
-            await db.refresh(job)
-            
-            # Query prospects in background (eligibility check happens here)
-            prospect_ids = job.params.get("prospect_ids")
-            auto_mode = job.params.get("auto_mode", False)
-            
-            if auto_mode or not prospect_ids:
-                # Automatic mode: query all draft-ready prospects (leads, scraped emails, websites)
-                # Include ALL verified prospects with emails, regardless of source_type
-                # EXCLUDE prospects that already have drafts (draft_subject AND draft_body are not null)
-                # This ensures we only draft prospects that don't already have drafts
-                try:
-                    # Query verified prospects with emails that DON'T already have drafts
-                    # A prospect has a draft if both draft_subject and draft_body are not null
-                    result = await db.execute(
-                        select(Prospect).where(
-                            and_(
-                                Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                                Prospect.contact_email.isnot(None),
-                                # Exclude prospects that already have complete drafts
-                                or_(
-                                    Prospect.draft_subject.is_(None),
-                                    Prospect.draft_body.is_(None)
-                                )
-                            )
-                        )
-                    )
-                    prospects = result.scalars().all()
-                    logger.info(f"📋 [DRAFTING] Found {len(prospects)} verified prospects without drafts (all sources)")
-                except Exception as e:
-                    logger.error(f"❌ [DRAFTING] Query error: {e}", exc_info=True)
-                    raise
-                
-                if len(prospects) == 0:
-                    logger.warning("⚠️  [DRAFTING] No prospects ready for drafting (all verified prospects already have drafts)")
-                    job.status = "completed"  # Mark as completed, not failed - all prospects already have drafts
-                    job.error_message = None
-                    if hasattr(job, 'drafts_created'):
-                        job.drafts_created = 0
-                    if hasattr(job, 'total_targets'):
-                        job.total_targets = 0
-                    await db.commit()
-                    return {
-                        "job_id": job_id,
-                        "status": "completed",
-                        "drafted": 0,
-                        "failed": 0,
-                        "message": "All verified prospects already have drafts. No new drafts needed."
-                    }
+            try:
+                job_uuid = UUID(job_id)
+            except Exception as e:
+                logger.error(f"❌ [DRAFTING] Invalid job id {job_id}: {e}")
+                return {"error": "Invalid job ID"}
+
+            has_progress_columns = await _job_progress_columns_exist(db)
+            job = None
+            job_params = {}
+            existing_drafts_created = 0
+            existing_total_targets = None
+            existing_failed_count = 0
+
+            if has_progress_columns:
+                result = await db.execute(select(Job).where(Job.id == job_uuid))
+                job = result.scalar_one_or_none()
+
+                if not job:
+                    logger.error(f"❌ [DRAFTING] Job {job_id} not found")
+                    return {"error": "Job not found"}
+
+                job_params = job.params or {}
+                existing_drafts_created = job.drafts_created or 0
+                existing_total_targets = job.total_targets
+                if isinstance(job.result, dict):
+                    existing_failed_count = job.result.get("failed") or 0
+                job.status = "running"
+                await db.commit()
+                await db.refresh(job)
             else:
-                # Manual mode: use provided prospect_ids
+                result = await db.execute(
+                    text(
+                        """
+                        SELECT id, params, status, result, error_message
+                        FROM jobs
+                        WHERE id = :job_id
+                        """
+                    ),
+                    {"job_id": str(job_uuid)},
+                )
+                row = result.fetchone()
+
+                if not row:
+                    logger.error(f"❌ [DRAFTING] Job {job_id} not found")
+                    return {"error": "Job not found"}
+
+                row_mapping = row._mapping
+                job_params = _coerce_json_value(row_mapping.get("params"))
+                result_data = _coerce_json_value(row_mapping.get("result"))
+                if result_data:
+                    existing_drafts_created = (
+                        result_data.get("drafts_created")
+                        or result_data.get("drafted")
+                        or 0
+                    )
+                    existing_total_targets = (
+                        result_data.get("total_targets")
+                        or result_data.get("total")
+                    )
+                    existing_failed_count = result_data.get("failed") or 0
+                await db.execute(
+                    text(
+                        "UPDATE jobs SET status = 'running', updated_at = NOW() WHERE id = :job_id"
+                    ),
+                    {"job_id": str(job_uuid)},
+                )
+                await db.commit()
+
+            prospect_ids = job_params.get("prospect_ids") if isinstance(job_params, dict) else None
+            auto_mode = bool(job_params.get("auto_mode")) if isinstance(job_params, dict) else False
+            if not prospect_ids:
+                auto_mode = True
+
+            email_present_filter = and_(
+                Prospect.contact_email.isnot(None),
+                func.length(func.trim(Prospect.contact_email)) > 0,
+            )
+            draft_missing_filter = or_(
+                Prospect.draft_subject.is_(None),
+                func.length(func.trim(Prospect.draft_subject)) == 0,
+                Prospect.draft_body.is_(None),
+                func.length(func.trim(Prospect.draft_body)) == 0,
+            )
+            verified_filter = func.lower(Prospect.verification_status) == VerificationStatus.VERIFIED.value
+            eligible_filter = and_(verified_filter, email_present_filter, draft_missing_filter)
+
+            if auto_mode:
+                result = await db.execute(select(Prospect).where(eligible_filter))
+                prospects = result.scalars().all()
+                logger.info(
+                    f"📋 [DRAFTING] Found {len(prospects)} verified prospects without drafts (all sources)"
+                )
+            else:
+                try:
+                    prospect_uuid_list = [UUID(pid) for pid in (prospect_ids or [])]
+                except Exception as e:
+                    error_message = f"Invalid prospect_ids in job params: {e}"
+                    logger.error(f"❌ [DRAFTING] {error_message}", exc_info=True)
+                    if has_progress_columns and job:
+                        job.status = "failed"
+                        job.error_message = error_message
+                        await db.commit()
+                    else:
+                        await db.execute(
+                            text(
+                                "UPDATE jobs SET status = 'failed', error_message = :error, updated_at = NOW() WHERE id = :job_id"
+                            ),
+                            {"job_id": str(job_uuid), "error": error_message},
+                        )
+                        await db.commit()
+                    return {"error": error_message}
+
                 result = await db.execute(
                     select(Prospect).where(
                         and_(
-                            Prospect.id.in_([UUID(pid) for pid in prospect_ids]),
-                            Prospect.verification_status == VerificationStatus.VERIFIED.value,
-                            Prospect.contact_email.isnot(None)
+                            Prospect.id.in_(prospect_uuid_list),
+                            eligible_filter,
                         )
                     )
                 )
                 prospects = result.scalars().all()
-                
+
                 if len(prospects) == 0:
+                    error_message = (
+                        "No valid prospects found. Ensure they are verified, have emails, and no existing drafts."
+                    )
                     logger.warning("⚠️  [DRAFTING] No valid prospects found for provided IDs")
-                    job.status = "failed"
-                    job.error_message = "No valid prospects found. Ensure they are verified and have emails."
-                    await db.commit()
+                    if has_progress_columns and job:
+                        job.status = "failed"
+                        job.error_message = error_message
+                        job.result = {
+                            "drafted": 0,
+                            "failed": 0,
+                            "total": 0,
+                            "drafts_created": 0,
+                            "total_targets": 0,
+                        }
+                        await db.commit()
+                    else:
+                        await db.execute(
+                            text(
+                                "UPDATE jobs SET status = 'failed', error_message = :error, result = :result, updated_at = NOW() WHERE id = :job_id"
+                            ),
+                            {
+                                "job_id": str(job_uuid),
+                                "error": error_message,
+                                "result": json.dumps(
+                                    {
+                                        "drafted": 0,
+                                        "failed": 0,
+                                        "total": 0,
+                                        "drafts_created": 0,
+                                        "total_targets": 0,
+                                    }
+                                ),
+                            },
+                        )
+                        await db.commit()
                     return {"error": "No valid prospects found"}
-            
-            # Set total_targets for progress tracking (if columns exist)
-            # WORKAROUND: Use getattr/setattr to handle missing columns gracefully
-            if hasattr(job, 'total_targets'):
-                job.total_targets = len(prospects)
-            if hasattr(job, 'drafts_created'):
-                job.drafts_created = 0
-            await db.commit()
-            await db.refresh(job)
-            
-            logger.info(f"✍️  [DRAFTING] Starting drafting for {len(prospects)} prospects (job {job_id})")
-            
-            # Initialize Gemini client
+
+            total_targets = len(prospects)
+            if existing_total_targets:
+                total_targets = max(existing_total_targets, total_targets)
+
+            if total_targets == 0:
+                error_message = "No eligible prospects ready for drafting"
+                if existing_total_targets and existing_drafts_created >= (existing_total_targets or 0):
+                    status = "completed"
+                    error_message = None
+                elif existing_drafts_created > 0:
+                    status = "completed"
+                    error_message = None
+                else:
+                    status = "failed"
+                logger.warning("⚠️  [DRAFTING] No eligible prospects ready for drafting")
+                job_result = {
+                    "drafted": existing_drafts_created,
+                    "failed": existing_failed_count,
+                    "total": total_targets,
+                    "drafts_created": existing_drafts_created,
+                    "total_targets": total_targets,
+                }
+                if has_progress_columns and job:
+                    job.status = status
+                    job.error_message = error_message
+                    job.drafts_created = existing_drafts_created
+                    job.total_targets = total_targets
+                    job.result = job_result
+                    await db.commit()
+                else:
+                    await db.execute(
+                        text(
+                            "UPDATE jobs SET status = :status, error_message = :error, result = :result, updated_at = NOW() WHERE id = :job_id"
+                        ),
+                        {
+                            "job_id": str(job_uuid),
+                            "status": status,
+                            "error": error_message,
+                            "result": json.dumps(job_result),
+                        },
+                    )
+                    await db.commit()
+                return {
+                    "job_id": job_id,
+                    "status": status,
+                    "drafted": existing_drafts_created,
+                    "failed": existing_failed_count,
+                    "message": error_message,
+                }
+
+            if has_progress_columns and job:
+                job.total_targets = total_targets
+                job.drafts_created = existing_drafts_created
+                job.result = {
+                    "drafted": existing_drafts_created,
+                    "failed": existing_failed_count,
+                    "total": total_targets,
+                    "drafts_created": existing_drafts_created,
+                    "total_targets": total_targets,
+                }
+                await db.commit()
+                await db.refresh(job)
+            else:
+                await db.execute(
+                    text(
+                        "UPDATE jobs SET result = :result, updated_at = NOW() WHERE id = :job_id"
+                    ),
+                    {
+                        "job_id": str(job_uuid),
+                        "result": json.dumps(
+                            {
+                                "drafted": existing_drafts_created,
+                                "failed": existing_failed_count,
+                                "total": total_targets,
+                                "drafts_created": existing_drafts_created,
+                                "total_targets": total_targets,
+                            }
+                        ),
+                    },
+                )
+                await db.commit()
+
+            logger.info(
+                f"✍️  [DRAFTING] Starting drafting for {total_targets} prospects (job {job_id})"
+            )
+
             try:
                 gemini_client = GeminiClient()
             except Exception as e:
+                error_message = f"Gemini not configured: {e}"
                 logger.error(f"❌ [DRAFTING] Failed to initialize Gemini client: {e}")
-                job.status = "failed"
-                job.error_message = f"Gemini not configured: {e}"
-                await db.commit()
-                return {"error": f"Gemini not configured: {e}"}
-            
-            drafted_count = 0
-            failed_count = 0
-            
+                if has_progress_columns and job:
+                    job.status = "failed"
+                    job.error_message = error_message
+                    await db.commit()
+                else:
+                    await db.execute(
+                        text(
+                            "UPDATE jobs SET status = 'failed', error_message = :error, updated_at = NOW() WHERE id = :job_id"
+                        ),
+                        {"job_id": str(job_uuid), "error": error_message},
+                    )
+                    await db.commit()
+                return {"error": error_message}
+
+            drafted_count = existing_drafts_created
+            failed_count = existing_failed_count
+            skipped_count = 0
+
             for idx, prospect in enumerate(prospects, 1):
                 try:
-                    logger.info(f"✍️  [DRAFTING] [{idx}/{len(prospects)}] Drafting email for {prospect.domain}...")
-                    
-                    # Determine email type
-                    email_type = "generic"
-                    if prospect.contact_email:
-                        local_part = prospect.contact_email.split("@")[0].lower()
-                        if local_part in ["info", "contact", "hello", "support"]:
-                            email_type = "generic"
-                        elif local_part in ["sales", "marketing", "business"]:
-                            email_type = "role_based"
-                        else:
-                            email_type = "personal"
-                    
-                    # Compose email using Gemini
-                    # Pass discovery_category for better personalization
+                    if has_progress_columns and job:
+                        await db.refresh(job)
+                        if job.status == "cancelled":
+                            logger.warning(
+                                f"⚠️  [DRAFTING] Job {job_id} cancelled - stopping"
+                            )
+                            return {"job_id": job_id, "status": "cancelled"}
+                    else:
+                        status_result = await db.execute(
+                            text("SELECT status FROM jobs WHERE id = :job_id"),
+                            {"job_id": str(job_uuid)},
+                        )
+                        status_row = status_result.fetchone()
+                        if status_row and status_row[0] == "cancelled":
+                            logger.warning(
+                                f"⚠️  [DRAFTING] Job {job_id} cancelled - stopping"
+                            )
+                            return {"job_id": job_id, "status": "cancelled"}
+
+                    if _has_complete_draft(prospect):
+                        skipped_count += 1
+                        continue
+
+                    logger.info(
+                        f"✍️  [DRAFTING] [{idx}/{total_targets}] Drafting email for {prospect.domain}..."
+                    )
+
+                    page_snippet = None
+                    if isinstance(prospect.dataforseo_payload, dict):
+                        page_snippet = prospect.dataforseo_payload.get("description") or prospect.dataforseo_payload.get(
+                            "snippet"
+                        )
+
                     gemini_result = await gemini_client.compose_email(
                         domain=prospect.domain,
                         page_title=prospect.page_title,
                         page_url=prospect.page_url,
-                        page_snippet=prospect.dataforseo_payload.get("description") if prospect.dataforseo_payload else None,
-                        contact_name=None,  # Could be extracted from email if personal
-                        category=prospect.discovery_category  # Use discovery category for better personalization
+                        page_snippet=page_snippet,
+                        contact_name=None,
+                        category=prospect.discovery_category,
                     )
-                    
+
                     if gemini_result.get("success"):
-                        prospect.draft_subject = gemini_result.get("subject")
-                        prospect.draft_body = gemini_result.get("body")
-                        prospect.draft_status = "drafted"
-                        drafted_count += 1
-                        
-                        # Update progress incrementally (if column exists)
-                        if hasattr(job, 'drafts_created'):
-                            job.drafts_created = drafted_count
-                            await db.commit()
-                            await db.refresh(job)
+                        subject = (gemini_result.get("subject") or "").strip()
+                        body = (gemini_result.get("body") or "").strip()
+                        if not subject or not body:
+                            raise ValueError("Gemini returned empty subject/body")
+
+                        update_result = await db.execute(
+                            update(Prospect)
+                            .where(
+                                and_(
+                                    Prospect.id == prospect.id,
+                                    draft_missing_filter,
+                                )
+                            )
+                            .values(
+                                draft_subject=subject,
+                                draft_body=body,
+                                draft_status=DraftStatus.DRAFTED.value,
+                                stage=ProspectStage.DRAFTED.value,
+                                updated_at=func.now(),
+                            )
+                        )
+
+                        if update_result.rowcount == 0:
+                            skipped_count += 1
                         else:
-                            # Columns don't exist - just commit the prospect update
-                            await db.commit()
-                        
-                        logger.info(f"✅ [DRAFTING] [{drafted_count}/{len(prospects)}] Drafted email for {prospect.domain}: {prospect.draft_subject}")
+                            drafted_count += 1
+                            logger.info(
+                                f"✅ [DRAFTING] [{drafted_count}/{total_targets}] Drafted email for {prospect.domain}: {subject}"
+                            )
                     else:
                         error = gemini_result.get("error", "Unknown error")
-                        logger.error(f"❌ [DRAFTING] Gemini failed for {prospect.domain}: {error}")
-                        prospect.draft_status = "failed"
+                        logger.error(
+                            f"❌ [DRAFTING] Gemini failed for {prospect.domain} ({prospect.contact_email}): {error}"
+                        )
                         failed_count += 1
-                    
+                        await db.execute(
+                            update(Prospect)
+                            .where(
+                                and_(
+                                    Prospect.id == prospect.id,
+                                    draft_missing_filter,
+                                )
+                            )
+                            .values(
+                                draft_status=DraftStatus.FAILED.value,
+                                updated_at=func.now(),
+                            )
+                        )
+
+                    job_result = {
+                        "drafted": drafted_count,
+                        "failed": failed_count,
+                        "total": total_targets,
+                        "drafts_created": drafted_count,
+                        "total_targets": total_targets,
+                        "skipped": skipped_count,
+                    }
+
+                    if has_progress_columns and job:
+                        job.drafts_created = drafted_count
+                        job.result = job_result
+                    else:
+                        await db.execute(
+                            text(
+                                "UPDATE jobs SET result = :result, updated_at = NOW() WHERE id = :job_id"
+                            ),
+                            {"job_id": str(job_uuid), "result": json.dumps(job_result)},
+                        )
+
                     await db.commit()
-                    await db.refresh(prospect)
-                    
-                    # Rate limiting
                     await asyncio.sleep(1)
-                    
+
                 except Exception as e:
-                    logger.error(f"❌ [DRAFTING] Failed to draft {prospect.domain}: {e}", exc_info=True)
-                    prospect.draft_status = "failed"
+                    logger.error(
+                        f"❌ [DRAFTING] Failed to draft {prospect.domain} ({prospect.contact_email}): {e}",
+                        exc_info=True,
+                    )
                     failed_count += 1
+                    await db.execute(
+                        update(Prospect)
+                        .where(
+                            and_(
+                                Prospect.id == prospect.id,
+                                draft_missing_filter,
+                            )
+                        )
+                        .values(
+                            draft_status=DraftStatus.FAILED.value,
+                            updated_at=func.now(),
+                        )
+                    )
+                    job_result = {
+                        "drafted": drafted_count,
+                        "failed": failed_count,
+                        "total": total_targets,
+                        "drafts_created": drafted_count,
+                        "total_targets": total_targets,
+                        "skipped": skipped_count,
+                    }
+                    if has_progress_columns and job:
+                        job.drafts_created = drafted_count
+                        job.result = job_result
+                    else:
+                        await db.execute(
+                            text(
+                                "UPDATE jobs SET result = :result, updated_at = NOW() WHERE id = :job_id"
+                            ),
+                            {"job_id": str(job_uuid), "result": json.dumps(job_result)},
+                        )
                     await db.commit()
                     continue
-            
-            # Update job status
-            job.status = "completed"
-            job.result = {
+
+            final_result = {
                 "drafted": drafted_count,
                 "failed": failed_count,
-                "total": len(prospects)
+                "total": total_targets,
+                "drafts_created": drafted_count,
+                "total_targets": total_targets,
+                "skipped": skipped_count,
             }
-            await db.commit()
-            
-            logger.info(f"✅ [DRAFTING] Job {job_id} completed: {drafted_count} drafted, {failed_count} failed")
-            
+
+            if drafted_count == 0:
+                status = "failed"
+                error_message = (
+                    "No drafts created. Check Gemini configuration and prospect eligibility."
+                    if failed_count > 0
+                    else "No eligible prospects were available to draft."
+                )
+            else:
+                status = "completed"
+                error_message = (
+                    f"{failed_count} drafts failed during processing."
+                    if failed_count > 0
+                    else None
+                )
+
+            if has_progress_columns and job:
+                job.status = status
+                job.error_message = error_message
+                job.drafts_created = drafted_count
+                job.result = final_result
+                await db.commit()
+            else:
+                await db.execute(
+                    text(
+                        "UPDATE jobs SET status = :status, error_message = :error, result = :result, updated_at = NOW() WHERE id = :job_id"
+                    ),
+                    {
+                        "job_id": str(job_uuid),
+                        "status": status,
+                        "error": error_message,
+                        "result": json.dumps(final_result),
+                    },
+                )
+                await db.commit()
+
+            logger.info(
+                f"✅ [DRAFTING] Job {job_id} completed: {drafted_count} drafted, {failed_count} failed"
+            )
+
             return {
                 "job_id": job_id,
-                "status": "completed",
+                "status": status,
                 "drafted": drafted_count,
-                "failed": failed_count
+                "failed": failed_count,
             }
             
         except Exception as e:
             logger.error(f"❌ [DRAFTING] Job {job_id} failed: {e}", exc_info=True)
             try:
-                result = await db.execute(select(Job).where(Job.id == UUID(job_id)))
-                job = result.scalar_one_or_none()
-                if job:
-                    job.status = "failed"
-                    job.error_message = str(e)
+                job_uuid = UUID(job_id)
+                if await _job_progress_columns_exist(db):
+                    result = await db.execute(select(Job).where(Job.id == job_uuid))
+                    job = result.scalar_one_or_none()
+                    if job:
+                        job.status = "failed"
+                        job.error_message = str(e)
+                        await db.commit()
+                else:
+                    await db.execute(
+                        text(
+                            "UPDATE jobs SET status = 'failed', error_message = :error, updated_at = NOW() WHERE id = :job_id"
+                        ),
+                        {"job_id": str(job_uuid), "error": str(e)},
+                    )
                     await db.commit()
             except Exception as commit_err:
                 logger.error(f"❌ [DRAFTING] Failed to commit error status: {commit_err}", exc_info=True)
             return {"error": str(e)}
+        finally:
+            try:
+                from app.task_manager import unregister_task
+
+                unregister_task(str(job_id))
+            except Exception:
+                pass
 

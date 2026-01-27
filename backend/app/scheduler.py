@@ -3,6 +3,8 @@ Scheduler for periodic tasks (follow-ups, reply checks, automatic scraper)
 """
 import logging
 import asyncio
+import json
+import uuid
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -165,6 +167,116 @@ async def check_and_run_scraper():
         logger.error(f"Error in check_and_run_scraper: {e}", exc_info=True)
 
 
+async def check_and_run_drafting():
+    """Check for eligible prospects and run drafting jobs automatically."""
+    try:
+        from app.db.database import AsyncSessionLocal
+        from app.api.scraper import check_master_switch
+        from app.models.job import Job
+        from app.models.prospect import Prospect, VerificationStatus
+        from app.task_manager import get_running_task, register_task
+        from app.tasks.drafting import draft_prospects_async
+        from sqlalchemy import select, and_, or_, func, text
+
+        async with AsyncSessionLocal() as db:
+            master_enabled = await check_master_switch(db)
+            if not master_enabled:
+                return
+
+            # Resume any pending/running draft jobs that aren't attached to a task.
+            result = await db.execute(
+                select(Job)
+                .where(
+                    Job.job_type == "draft",
+                    Job.status.in_(["pending", "running"]),
+                )
+                .order_by(Job.created_at.asc())
+            )
+            draft_jobs = result.scalars().all()
+
+            for job in draft_jobs:
+                if get_running_task(str(job.id)):
+                    return
+                logger.info(f"🔄 Resuming draft job {job.id} (status={job.status})")
+                task = asyncio.create_task(draft_prospects_async(str(job.id)))
+                register_task(str(job.id), task)
+                return
+
+            email_present_filter = and_(
+                Prospect.contact_email.isnot(None),
+                func.length(func.trim(Prospect.contact_email)) > 0,
+            )
+            draft_missing_filter = or_(
+                Prospect.draft_subject.is_(None),
+                func.length(func.trim(Prospect.draft_subject)) == 0,
+                Prospect.draft_body.is_(None),
+                func.length(func.trim(Prospect.draft_body)) == 0,
+            )
+            verified_filter = func.lower(Prospect.verification_status) == VerificationStatus.VERIFIED.value
+            eligible_filter = and_(verified_filter, email_present_filter, draft_missing_filter)
+
+            eligible_count_result = await db.execute(
+                select(func.count(Prospect.id)).where(eligible_filter)
+            )
+            eligible_count = eligible_count_result.scalar() or 0
+            if eligible_count == 0:
+                return
+
+            # Create a new draft job (auto mode) and start it.
+            params_dict = {
+                "prospect_ids": None,
+                "pipeline_mode": True,
+                "auto_mode": True,
+                "source": "scheduler",
+            }
+
+            column_check = await db.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = 'jobs'
+                    AND column_name IN ('drafts_created', 'total_targets')
+                    """
+                )
+            )
+            existing_columns = {row[0] for row in column_check.fetchall()}
+            has_progress_columns = (
+                "drafts_created" in existing_columns and "total_targets" in existing_columns
+            )
+
+            if has_progress_columns:
+                job = Job(job_type="draft", params=params_dict, status="pending")
+                db.add(job)
+                await db.commit()
+                await db.refresh(job)
+                job_id = job.id
+            else:
+                job_id = uuid.uuid4()
+                await db.execute(
+                    text(
+                        """
+                        INSERT INTO jobs (id, job_type, params, status, created_at, updated_at)
+                        VALUES (:id, :job_type, :params, :status, NOW(), NOW())
+                        """
+                    ),
+                    {
+                        "id": str(job_id),
+                        "job_type": "draft",
+                        "params": json.dumps(params_dict),
+                        "status": "pending",
+                    },
+                )
+                await db.commit()
+
+            logger.info(f"🚀 Auto drafting job started: {job_id} ({eligible_count} eligible)")
+            task = asyncio.create_task(draft_prospects_async(str(job_id)))
+            register_task(str(job_id), task)
+
+    except Exception as e:
+        logger.error(f"Error in check_and_run_drafting: {e}", exc_info=True)
+
+
 def start_scheduler():
     """Start the scheduler with configured jobs"""
     # Schedule scraper check every minute (async function)
@@ -174,6 +286,14 @@ def start_scheduler():
         id="scraper_check",
         name="Check and Run Automatic Scraper",
         max_instances=1  # Prevent overlapping runs
+    )
+
+    scheduler.add_job(
+        check_and_run_drafting,
+        trigger=IntervalTrigger(minutes=1),
+        id="drafting_check",
+        name="Check and Run Automatic Drafting",
+        max_instances=1
     )
     
     # Schedule follow-ups daily at 9 AM
