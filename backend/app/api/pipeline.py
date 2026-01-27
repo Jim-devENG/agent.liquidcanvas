@@ -534,7 +534,7 @@ async def verify_emails(
         
         task = asyncio.create_task(verify_prospects_async(str(job.id)))
         register_task(str(job.id), task)
-        logger.info(f"✅ [PIPELINE STEP 4] Verification job {job.id} started")
+        logger.info(f"✅ [PIPELINE STEP 4] Verification job {job.id} started - DEPLOYMENT FIX v2")
     except Exception as e:
         logger.error(f"❌ [PIPELINE STEP 4] Failed to start verification job: {e}", exc_info=True)
         try:
