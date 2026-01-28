@@ -103,6 +103,7 @@ class GeminiClient:
             True if model is valid, False otherwise
         """
         try:
+            logger.info(f"🔍 [GEMINI] Validating model: {self.model}")
             url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
             test_payload = {
                 "contents": [{
@@ -121,10 +122,11 @@ class GeminiClient:
                     logger.info(f"✅ Gemini model {self.model} is valid and supports generateContent")
                     return True
                 else:
-                    logger.error(f"❌ Gemini model {self.model} validation failed: {response.status_code} - {response.text}")
+                    error_detail = response.text
+                    logger.error(f"❌ Gemini model {self.model} validation failed: {response.status_code} - {error_detail}")
                     return False
         except Exception as e:
-            logger.error(f"❌ Failed to validate Gemini model {self.model}: {e}")
+            logger.error(f"❌ Failed to validate Gemini model {self.model}: {e}", exc_info=True)
             return False
     
     async def _search_liquid_canvas_info(self) -> str:

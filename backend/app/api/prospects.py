@@ -1604,11 +1604,13 @@ async def compose_email(
         logger.info(f"✅ [COMPOSE] Gemini client initialized with model: {client.model}")
         
         # Validate model exists and supports generateContent
-        if not await client.validate_model():
+        logger.info(f"🔍 [COMPOSE] Validating Gemini model {client.model}...")
+        is_valid = await client.validate_model()
+        if not is_valid:
             logger.error(f"❌ [COMPOSE] Gemini model {client.model} failed validation")
             raise HTTPException(
                 status_code=500, 
-                detail=f"Gemini model {client.model} is not available or doesn't support generateContent. Please check model configuration."
+                detail=f"Gemini model {client.model} is not available or doesn't support generateContent. Check backend logs for details."
             )
         
         logger.info(f"✅ [COMPOSE] Gemini model {client.model} validated successfully")
