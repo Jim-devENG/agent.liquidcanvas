@@ -1412,6 +1412,37 @@ async def test_smtp():
         return {"success": False, "error": "SMTP auth failed", "details": str(e)}
 
 
+@router.get("/smtp-debug-info")
+async def smtp_debug_info():
+    """
+    Safe SMTP debug info: shows presence and fingerprints only (no secrets).
+    """
+    import os
+    import hashlib
+
+    def fingerprint(value: str) -> str:
+        if not value:
+            return "missing"
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        return f"len:{len(value)} sha256:{digest[:10]}"
+
+    host = os.getenv("SMTP_HOST", "")
+    port = os.getenv("SMTP_PORT", "")
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASSWORD", "")
+    from_email = os.getenv("SMTP_FROM", "")
+    use_tls = os.getenv("SMTP_USE_TLS", "")
+
+    return {
+        "smtp_host": fingerprint(host),
+        "smtp_port": fingerprint(port),
+        "smtp_user": fingerprint(user),
+        "smtp_password": fingerprint(password),
+        "smtp_from": fingerprint(from_email),
+        "smtp_use_tls": fingerprint(use_tls),
+    }
+
+
 @router.get("/test-gmail")
 async def test_gmail():
     """
