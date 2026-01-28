@@ -127,6 +127,23 @@ class GeminiClient:
                     
                     # If model not found, try fallback models
                     if response.status_code == 404:
+                        # First, let's list available models to debug
+                        logger.info(f"🔍 [GEMINI] Listing available models to debug...")
+                        list_url = f"{self.BASE_URL}/models?key={self.api_key}"
+                        list_response = await client.get(list_url)
+                        if list_response.status_code == 200:
+                            models_data = list_response.json()
+                            available_models = []
+                            if "models" in models_data:
+                                for model in models_data["models"]:
+                                    if "generateContent" in model.get("supportedGenerationMethods", []):
+                                        available_models.append(model["name"])
+                                logger.info(f"✅ [GEMINI] Available models with generateContent: {available_models}")
+                            else:
+                                logger.warning(f"⚠️ [GEMINI] No models found in response: {models_data}")
+                        else:
+                            logger.error(f"❌ [GEMINI] Failed to list models: {list_response.status_code} - {list_response.text}")
+                        
                         fallback_models = [
                             "gemini-1.5-flash",
                             "gemini-1.5-flash-latest", 
