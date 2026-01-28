@@ -1381,6 +1381,37 @@ async def gmail_debug_info():
     }
 
 
+@router.get("/test-smtp")
+async def test_smtp():
+    """
+    Test SMTP configuration (connect + auth) without sending an email.
+    """
+    import os
+    import smtplib
+
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    username = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    use_tls = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
+
+    if not all([host, username, password]):
+        return {
+            "success": False,
+            "error": "SMTP not configured",
+            "details": "Set SMTP_HOST, SMTP_USER, SMTP_PASSWORD (and optionally SMTP_PORT, SMTP_USE_TLS)."
+        }
+
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as server:
+            if use_tls:
+                server.starttls()
+            server.login(username, password)
+        return {"success": True, "message": "SMTP auth successful"}
+    except Exception as e:
+        return {"success": False, "error": "SMTP auth failed", "details": str(e)}
+
+
 @router.get("/test-gmail")
 async def test_gmail():
     """
