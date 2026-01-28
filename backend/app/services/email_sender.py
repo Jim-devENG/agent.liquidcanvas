@@ -3,6 +3,10 @@ Shared email sending service
 Used by both pipeline send and manual send endpoints
 """
 import logging
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +15,41 @@ from app.models.email_log import EmailLog
 from app.clients.gmail import GmailClient
 
 logger = logging.getLogger(__name__)
+
+
+def _smtp_configured() -> bool:
+    return bool(
+        os.getenv("SMTP_HOST")
+        and os.getenv("SMTP_PORT")
+        and os.getenv("SMTP_USER")
+        and os.getenv("SMTP_PASSWORD")
+    )
+
+
+def _send_email_smtp(to_email: str, subject: str, body: str) -> Dict[str, Any]:
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    username = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    from_email = os.getenv("SMTP_FROM") or username
+    use_tls = os.getenv("SMTP_USE_TLS", "true").lower() != "false"
+
+    message = MIMEMultipart()
+    message["to"] = to_email
+    message["subject"] = subject
+    message["from"] = from_email
+    message.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(host, port, timeout=30) as server:
+            if use_tls:
+                server.starttls()
+            server.login(username, password)
+            server.sendmail(from_email, [to_email], message.as_string())
+        return {"success": True, "message_id": "smtp"}
+    except Exception as e:
+        logger.error(f"❌ [SEND] SMTP send failed: {e}")
+        return {"success": False, "error": "SMTP send failed", "error_detail": str(e)}
 
 
 async def send_prospect_email(
@@ -54,49 +93,55 @@ async def send_prospect_email(
     if not subject or not body:
         raise ValueError("Prospect has no draft email (draft_subject and draft_body required)")
     
-    # Initialize Gmail client if not provided
-    if not gmail_client:
-        try:
-            logger.info("🔧 [SEND] Initializing Gmail client...")
-            gmail_client = GmailClient()
-            
-            # Verify client is properly configured
-            if not gmail_client.is_configured():
-                raise ValueError(
-                    "Gmail client is not properly configured. "
-                    "Set GMAIL_ACCESS_TOKEN or (GMAIL_REFRESH_TOKEN + GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET) environment variables."
-                )
-            
-            # If using refresh token, test that it works
-            if gmail_client.refresh_token and not gmail_client.access_token:
-                logger.info("🔄 [SEND] Testing refresh token...")
-                if not await gmail_client.refresh_access_token():
+    # SMTP path (app password) if configured
+    if _smtp_configured():
+        logger.info("📧 [SEND] Using SMTP sender (app password)")
+        send_result = _send_email_smtp(to_email=prospect.contact_email, subject=subject, body=body)
+    else:
+        # Initialize Gmail client if not provided
+        if not gmail_client:
+            try:
+                logger.info("🔧 [SEND] Initializing Gmail client...")
+                gmail_client = GmailClient()
+                
+                # Verify client is properly configured
+                if not gmail_client.is_configured():
                     raise ValueError(
-                        "Gmail refresh token is invalid or expired. "
-                        "Please generate a new refresh token from Google OAuth Playground or re-authenticate."
+                        "Gmail client is not properly configured. "
+                        "Set SMTP_* env vars for SMTP or Gmail OAuth env vars."
                     )
-            
-            logger.info("✅ [SEND] Gmail client initialized successfully")
-        except ValueError as e:
-            error_msg = str(e)
-            logger.error(f"❌ [SEND] Gmail client initialization failed: {error_msg}")
-            raise ValueError(error_msg)
-        except Exception as e:
-            logger.error(f"❌ [SEND] Unexpected error initializing Gmail client: {e}", exc_info=True)
-            raise ValueError(f"Gmail configuration error: {str(e)}")
+                
+                # If using refresh token, test that it works
+                if gmail_client.refresh_token and not gmail_client.access_token:
+                    logger.info("🔄 [SEND] Testing refresh token...")
+                    if not await gmail_client.refresh_access_token():
+                        raise ValueError(
+                            "Gmail refresh token is invalid or expired. "
+                            "Please generate a new refresh token or use SMTP app password."
+                        )
+                
+                logger.info("✅ [SEND] Gmail client initialized successfully")
+            except ValueError as e:
+                error_msg = str(e)
+                logger.error(f"❌ [SEND] Gmail client initialization failed: {error_msg}")
+                raise ValueError(error_msg)
+            except Exception as e:
+                logger.error(f"❌ [SEND] Unexpected error initializing Gmail client: {e}", exc_info=True)
+                raise ValueError(f"Gmail configuration error: {str(e)}")
     
-    # Send email via Gmail API
+    # Send email
     logger.info(f"📧 [SEND] Sending email to {prospect.contact_email} (prospect_id: {prospect.id})...")
-    
-    try:
-        send_result = await gmail_client.send_email(
-            to_email=prospect.contact_email,
-            subject=subject,
-            body=body
-        )
-    except Exception as send_err:
-        logger.error(f"❌ [SEND] Gmail API call failed: {send_err}", exc_info=True)
-        raise Exception(f"Failed to send email via Gmail: {send_err}")
+
+    if not _smtp_configured():
+        try:
+            send_result = await gmail_client.send_email(
+                to_email=prospect.contact_email,
+                subject=subject,
+                body=body
+            )
+        except Exception as send_err:
+            logger.error(f"❌ [SEND] Gmail API call failed: {send_err}", exc_info=True)
+            raise Exception(f"Failed to send email via Gmail: {send_err}")
     
     if not send_result.get("success"):
         error_msg = send_result.get('error', 'Unknown error')
