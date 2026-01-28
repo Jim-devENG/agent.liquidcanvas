@@ -127,7 +127,21 @@ class GeminiClient:
                     
                     # If model not found, try fallback models
                     if response.status_code == 404:
-                        fallback_models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-001"]
+                        fallback_models = [
+                            "gemini-1.5-flash",
+                            "gemini-1.5-flash-latest", 
+                            "gemini-1.5-flash-001",
+                            "gemini-1.5-flash-002",
+                            "gemini-1.5-flash-8b",
+                            "gemini-1.5-pro",
+                            "gemini-1.5-pro-latest",
+                            "gemini-1.5-pro-001",
+                            "gemini-1.5-pro-002",
+                            "gemini-2.0-flash-exp",
+                            "gemini-2.0-flash-thinking-exp",
+                            "gemini-exp-1206",
+                            "gemini-exp-1121"
+                        ]
                         for fallback in fallback_models:
                             if fallback == self.model:
                                 continue
