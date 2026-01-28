@@ -1283,6 +1283,76 @@ async def configure_gmail(
         )
 
 
+@router.get("/test-gmail-debug")
+async def test_gmail_debug():
+    """
+    Detailed Gmail debug - shows exact OAuth error without exposing secrets
+    """
+    try:
+        from app.clients.gmail import GmailClient
+        import httpx
+        
+        gmail_client = GmailClient()
+        
+        if not gmail_client.is_configured():
+            return {
+                "success": False,
+                "error": "Gmail client not configured",
+                "details": "Missing refresh_token, client_id, or client_secret"
+            }
+        
+        # Test refresh token directly against Google OAuth
+        url = "https://oauth2.googleapis.com/token"
+        payload = {
+            "client_id": gmail_client.client_id,
+            "client_secret": gmail_client.client_secret,
+            "refresh_token": gmail_client.refresh_token,
+            "grant_type": "refresh_token"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, data=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return {
+                    "success": True,
+                    "message": "Refresh token is valid",
+                    "access_token_received": bool(result.get("access_token")),
+                    "expires_in": result.get("expires_in"),
+                    "token_type": result.get("token_type")
+                }
+            else:
+                error_text = response.text
+                try:
+                    error_json = response.json()
+                    error_code = error_json.get("error", "unknown")
+                    error_desc = error_json.get("error_description", error_text)
+                except:
+                    error_code = "parse_error"
+                    error_desc = error_text
+                
+                return {
+                    "success": False,
+                    "error": "Refresh token failed",
+                    "status_code": response.status_code,
+                    "error_code": error_code,
+                    "error_description": error_desc,
+                    "fix_suggestions": {
+                        "invalid_grant": "Generate new refresh token with access_type=offline and prompt=consent",
+                        "invalid_client": "Check GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET",
+                        "redirect_uri_mismatch": "Ensure OAuth Playground redirect URI matches your client config"
+                    }
+                }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "Debug failed",
+            "details": str(e)
+        }
+
+
 @router.get("/test-gmail")
 async def test_gmail():
     """
