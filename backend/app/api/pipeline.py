@@ -1353,6 +1353,34 @@ async def test_gmail_debug():
         }
 
 
+@router.get("/gmail-debug-info")
+async def gmail_debug_info():
+    """
+    Safe Gmail debug info: shows presence and fingerprints only (no secrets).
+    """
+    import os
+    import hashlib
+
+    def fingerprint(value: str) -> str:
+        if not value:
+            return "missing"
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+        return f"len:{len(value)} sha256:{digest[:10]}"
+
+    refresh_token = os.getenv("GMAIL_REFRESH_TOKEN", "")
+    client_id = os.getenv("GMAIL_CLIENT_ID", "")
+    client_secret = os.getenv("GMAIL_CLIENT_SECRET", "")
+    access_token = os.getenv("GMAIL_ACCESS_TOKEN", "")
+
+    return {
+        "configured": all([refresh_token, client_id, client_secret]) or bool(access_token),
+        "refresh_token": fingerprint(refresh_token),
+        "client_id": fingerprint(client_id),
+        "client_secret": fingerprint(client_secret),
+        "access_token": fingerprint(access_token),
+    }
+
+
 @router.get("/test-gmail")
 async def test_gmail():
     """
