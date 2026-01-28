@@ -1644,8 +1644,8 @@ async def compose_email(
         logger.error(f"Gemini API configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini API not configured: {str(e)}")
     except Exception as e:
-        logger.error(f"Unexpected error with Gemini client: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Gemini client error: {str(e)}")
+        logger.error(f"❌ [COMPOSE] Unexpected error with Gemini client: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini client: {str(e)}")
     
     # Extract snippet from DataForSEO payload (safe None check)
     page_snippet = None
