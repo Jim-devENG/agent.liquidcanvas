@@ -38,6 +38,12 @@ router = APIRouter()
 MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
 
 
+class BulkDraftRequest(BaseModel):
+    subject: str
+    body: str
+    category: Optional[str] = None
+
+
 @router.get("/categories")
 async def get_available_categories(
     db: AsyncSession = Depends(get_db),
