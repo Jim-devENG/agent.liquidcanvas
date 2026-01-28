@@ -1526,7 +1526,6 @@ async def update_prospect_draft(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ [DRAFT UPDATE] Error: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update draft: {str(e)}")
 
@@ -1551,11 +1550,17 @@ async def compose_email(
     from sqlalchemy import or_
     from app.models.email_log import EmailLog
     
-    result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
-    prospect = result.scalar_one_or_none()
-    
-    if not prospect:
-        raise HTTPException(status_code=404, detail="Prospect not found")
+    try:
+        result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
+        prospect = result.scalar_one_or_none()
+        
+        if not prospect:
+            raise HTTPException(status_code=404, detail="Prospect not found")
+        
+        logger.info(f"✅ [COMPOSE] Database session OK, prospect found: {prospect.domain}")
+    except Exception as e:
+        logger.error(f"❌ [COMPOSE] Database session error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     # Check for duplicates (same domain OR same email) = follow-up
     # If duplicate exists and has been sent, this is a follow-up
@@ -1596,11 +1601,16 @@ async def compose_email(
     try:
         from app.clients.gemini import GeminiClient
         client = GeminiClient()
+        logger.info(f"✅ [COMPOSE] Gemini client initialized with model: {client.model}")
     except ImportError as e:
         logger.error(f"Failed to import GeminiClient: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini client not available: {str(e)}")
     except ValueError as e:
+        logger.error(f"Gemini API configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini API not configured: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error initializing Gemini client: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini client: {str(e)}")
     
     # Extract snippet from DataForSEO payload (safe None check)
     page_snippet = None
@@ -1722,6 +1732,7 @@ async def compose_email(
     
     if not gemini_result.get("success"):
         error = gemini_result.get("error", "Unknown error")
+        logger.error(f"❌ [COMPOSE] Gemini API error: {error}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to compose email: {error}")
     
     # Save draft to prospect (OVERWRITE if draft already exists, don't duplicate)
