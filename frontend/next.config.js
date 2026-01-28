@@ -7,7 +7,7 @@ console.log('🔨 [FORENSIC] NOT: frontend/frontend/next.config.js')
 const nextConfig = {
   reactStrictMode: true,
   env: {
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api',
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://agent-liquidcanvas.onrender.com/api',
   },
   // Generate unique build ID at build time - FORCE NEW BUILD EVERY TIME
   generateBuildId: async () => {
