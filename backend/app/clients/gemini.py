@@ -76,7 +76,7 @@ def strip_markdown_formatting(text: str) -> str:
 class GeminiClient:
     """Client for Google Gemini API"""
     
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+    BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
     
     def __init__(self, api_key: Optional[str] = None):
         """
@@ -86,7 +86,7 @@ class GeminiClient:
             api_key: Gemini API key (if None, uses GEMINI_API_KEY from env)
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest")
         
         if not self.api_key:
             raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY")
