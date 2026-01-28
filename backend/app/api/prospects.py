@@ -1602,6 +1602,16 @@ async def compose_email(
         from app.clients.gemini import GeminiClient
         client = GeminiClient()
         logger.info(f"✅ [COMPOSE] Gemini client initialized with model: {client.model}")
+        
+        # Validate model exists and supports generateContent
+        if not await client.validate_model():
+            logger.error(f"❌ [COMPOSE] Gemini model {client.model} failed validation")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Gemini model {client.model} is not available or doesn't support generateContent. Please check model configuration."
+            )
+        
+        logger.info(f"✅ [COMPOSE] Gemini model {client.model} validated successfully")
     except ImportError as e:
         logger.error(f"Failed to import GeminiClient: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini client not available: {str(e)}")
