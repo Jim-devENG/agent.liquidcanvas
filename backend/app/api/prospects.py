@@ -1530,6 +1530,31 @@ async def update_prospect_draft(
         raise HTTPException(status_code=500, detail=f"Failed to update draft: {str(e)}")
 
 
+@router.get("/debug/gemini-config")
+async def debug_gemini_config():
+    """
+    Debug endpoint to check current Gemini configuration
+    """
+    from app.clients.gemini import GeminiClient
+    import os
+    
+    try:
+        client = GeminiClient()
+        return {
+            "gemini_model_env": os.getenv("GEMINI_MODEL"),
+            "client_model": client.model,
+            "base_url": client.BASE_URL,
+            "api_key_exists": bool(client.api_key),
+            "api_key_prefix": client.api_key[:10] + "..." if client.api_key else None
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "gemini_model_env": os.getenv("GEMINI_MODEL"),
+            "base_url": os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        }
+
+
 @router.post("/{prospect_id}/compose", response_model=ComposeResponse)
 async def compose_email(
     prospect_id: UUID,
