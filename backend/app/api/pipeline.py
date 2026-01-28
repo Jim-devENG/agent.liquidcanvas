@@ -1139,6 +1139,58 @@ async def send_emails(
 # SCHEMA FIX
 # ============================================
 
+@router.post("/cancel-job/{job_id}")
+async def cancel_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Cancel a stuck job by marking it as failed
+    """
+    try:
+        from sqlalchemy import select, update
+        from app.models.job import Job
+        import uuid
+
+        # Validate UUID
+        try:
+            uuid.UUID(job_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid job ID format")
+
+        # Get job
+        result = await db.execute(select(Job).where(Job.id == job_id))
+        job = result.scalar_one_or_none()
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Only allow canceling running jobs
+        if job.status != "running":
+            raise HTTPException(status_code=400, detail=f"Job is not running (status: {job.status})")
+
+        # Mark as failed
+        await db.execute(
+            update(Job)
+            .where(Job.id == job_id)
+            .values(
+                status="failed",
+                error_message="Job cancelled by user",
+                updated_at=datetime.now(timezone.utc)
+            )
+        )
+        await db.commit()
+
+        return {"success": True, "message": f"Job {job_id} marked as failed"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel job: {str(e)}")
+
+
 @router.post("/fix-jobs-schema")
 async def fix_jobs_schema(
     db: AsyncSession = Depends(get_db),
