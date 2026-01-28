@@ -86,7 +86,7 @@ class GeminiClient:
             api_key: Gemini API key (if None, uses GEMINI_API_KEY from env)
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-8b")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
         
         if not self.api_key:
             raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY")
