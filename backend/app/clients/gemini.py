@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 import logging
 import json
+import asyncio
 
 if TYPE_CHECKING:
     from app.models.prospect import Prospect
@@ -144,33 +145,41 @@ class GeminiClient:
                         else:
                             logger.error(f"❌ [GEMINI] Failed to list models: {list_response.status_code} - {list_response.text}")
                         
+                        # Try most likely models first, stop on first success
                         fallback_models = [
                             "gemini-1.5-flash",
-                            "gemini-1.5-flash-latest", 
-                            "gemini-1.5-flash-001",
-                            "gemini-1.5-flash-002",
-                            "gemini-1.5-flash-8b",
                             "gemini-1.5-pro",
-                            "gemini-1.5-pro-latest",
-                            "gemini-1.5-pro-001",
-                            "gemini-1.5-pro-002",
-                            "gemini-2.0-flash-exp",
-                            "gemini-2.0-flash-thinking-exp",
-                            "gemini-exp-1206",
-                            "gemini-exp-1121"
+                            "gemini-1.5-flash-latest",
+                            "gemini-1.5-pro-latest"
                         ]
+                        
                         for fallback in fallback_models:
                             if fallback == self.model:
                                 continue
                             logger.info(f"🔄 [GEMINI] Trying fallback model: {fallback}")
                             fallback_url = f"{self.BASE_URL}/models/{fallback}:generateContent?key={self.api_key}"
                             fallback_response = await client.post(fallback_url, json=test_payload)
+                            
                             if fallback_response.status_code == 200:
                                 logger.info(f"✅ [GEMINI] Fallback model {fallback} works! Updating model...")
                                 self.model = fallback
                                 return True
+                            elif fallback_response.status_code == 429:
+                                logger.warning(f"⚠️ [GEMINI] Rate limited on model {fallback}, waiting before retry...")
+                                await asyncio.sleep(2)  # Wait 2 seconds on rate limit
+                                continue
                             else:
-                                logger.warning(f"⚠️ [GEMINI] Fallback model {fallback} also failed: {fallback_response.status_code}")
+                                logger.warning(f"⚠️ [GEMINI] Fallback model {fallback} failed: {fallback_response.status_code}")
+                    
+                    # Handle rate limit for initial model too
+                    elif response.status_code == 429:
+                        logger.warning(f"⚠️ [GEMINI] Rate limited on model {self.model}, waiting...")
+                        await asyncio.sleep(3)
+                        # Retry once after waiting
+                        retry_response = await client.post(url, json=test_payload)
+                        if retry_response.status_code == 200:
+                            logger.info(f"✅ Gemini model {self.model} worked after retry")
+                            return True
                     
                     return False
         except Exception as e:
