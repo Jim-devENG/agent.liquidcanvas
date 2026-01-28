@@ -1550,6 +1550,7 @@ async def compose_email(
     from sqlalchemy import or_
     from app.models.email_log import EmailLog
     
+    # Database operations first
     try:
         result = await db.execute(select(Prospect).where(Prospect.id == prospect_id))
         prospect = result.scalar_one_or_none()
@@ -1558,6 +1559,9 @@ async def compose_email(
             raise HTTPException(status_code=404, detail="Prospect not found")
         
         logger.info(f"✅ [COMPOSE] Database session OK, prospect found: {prospect.domain}")
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404)
+        raise
     except Exception as e:
         logger.error(f"❌ [COMPOSE] Database session error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -1578,26 +1582,20 @@ async def compose_email(
     duplicate_prospect = duplicate_check.scalar_one_or_none()
     is_followup = duplicate_prospect is not None
     
-    # If follow-up, get thread_id from duplicate or create new
     if is_followup:
-        # Use the duplicate's thread_id, or create one if it doesn't have one
-        thread_id = duplicate_prospect.thread_id
-        if not thread_id:
-            thread_id = duplicate_prospect.id  # Use duplicate's ID as thread_id
-        prospect.thread_id = thread_id
-        
-        # Get sequence_index (increment from duplicate's sequence_index)
+        logger.info(f"📝 [COMPOSE] Follow-up email for {prospect.domain} (original sent to {duplicate_prospect.domain or duplicate_prospect.contact_email})")
+        # Use sequence index from original prospect
         prospect.sequence_index = (duplicate_prospect.sequence_index or 0) + 1
-        
-        logger.info(f"📌 [COMPOSE] Follow-up detected for {prospect.domain} (thread_id: {thread_id}, sequence: {prospect.sequence_index})")
+        prospect.thread_id = duplicate_prospect.thread_id or duplicate_prospect.id
+        logger.info(f"📝 [COMPOSE] Follow-up sequence index: {prospect.sequence_index}, thread_id: {prospect.thread_id}")
     else:
-        # Initial email - use prospect's own ID as thread_id
+        # Ensure thread_id is set for initial emails
         if not prospect.thread_id:
             prospect.thread_id = prospect.id
         prospect.sequence_index = 0
         logger.info(f"📝 [COMPOSE] Initial email for {prospect.domain} (thread_id: {prospect.thread_id})")
     
-    # Import Gemini client
+    # Import and initialize Gemini client
     try:
         from app.clients.gemini import GeminiClient
         client = GeminiClient()
@@ -1621,8 +1619,8 @@ async def compose_email(
         logger.error(f"Gemini API configuration error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Gemini API not configured: {str(e)}")
     except Exception as e:
-        logger.error(f"Unexpected error initializing Gemini client: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini client: {str(e)}")
+        logger.error(f"Unexpected error with Gemini client: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Gemini client error: {str(e)}")
     
     # Extract snippet from DataForSEO payload (safe None check)
     page_snippet = None
