@@ -86,6 +86,7 @@ class GeminiClient:
             api_key: Gemini API key (if None, uses GEMINI_API_KEY from env)
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
         
         if not self.api_key:
             raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY")
@@ -101,7 +102,7 @@ class GeminiClient:
         Returns:
             String with information about Liquid Canvas
         """
-        search_url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        search_url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         search_prompt = f"""Search DEEPLY into the internet for comprehensive information about Liquid Canvas (liquidcanvas.art), a mobile-to-TV streaming art platform.
 
@@ -378,7 +379,7 @@ Draft suggestions are OPTIONAL. Only include them if you think a full rewrite wo
         
         This analyzes the recipient's website and determines how to position Liquid Canvas.
         """
-        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         analysis_prompt = f"""Analyze this website and create a positioning summary for outreach.
 
@@ -448,7 +449,7 @@ Return ONLY the positioning summary text, no additional formatting."""
         Returns:
             Dictionary with subject and body
         """
-        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         # STEP 1: Search for Liquid Canvas information
         liquid_canvas_info = await self._search_liquid_canvas_info()
@@ -669,7 +670,7 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         Returns:
             Dictionary with 'success', 'body', and optionally 'error'
         """
-        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         payload = {
             "contents": [{
@@ -834,7 +835,7 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         Returns:
             Dictionary with subject and body
         """
-        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         # Build context for the email
         # Extract business/organization name from page_title
@@ -1051,7 +1052,7 @@ Do not include any text before or after the JSON. Return ONLY the JSON object.""
         Returns:
             Dictionary with 'success', 'body', and optionally 'error'
         """
-        url = f"{self.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={self.api_key}"
+        url = f"{self.BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
         
         payload = {
             "contents": [{

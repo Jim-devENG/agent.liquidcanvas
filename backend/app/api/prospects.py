@@ -2308,7 +2308,7 @@ async def gemini_chat(
         
         # Stage 4: API call
         stage = "api_call"
-        url = f"{gemini_client.BASE_URL}/models/gemini-2.0-flash-exp:generateContent?key={gemini_client.api_key}"
+        url = f"{gemini_client.BASE_URL}/models/{gemini_client.model}:generateContent?key={gemini_client.api_key}"
         
         payload = {
             "contents": [{"parts": [{"text": context}]}],
