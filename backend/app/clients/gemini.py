@@ -86,7 +86,7 @@ class GeminiClient:
             api_key: Gemini API key (if None, uses GEMINI_API_KEY from env)
         """
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-002")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
         
         if not self.api_key:
             raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY")
@@ -124,6 +124,23 @@ class GeminiClient:
                 else:
                     error_detail = response.text
                     logger.error(f"❌ Gemini model {self.model} validation failed: {response.status_code} - {error_detail}")
+                    
+                    # If model not found, try fallback models
+                    if response.status_code == 404:
+                        fallback_models = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash-001"]
+                        for fallback in fallback_models:
+                            if fallback == self.model:
+                                continue
+                            logger.info(f"🔄 [GEMINI] Trying fallback model: {fallback}")
+                            fallback_url = f"{self.BASE_URL}/models/{fallback}:generateContent?key={self.api_key}"
+                            fallback_response = await client.post(fallback_url, json=test_payload)
+                            if fallback_response.status_code == 200:
+                                logger.info(f"✅ [GEMINI] Fallback model {fallback} works! Updating model...")
+                                self.model = fallback
+                                return True
+                            else:
+                                logger.warning(f"⚠️ [GEMINI] Fallback model {fallback} also failed: {fallback_response.status_code}")
+                    
                     return False
         except Exception as e:
             logger.error(f"❌ Failed to validate Gemini model {self.model}: {e}", exc_info=True)
