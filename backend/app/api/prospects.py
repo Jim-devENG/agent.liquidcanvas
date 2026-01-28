@@ -1,7 +1,7 @@
 """
 Prospect management API endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from typing import List, Optional, Dict
@@ -19,6 +19,7 @@ from app.utils.email_validation import format_job_error
 
 logger = logging.getLogger(__name__)
 from app.models.prospect import Prospect
+from app.models.email_attachment import EmailAttachment
 from app.models.job import Job
 from app.schemas.prospect import (
     ProspectResponse,
@@ -33,6 +34,8 @@ from pydantic import BaseModel
 load_dotenv()
 
 router = APIRouter()
+
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 @router.get("/categories")
@@ -271,104 +274,46 @@ async def enrich_prospect_by_id(
         raise HTTPException(status_code=500, detail=f"Failed to enrich prospect: {error_msg}")
 
 
-@router.post("/enrich")
-async def create_enrichment_job(
-    prospect_ids: Optional[List[UUID]] = None,
-    max_prospects: int = 100,
-    only_missing_emails: bool = False,  # New parameter: only enrich prospects without emails
+@router.post("/bulk_draft")
+async def bulk_draft_endpoint(
+    payload: BulkDraftRequest,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[str] = Depends(get_current_user_optional)
 ):
     """
-    Create a new enrichment job to find emails for prospects
-    
-    Query params:
-    - prospect_ids: Optional list of specific prospect IDs to enrich
-    - max_prospects: Maximum number of prospects to enrich (if no IDs specified)
-    - only_missing_emails: If True, only enrich prospects that don't have emails yet (prioritizes existing prospects without emails)
+    Apply a draft subject/body to all prospects matching a category filter.
+    If category is None, applies to all website prospects with verified emails.
     """
-    # Check master switch
-    try:
-        from app.api.scraper import validate_master_switch
-        await validate_master_switch(db)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error checking master switch: {e}", exc_info=True)
-        # Continue if check fails
-    # TEMP LOG: Enrichment job creation started
-    logger.info(f"📝 [ENRICHMENT API] Creating enrichment job - max_prospects={max_prospects}, only_missing_emails={only_missing_emails}")
-    
-    # Create job record
-    job = Job(
-        job_type="enrich",
-        params={
-            "prospect_ids": [str(pid) for pid in prospect_ids] if prospect_ids else None,
-            "max_prospects": max_prospects,
-            "only_missing_emails": only_missing_emails
-        },
-        status="pending"
-    )
-    
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-    
-    logger.info(f"✅ [ENRICHMENT API] Job record created: {job.id}")
-    
-    # Start enrichment task in background
-    try:
-        import asyncio
-        # Import inside function to catch syntax errors early
-        try:
-            logger.info(f"📦 [ENRICHMENT API] Importing enrichment task module...")
-            from app.tasks.enrichment import process_enrichment_job
-            logger.info(f"✅ [ENRICHMENT API] Enrichment task module imported successfully")
-        except SyntaxError as syntax_err:
-            logger.exception("❌ Syntax error in enrichment task module")
-            job.status = "failed"
-            job.error_message = str(syntax_err)
-            await db.commit()
-            await db.refresh(job)
-            raise HTTPException(
-                status_code=500,
-                detail=str(syntax_err)
-            )
-        except ImportError as import_err:
-            logger.exception("❌ Import error for enrichment task")
-            job.status = "failed"
-            job.error_message = str(import_err)
-            await db.commit()
-            await db.refresh(job)
-            raise HTTPException(
-                status_code=500,
-                detail=str(import_err)
-            )
-        
-        # TEMP LOG: Before starting background task
-        logger.info(f"🚀 [ENRICHMENT API] Starting background task for job {job.id}...")
-        asyncio.create_task(process_enrichment_job(str(job.id)))
-        logger.info(f"✅ [ENRICHMENT API] Background task started - job {job.id} is now running")
-    except HTTPException:
-        # Re-raise HTTP exceptions (already handled above)
-        raise
-    except Exception as e:
-        logger.exception("❌ Failed to start enrichment job")
-        job.status = "failed"
-        # Store full error for debugging
-        job.error_message = str(e)
-        await db.commit()
-        await db.refresh(job)
-        # Raise HTTPException with actual error for debugging
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
+    from app.models.prospect import VerificationStatus
+
+    query = select(Prospect).where(
+        and_(
+            Prospect.contact_email.isnot(None),
+            Prospect.verification_status == VerificationStatus.VERIFIED.value,
+            or_(Prospect.source_type == "website", Prospect.source_type.is_(None))
         )
-    
+    )
+
+    if payload.category:
+        query = query.where(Prospect.discovery_category == payload.category)
+
+    result = await db.execute(query)
+    prospects = result.scalars().all()
+
+    if not prospects:
+        return {"success": True, "updated": 0, "message": "No matching prospects found"}
+
+    for prospect in prospects:
+        prospect.draft_subject = payload.subject
+        prospect.draft_body = payload.body
+        prospect.draft_status = "drafted"
+
+    await db.commit()
+
     return {
-        "job_id": job.id,
-        "status": "pending",
-        "message": f"Enrichment job {job.id} started successfully"
+        "success": True,
+        "updated": len(prospects),
+        "message": f"Draft applied to {len(prospects)} prospect(s)"
     }
 
 
@@ -2154,6 +2099,106 @@ async def export_scraped_emails_csv(
 
 
 # ============================================
+# ATTACHMENTS
+# ============================================
+
+
+@router.post("/attachments")
+async def upload_attachment(
+    scope: str = Form("global"),
+    prospect_id: Optional[UUID] = Form(None),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    """
+    Upload an attachment (global or per-prospect).
+    scope: global | prospect
+    """
+    if scope not in {"global", "prospect"}:
+        raise HTTPException(status_code=400, detail="Invalid scope. Use 'global' or 'prospect'.")
+
+    if scope == "prospect" and not prospect_id:
+        raise HTTPException(status_code=400, detail="prospect_id is required for prospect scope")
+
+    content = await file.read()
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=400, detail="Attachment exceeds 10MB limit")
+
+    attachment = EmailAttachment(
+        prospect_id=prospect_id,
+        filename=file.filename or "attachment",
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(content),
+        scope=scope,
+        data=content
+    )
+    db.add(attachment)
+    await db.commit()
+    await db.refresh(attachment)
+
+    return {
+        "id": str(attachment.id),
+        "filename": attachment.filename,
+        "content_type": attachment.content_type,
+        "size_bytes": attachment.size_bytes,
+        "scope": attachment.scope,
+        "prospect_id": str(attachment.prospect_id) if attachment.prospect_id else None,
+        "created_at": attachment.created_at.isoformat() if attachment.created_at else None,
+    }
+
+
+@router.get("/attachments")
+async def list_attachments(
+    scope: Optional[str] = None,
+    prospect_id: Optional[UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    query = select(EmailAttachment)
+    if scope:
+        query = query.where(EmailAttachment.scope == scope)
+    if prospect_id:
+        query = query.where(EmailAttachment.prospect_id == prospect_id)
+
+    result = await db.execute(query.order_by(EmailAttachment.created_at.desc()))
+    attachments = result.scalars().all()
+
+    return {
+        "data": [
+            {
+                "id": str(a.id),
+                "filename": a.filename,
+                "content_type": a.content_type,
+                "size_bytes": a.size_bytes,
+                "scope": a.scope,
+                "prospect_id": str(a.prospect_id) if a.prospect_id else None,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in attachments
+        ]
+    }
+
+
+@router.delete("/attachments/{attachment_id}")
+async def delete_attachment(
+    attachment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[str] = Depends(get_current_user_optional)
+):
+    result = await db.execute(select(EmailAttachment).where(EmailAttachment.id == attachment_id))
+    attachment = result.scalar_one_or_none()
+
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    await db.delete(attachment)
+    await db.commit()
+
+    return {"success": True}
+
+
+# ============================================
 # GEMINI CHAT
 # ============================================
 
@@ -2162,6 +2207,12 @@ class GeminiChatRequest(BaseModel):
     message: str
     current_subject: Optional[str] = None
     current_body: Optional[str] = None
+
+
+class BulkDraftRequest(BaseModel):
+    subject: str
+    body: str
+    category: Optional[str] = None
 
 
 class GeminiChatResponse(BaseModel):

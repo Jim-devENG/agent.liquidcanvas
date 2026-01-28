@@ -7,11 +7,15 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models.prospect import Prospect, SendStatus
 from app.models.email_log import EmailLog
+from app.models.email_attachment import EmailAttachment
 from app.clients.gmail import GmailClient
 
 logger = logging.getLogger(__name__)
@@ -26,7 +30,22 @@ def _smtp_configured() -> bool:
     )
 
 
-def _send_email_smtp(to_email: str, subject: str, body: str) -> Dict[str, Any]:
+async def _get_attachments(db: AsyncSession, prospect_id: str) -> list[EmailAttachment]:
+    result = await db.execute(
+        select(EmailAttachment).where(
+            (EmailAttachment.scope == "global")
+            | (EmailAttachment.prospect_id == prospect_id)
+        )
+    )
+    return result.scalars().all()
+
+
+def _send_email_smtp(
+    to_email: str,
+    subject: str,
+    body: str,
+    attachments: Optional[list[EmailAttachment]] = None
+) -> Dict[str, Any]:
     host = os.getenv("SMTP_HOST")
     port = int(os.getenv("SMTP_PORT", "587"))
     username = os.getenv("SMTP_USER")
@@ -38,7 +57,17 @@ def _send_email_smtp(to_email: str, subject: str, body: str) -> Dict[str, Any]:
     message["to"] = to_email
     message["subject"] = subject
     message["from"] = from_email
-    message.attach(MIMEText(body, "plain"))
+    message.attach(MIMEText(body, "html"))
+
+    for attachment in attachments or []:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(attachment.data)
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename=\"{attachment.filename}\"",
+        )
+        message.attach(part)
 
     try:
         with smtplib.SMTP(host, port, timeout=30) as server:
@@ -96,7 +125,13 @@ async def send_prospect_email(
     # SMTP path (app password) if configured
     if _smtp_configured():
         logger.info("📧 [SEND] Using SMTP sender (app password)")
-        send_result = _send_email_smtp(to_email=prospect.contact_email, subject=subject, body=body)
+        attachments = await _get_attachments(db, str(prospect.id))
+        send_result = _send_email_smtp(
+            to_email=prospect.contact_email,
+            subject=subject,
+            body=body,
+            attachments=attachments
+        )
     else:
         # Initialize Gmail client if not provided
         if not gmail_client:

@@ -375,6 +375,90 @@ export async function createEnrichmentJob(
   return res.json()
 }
 
+export type AttachmentScope = 'global' | 'prospect'
+
+export interface EmailAttachment {
+  id: string
+  filename: string
+  content_type: string
+  size_bytes: number
+  scope: AttachmentScope
+  prospect_id?: string | null
+  created_at?: string | null
+}
+
+export async function uploadAttachment(params: {
+  file: File
+  scope: AttachmentScope
+  prospectId?: string
+}): Promise<EmailAttachment> {
+  const formData = new FormData()
+  formData.append('file', params.file)
+  formData.append('scope', params.scope)
+  if (params.scope === 'prospect' && params.prospectId) {
+    formData.append('prospect_id', params.prospectId)
+  }
+
+  const res = await authenticatedFetch(`${API_BASE}/prospects/attachments`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to upload attachment' }))
+    throw new Error(error.detail || 'Failed to upload attachment')
+  }
+  return res.json()
+}
+
+export async function listAttachments(params?: {
+  scope?: AttachmentScope
+  prospectId?: string
+}): Promise<EmailAttachment[]> {
+  const searchParams = new URLSearchParams()
+  if (params?.scope) searchParams.append('scope', params.scope)
+  if (params?.prospectId) searchParams.append('prospect_id', params.prospectId)
+
+  const query = searchParams.toString()
+  const res = await authenticatedFetch(`${API_BASE}/prospects/attachments${query ? `?${query}` : ''}`)
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to list attachments' }))
+    throw new Error(error.detail || 'Failed to list attachments')
+  }
+  const result = await res.json()
+  return Array.isArray(result?.data) ? result.data : []
+}
+
+export async function deleteAttachment(attachmentId: string): Promise<{ success: boolean }> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to delete attachment' }))
+    throw new Error(error.detail || 'Failed to delete attachment')
+  }
+  return res.json()
+}
+
+export async function bulkDraft(params: {
+  subject: string
+  body: string
+  category?: string | null
+}): Promise<{ success: boolean; updated: number; message: string }> {
+  const res = await authenticatedFetch(`${API_BASE}/prospects/bulk_draft`, {
+    method: 'POST',
+    body: JSON.stringify({
+      subject: params.subject,
+      body: params.body,
+      category: params.category ?? null,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Failed to apply bulk draft' }))
+    throw new Error(error.detail || 'Failed to apply bulk draft')
+  }
+  return res.json()
+}
+
 export async function createScoringJob(
   prospectIds?: string[],
   maxProspects?: number

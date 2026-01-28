@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download } from 'lucide-react'
-import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, type Prospect } from '@/lib/api'
+import { useEffect, useRef, useState } from 'react'
+import { Mail, ExternalLink, RefreshCw, Send, X, Loader2, Users, Globe, CheckCircle, Eye, Edit2, Download, Paperclip, Plus } from 'lucide-react'
+import { listLeads, listScrapedEmails, promoteToLead, composeEmail, sendEmail, updateProspectDraft, manualScrape, manualVerify, updateProspectCategory, autoCategorizeAll, migrateCategories, exportLeadsCSV, exportScrapedEmailsCSV, uploadAttachment, listAttachments, deleteAttachment, bulkDraft, type Prospect, type EmailAttachment } from '@/lib/api'
 import GeminiChatPanel from '@/components/GeminiChatPanel'
 import { safeToFixed } from '@/lib/safe-utils'
 
@@ -20,9 +20,13 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [activeProspect, setActiveProspect] = useState<Prospect | null>(null)
   const [draftSubject, setDraftSubject] = useState('')
   const [draftBody, setDraftBody] = useState('')
+  const editorRef = useRef<HTMLDivElement | null>(null)
   const [isComposing, setIsComposing] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [activeTab, setActiveTab] = useState<'edit' | 'preview'>('edit')
+  const [attachmentsGlobal, setAttachmentsGlobal] = useState<EmailAttachment[]>([])
+  const [attachmentsProspect, setAttachmentsProspect] = useState<EmailAttachment[]>([])
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false)
 
   // Manual actions state
   const [showManualActions, setShowManualActions] = useState(false)
@@ -40,6 +44,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isMigratingCategories, setIsMigratingCategories] = useState(false)
+  const [showBulkDraft, setShowBulkDraft] = useState(false)
+  const [bulkDraftSubject, setBulkDraftSubject] = useState('')
+  const [bulkDraftBody, setBulkDraftBody] = useState('')
+  const bulkEditorRef = useRef<HTMLDivElement | null>(null)
   const [availableCategories, setAvailableCategories] = useState<string[]>([
     'Art Lovers', 'Interior Design', 'Pet Lovers', 'Dogs and Cat Owners - Fur Parent', 'Childhood Development', 
     'Holidays', 'Famous Quotes', 'Home Decor', 
@@ -73,7 +81,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         console.log(`🔍 [FILTER] Backend filtered for category: "${selectedCategory}"`)
         console.log(`🔍 [FILTER] Results returned: ${leads.length} items (total: ${response.total})`)
       }
-      
+
       // Sort by category in ascending order
       leads.sort((a: Prospect, b: Prospect) => {
         const catA = a.discovery_category || ''
@@ -224,6 +232,10 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
       setActiveProspect({ ...prospect, draft_subject: draftSub, draft_body: draftBdy })
       setDraftSubject(draftSub)
       setDraftBody(draftBdy)
+      if (editorRef.current) {
+        editorRef.current.innerHTML = draftBdy || ''
+      }
+      await loadAttachmentData(prospect.id)
       
       // Trigger pipeline status refresh so Drafting card updates
       if (typeof window !== 'undefined') {
@@ -241,6 +253,62 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
     setActiveProspect(null)
     setDraftSubject('')
     setDraftBody('')
+    setAttachmentsGlobal([])
+    setAttachmentsProspect([])
+  }
+
+  const loadAttachmentData = async (prospectId?: string) => {
+    try {
+      const [globalAttachments, prospectAttachments] = await Promise.all([
+        listAttachments({ scope: 'global' }),
+        prospectId ? listAttachments({ scope: 'prospect', prospectId }) : Promise.resolve([]),
+      ])
+      setAttachmentsGlobal(globalAttachments)
+      setAttachmentsProspect(prospectAttachments)
+    } catch (err: any) {
+      console.error('Failed to load attachments:', err)
+    }
+  }
+
+  const handleUploadAttachment = async (scope: 'global' | 'prospect', file?: File) => {
+    if (!file) return
+    if (scope === 'prospect' && !activeProspect) return
+    setIsUploadingAttachment(true)
+    try {
+      await uploadAttachment({
+        file,
+        scope,
+        prospectId: scope === 'prospect' ? activeProspect?.id : undefined,
+      })
+      await loadAttachmentData(activeProspect?.id)
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload attachment')
+    } finally {
+      setIsUploadingAttachment(false)
+    }
+  }
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    try {
+      await deleteAttachment(attachmentId)
+      await loadAttachmentData(activeProspect?.id)
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete attachment')
+    }
+  }
+
+  const applyEditorCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value)
+    if (editorRef.current) {
+      setDraftBody(editorRef.current.innerHTML)
+    }
+  }
+
+  const applyBulkEditorCommand = (command: string, value?: string) => {
+    document.execCommand(command, false, value)
+    if (bulkEditorRef.current) {
+      setBulkDraftBody(bulkEditorRef.current.innerHTML)
+    }
   }
 
   const handleSaveDraft = async () => {
@@ -277,6 +345,9 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
   const handleDraftAdopted = (subject: string, body: string) => {
     setDraftSubject(subject)
     setDraftBody(body)
+    if (editorRef.current) {
+      editorRef.current.innerHTML = body
+    }
     if (activeProspect) {
       // Update the active prospect's draft fields
       setActiveProspect({
@@ -284,6 +355,36 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
         draft_subject: subject,
         draft_body: body
       })
+    }
+  }
+
+  const handleBulkDraftApply = async () => {
+    if (!bulkDraftSubject || !bulkDraftBody) {
+      setError('Please provide a subject and body for the bulk draft.')
+      return
+    }
+    try {
+      setError(null)
+      const category = selectedCategory === 'all' ? null : selectedCategory
+      const result = await bulkDraft({
+        subject: bulkDraftSubject,
+        body: bulkDraftBody,
+        category,
+      })
+      setError(`✅ ${result.message}`)
+      setShowBulkDraft(false)
+      setBulkDraftSubject('')
+      setBulkDraftBody('')
+      if (bulkEditorRef.current) {
+        bulkEditorRef.current.innerHTML = ''
+      }
+      await loadProspects()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshPipelineStatus'))
+        window.dispatchEvent(new CustomEvent('jobsCompleted'))
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to apply bulk draft')
     }
   }
 
@@ -553,6 +654,19 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
               Update Category ({selectedProspects.size})
             </button>
           )}
+          <button
+            onClick={() => {
+              setShowBulkDraft(true)
+              setBulkDraftSubject('')
+              setBulkDraftBody('')
+              if (bulkEditorRef.current) {
+                bulkEditorRef.current.innerHTML = ''
+              }
+            }}
+            className="px-2 py-1.5 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+          >
+            Draft to Filter
+          </button>
           {prospects.filter(p => !p.discovery_category || p.discovery_category === 'N/A').length > 0 && (
             <button
               onClick={() => {
@@ -1118,13 +1232,98 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Message Body
                         </label>
-                        <textarea
-                          value={draftBody}
-                          onChange={(e) => setDraftBody(e.target.value)}
-                          rows={10}
-                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-olive-500 focus:border-olive-500"
-                          placeholder="Write your message here..."
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          <button onClick={() => applyEditorCommand('bold')} className="px-2 py-1 text-xs bg-white border rounded">Bold</button>
+                          <button onClick={() => applyEditorCommand('italic')} className="px-2 py-1 text-xs bg-white border rounded">Italic</button>
+                          <button onClick={() => applyEditorCommand('underline')} className="px-2 py-1 text-xs bg-white border rounded">Underline</button>
+                          <button onClick={() => applyEditorCommand('insertUnorderedList')} className="px-2 py-1 text-xs bg-white border rounded">List</button>
+                          <button
+                            onClick={() => {
+                              const url = prompt('Enter link URL')
+                              if (url) applyEditorCommand('createLink', url)
+                            }}
+                            className="px-2 py-1 text-xs bg-white border rounded"
+                          >
+                            Link
+                          </button>
+                        </div>
+                        <div
+                          ref={editorRef}
+                          contentEditable
+                          onInput={(e) => setDraftBody((e.target as HTMLDivElement).innerHTML)}
+                          className="min-h-[220px] w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-olive-500"
+                          data-placeholder="Write your message here..."
+                          suppressContentEditableWarning
                         />
+                      </div>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                            <Paperclip className="w-3 h-3" /> Attachments
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs bg-white border rounded px-2 py-1 cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => handleUploadAttachment('global', e.target.files?.[0])}
+                                disabled={isUploadingAttachment}
+                              />
+                              + Global
+                            </label>
+                            <label className="text-xs bg-white border rounded px-2 py-1 cursor-pointer">
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => handleUploadAttachment('prospect', e.target.files?.[0])}
+                                disabled={isUploadingAttachment}
+                              />
+                              + Prospect
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <p className="text-[11px] text-gray-500 mb-1">Global</p>
+                            {attachmentsGlobal.length === 0 ? (
+                              <p className="text-[11px] text-gray-400">No global attachments</p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {attachmentsGlobal.map((att) => (
+                                  <li key={att.id} className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-700 truncate">{att.filename}</span>
+                                    <button
+                                      onClick={() => handleDeleteAttachment(att.id)}
+                                      className="text-red-600 text-[11px]"
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-gray-500 mb-1">This Prospect</p>
+                            {attachmentsProspect.length === 0 ? (
+                              <p className="text-[11px] text-gray-400">No prospect attachments</p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {attachmentsProspect.map((att) => (
+                                  <li key={att.id} className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-700 truncate">{att.filename}</span>
+                                    <button
+                                      onClick={() => handleDeleteAttachment(att.id)}
+                                      className="text-red-600 text-[11px]"
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1135,7 +1334,7 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                       </div>
                       <div>
                         <h4 className="text-xs font-semibold text-gray-700 mb-1">Body:</h4>
-                        <div className="text-xs text-gray-900 whitespace-pre-wrap">{draftBody || '(No body)'}</div>
+                        <div className="text-xs text-gray-900" dangerouslySetInnerHTML={{ __html: draftBody || '(No body)' }} />
                       </div>
                     </div>
                   )}
@@ -1175,6 +1374,79 @@ export default function LeadsTable({ emailsOnly = false }: LeadsTableProps) {
                   )}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="glass rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col border border-white/20 animate-scale-in">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200/50 bg-gradient-to-r from-emerald-50/60 to-blue-50/40">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Bulk Draft Editor</h3>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Apply to: {selectedCategory === 'all' ? 'All verified prospects' : selectedCategory}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBulkDraft(false)}
+                className="p-1.5 rounded-lg hover:bg-white/80 text-gray-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={bulkDraftSubject}
+                  onChange={(e) => setBulkDraftSubject(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="Email subject..."
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Message Body</label>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <button onClick={() => applyBulkEditorCommand('bold')} className="px-2 py-1 text-xs bg-white border rounded">Bold</button>
+                  <button onClick={() => applyBulkEditorCommand('italic')} className="px-2 py-1 text-xs bg-white border rounded">Italic</button>
+                  <button onClick={() => applyBulkEditorCommand('underline')} className="px-2 py-1 text-xs bg-white border rounded">Underline</button>
+                  <button onClick={() => applyBulkEditorCommand('insertUnorderedList')} className="px-2 py-1 text-xs bg-white border rounded">List</button>
+                  <button
+                    onClick={() => {
+                      const url = prompt('Enter link URL')
+                      if (url) applyBulkEditorCommand('createLink', url)
+                    }}
+                    className="px-2 py-1 text-xs bg-white border rounded"
+                  >
+                    Link
+                  </button>
+                </div>
+                <div
+                  ref={bulkEditorRef}
+                  contentEditable
+                  onInput={(e) => setBulkDraftBody((e.target as HTMLDivElement).innerHTML)}
+                  className="min-h-[240px] w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  data-placeholder="Write your bulk message here..."
+                  suppressContentEditableWarning
+                />
+              </div>
+            </div>
+            <div className="border-t p-3 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowBulkDraft(false)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDraftApply}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-1.5"
+              >
+                <Plus className="w-3 h-3" /> Apply to Filter
+              </button>
             </div>
           </div>
         </div>

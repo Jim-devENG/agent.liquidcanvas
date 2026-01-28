@@ -17,7 +17,6 @@ export default function DraftsTable() {
   const [editSubject, setEditSubject] = useState('')
   const [editBody, setEditBody] = useState('')
   const [isDrafting, setIsDrafting] = useState(false)
-  const [hasAutoDrafted, setHasAutoDrafted] = useState(false)
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -97,50 +96,6 @@ export default function DraftsTable() {
     }
   }, [skip])
 
-  // Separate effect for auto-drafting on mount
-  useEffect(() => {
-    if (hasAutoDrafted) return
-    
-    const checkAndAutoDraft = async () => {
-      try {
-        // Check if we have any drafts
-        const response = await listProspects(0, 50)
-        const allProspects = Array.isArray(response?.data) ? response.data : []
-        const draftedProspects = allProspects.filter((p: Prospect) => 
-          p.draft_subject && p.draft_body && 
-          ((p as any).source_type === 'website' || !(p as any).source_type)
-        )
-        
-        // Auto-trigger drafting if no drafts exist and we have verified leads
-        if (draftedProspects.length === 0) {
-          // Check if we have verified leads before auto-drafting
-          const verifiedLeads = allProspects.filter((p: Prospect) => 
-            p.contact_email && 
-            p.verification_status === 'verified' &&
-            ((p as any).source_type === 'website' || !(p as any).source_type)
-          )
-          
-          if (verifiedLeads.length > 0) {
-            setTimeout(() => {
-              handleAutoDraft(false) // Auto-draft without confirmation
-              setHasAutoDrafted(true)
-            }, 1500)
-          } else {
-            setHasAutoDrafted(true) // No verified leads to draft
-          }
-        } else {
-          setHasAutoDrafted(true) // Drafts already exist
-        }
-      } catch (err) {
-        console.error('Error checking for drafts:', err)
-        setHasAutoDrafted(true) // Mark as checked even on error to prevent retry loops
-      }
-    }
-    
-    // Delay to ensure component is mounted
-    const timer = setTimeout(checkAndAutoDraft, 500)
-    return () => clearTimeout(timer)
-  }, [hasAutoDrafted, handleAutoDraft, loadDrafts])
 
   const handleSend = async () => {
     if (selected.size === 0) {
